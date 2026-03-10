@@ -10,7 +10,7 @@ import uuid
 import sqlalchemy
 import sqlalchemy.ext.asyncio
 
-from generated import models
+from . import models
 
 
 COUNT_USER_SESSIONS = """-- name: count_user_sessions \\:one

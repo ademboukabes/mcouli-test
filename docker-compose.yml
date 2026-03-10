@@ -24,6 +24,7 @@ services:
     container_name: multi_nats
     command: >
       -js
+      -a 0.0.0.0
       -m ${NATS_MONITOR_PORT}
     ports:
       - "${NATS_PORT}:4222"

@@ -8,7 +8,7 @@ import uuid
 import sqlalchemy
 import sqlalchemy.ext.asyncio
 
-from generated import models
+from . import models
 
 
 CREATE_ADMIN = """-- name: create_admin \\:one

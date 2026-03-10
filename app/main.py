@@ -1,7 +1,7 @@
 import logging
 import time
 from contextlib import asynccontextmanager
-
+import asyncio
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
@@ -47,16 +47,25 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
         return response
 
 
-
+MAX_RETRIES = 5
+RETRY_DELAY = 2  # seconds
 @asynccontextmanager
 async def lifespan(app: FastAPI):
 
-    await init_minio_client(
-        minio_host=settings.MINIO_HOST,
-        minio_port=settings.MINIO_API_PORT,
-        minio_root_user=settings.MINIO_ROOT_USER,
-        minio_root_password=settings.MINIO_ROOT_PASSWORD,
-    )
+    for attempt in range(1, MAX_RETRIES + 1):
+        try:
+            await init_minio_client(
+                minio_host=settings.MINIO_HOST,
+                minio_port=settings.MINIO_API_PORT,
+                minio_root_user=settings.MINIO_ROOT_USER,
+                minio_root_password=settings.MINIO_ROOT_PASSWORD,
+            )
+            break
+        except Exception as e:
+            print(f"[MINIO] Attempt {attempt} failed: {e}")
+            if attempt == MAX_RETRIES:
+                raise RuntimeError("Cannot connect to MinIO after multiple attempts") from e
+            await asyncio.sleep(RETRY_DELAY)
 
     RedisClient(
         host=settings.REDIS_HOST,
