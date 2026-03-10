@@ -32,5 +32,11 @@ class RedisClient:
     async def expire(self, key: RedisKey | str, seconds: int):
         await self.client.expire(key, seconds)
     
+    @classmethod
+    def get_instance(cls) -> "RedisClient":
+        if cls._instance is None:
+            raise RuntimeError("RedisClient not initialized")
+        return cls._instance
+
     async def close(self):
         await self.client.close()
