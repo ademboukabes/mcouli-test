@@ -3,8 +3,8 @@ from typing import Any
 import jwt
 from passlib.context import CryptContext
 import pyotp
-from core.config import settings
-from core.exceptions import AppException
+from app.core.config import settings
+from app.core.exceptions import AppException
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 

@@ -67,11 +67,13 @@ services:
     networks:
       - multi_network
     volumes:
-      - redis_data:/data
+      - redis_data:/data  
 
 volumes:
   postgres_data:
   minio_data:
+  redis_data:
+
 
 networks:
   multi_network:
