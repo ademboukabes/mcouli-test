@@ -37,12 +37,12 @@ class AuthService:
         self.device_querier = device_querier
         self.session_querier = session_querier
 
-    @staticmethod
     async def mobile_register_login(
+        self,
         redis: RedisClient,
         req: MobileAuthRequest,
     ) -> MobileAuthResponse:
-        existing_user = await AuthService.user_querier.get_user_by_email(email=req.email)
+        existing_user = await self.user_querier.get_user_by_email(email=req.email)
 
         if existing_user:
             if not verify_password(req.password, existing_user.hashed_password or ""):
@@ -50,7 +50,7 @@ class AuthService:
             user = existing_user
         else:
             hashed = hash_password(req.password)
-            user = await AuthService.user_querier.create_user(
+            user = await self.user_querier.create_user(
                 email=req.email, hashed_password=hashed
             )
             if not user:
@@ -62,14 +62,14 @@ class AuthService:
         if await redis.exists(session_key):
             raise AppException.forbidden("User already has an active session")
 
-        session_count = await AuthService.session_querier.count_user_sessions(user_id=user_id)
+        session_count = await self.session_querier.count_user_sessions(user_id=user_id)
         if session_count and session_count >= AuthService.SESSION_LIMIT:
             raise AppException.forbidden("Maximum session limit reached")
 
         device_id = uuid.UUID(req.device_id)
         expires_at = datetime.now(timezone.utc) + timedelta(days=7)
 
-        device = await AuthService.device_querier.create_device(
+        device = await self.device_querier.create_device(
             user_id=user_id,
             device_name=req.device_name,
             device_type=req.device_type,
@@ -79,7 +79,7 @@ class AuthService:
         if not device:
             raise AppException.internal_error("Failed to create device")
 
-        session = await AuthService.session_querier.upsert_session(
+        session = await self.session_querier.upsert_session(
             user_id=user_id,
             device_id=device_id,
             expires_at=expires_at,
@@ -103,8 +103,8 @@ class AuthService:
             expires_in=expiry,
         )
 
-    @staticmethod
     async def refresh_token(
+        self,
         redis: RedisClient,
         refresh_token: str,
     ) -> MobileAuthResponse:
@@ -114,7 +114,7 @@ class AuthService:
         if not session_id:
             raise AppException.unauthorized("Invalid refresh token")
 
-        session = await AuthService.session_querier.get_session_by_id(id=uuid.UUID(session_id))
+        session = await self.session_querier.get_session_by_id(id=uuid.UUID(session_id))
 
         if not session:
             raise AppException.unauthorized("Session not found")
