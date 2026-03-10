@@ -2,6 +2,7 @@
 # versions:
 #   sqlc v1.30.0
 # source: session.sql
+import dataclasses
 import datetime
 from typing import Optional
 import uuid
@@ -9,7 +10,7 @@ import uuid
 import sqlalchemy
 import sqlalchemy.ext.asyncio
 
-from generated import models
+from . import models
 
 
 COUNT_USER_SESSIONS = """-- name: count_user_sessions \\:one
@@ -69,8 +70,24 @@ ON CONFLICT (user_id, device_id)
 DO UPDATE SET
     last_active = NOW(),
     expires_at = EXCLUDED.expires_at
-RETURNING id, user_id, device_id, created_at, last_active, expires_at
+RETURNING
+    id,
+    user_id,
+    device_id,
+    last_active,
+    expires_at,
+    created_at
 """
+
+
+@dataclasses.dataclass()
+class UpsertSessionRow:
+    id: uuid.UUID
+    user_id: uuid.UUID
+    device_id: uuid.UUID
+    last_active: datetime.datetime
+    expires_at: datetime.datetime
+    created_at: datetime.datetime
 
 
 class AsyncQuerier:
@@ -121,15 +138,15 @@ class AsyncQuerier:
     async def update_session_activity(self, *, id: uuid.UUID) -> None:
         await self._conn.execute(sqlalchemy.text(UPDATE_SESSION_ACTIVITY), {"p1": id})
 
-    async def upsert_session(self, *, user_id: uuid.UUID, device_id: uuid.UUID, expires_at: datetime.datetime) -> Optional[models.UserSession]:
+    async def upsert_session(self, *, user_id: uuid.UUID, device_id: uuid.UUID, expires_at: datetime.datetime) -> Optional[UpsertSessionRow]:
         row = (await self._conn.execute(sqlalchemy.text(UPSERT_SESSION), {"p1": user_id, "p2": device_id, "p3": expires_at})).first()
         if row is None:
             return None
-        return models.UserSession(
+        return UpsertSessionRow(
             id=row[0],
             user_id=row[1],
             device_id=row[2],
-            created_at=row[3],
-            last_active=row[4],
-            expires_at=row[5],
+            last_active=row[3],
+            expires_at=row[4],
+            created_at=row[5],
         )

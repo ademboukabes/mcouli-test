@@ -20,6 +20,10 @@ class AppException:
     @staticmethod
     def bad_request(detail: str = "Bad request") -> HTTPException:
         return HTTPException(status_code=400, detail=detail)
+    
+    @staticmethod
+    def payement_required(detail:str = "payement required")->HTTPException:
+        return HTTPException(status_code=402,detail=detail)
 
     @staticmethod
     def internal_error(detail: str = "Internal server error") -> HTTPException:

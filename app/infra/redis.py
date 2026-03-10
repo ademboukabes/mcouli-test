@@ -17,8 +17,8 @@ class RedisClient:
                 f"redis://{host}:{port}", password=password, decode_responses=True
             )
 
-    async def set(self, key: RedisKey | str, value: str, expire: int | None = None):
-        await self.client.set(key, value, ex=expire)
+    async def set(self, key: RedisKey | str, value: str, expire: int | None = None,nx:bool=False):
+        await self.client.set(key, value, ex=expire,nx=nx)
 
     async def get(self, key: RedisKey | str) -> str | None:
         return await self.client.get(key)
@@ -32,5 +32,11 @@ class RedisClient:
     async def expire(self, key: RedisKey | str, seconds: int):
         await self.client.expire(key, seconds)
     
+    @classmethod
+    def get_instance(cls) -> "RedisClient":
+        if cls._instance is None:
+            raise RuntimeError("RedisClient not initialized")
+        return cls._instance
+
     async def close(self):
         await self.client.close()

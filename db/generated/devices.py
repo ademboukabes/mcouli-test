@@ -8,7 +8,14 @@ import uuid
 import sqlalchemy
 import sqlalchemy.ext.asyncio
 
-from generated import models
+from . import models
+
+
+COUNT__USER__DEVICES = """-- name: count__user__devices \\:one
+SELECT COUNT(*) 
+FROM user_devices
+WHERE user_id = :p1
+"""
 
 
 CREATE_DEVICE = """-- name: create_device \\:one
@@ -30,6 +37,12 @@ SET is_2fa_enabled = TRUE
 WHERE id = :p1
 AND user_id = :p2
 AND is_2fa_enabled = FALSE
+"""
+
+
+GET_DEVICE__BY_ID = """-- name: get_device__by_id \\:one
+SELECT id, user_id, device_name, device_type, totp_secret, is_2fa_enabled, last_active, created_at from user_devices
+WHERE id =:p1
 """
 
 
@@ -59,6 +72,12 @@ class AsyncQuerier:
     def __init__(self, conn: sqlalchemy.ext.asyncio.AsyncConnection):
         self._conn = conn
 
+    async def count__user__devices(self, *, user_id: uuid.UUID) -> Optional[int]:
+        row = (await self._conn.execute(sqlalchemy.text(COUNT__USER__DEVICES), {"p1": user_id})).first()
+        if row is None:
+            return None
+        return row[0]
+
     async def create_device(self, *, user_id: uuid.UUID, device_name: Optional[str], device_type: Optional[str], totp_secret: Optional[str]) -> Optional[models.UserDevice]:
         row = (await self._conn.execute(sqlalchemy.text(CREATE_DEVICE), {
             "p1": user_id,
@@ -81,6 +100,21 @@ class AsyncQuerier:
 
     async def enable_device2_fa(self, *, id: uuid.UUID, user_id: uuid.UUID) -> None:
         await self._conn.execute(sqlalchemy.text(ENABLE_DEVICE2_FA), {"p1": id, "p2": user_id})
+
+    async def get_device__by_id(self, *, id: uuid.UUID) -> Optional[models.UserDevice]:
+        row = (await self._conn.execute(sqlalchemy.text(GET_DEVICE__BY_ID), {"p1": id})).first()
+        if row is None:
+            return None
+        return models.UserDevice(
+            id=row[0],
+            user_id=row[1],
+            device_name=row[2],
+            device_type=row[3],
+            totp_secret=row[4],
+            is_2fa_enabled=row[5],
+            last_active=row[6],
+            created_at=row[7],
+        )
 
     async def list_user_devices(self, *, user_id: uuid.UUID) -> AsyncIterator[models.UserDevice]:
         result = await self._conn.stream(sqlalchemy.text(LIST_USER_DEVICES), {"p1": user_id})

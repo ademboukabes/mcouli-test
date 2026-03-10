@@ -1,7 +1,5 @@
 from datetime import datetime, timedelta, timezone
-from typing import Any
 import uuid
-import sqlalchemy.ext.asyncio
 
 from app.core import constant
 from app.core.exceptions import AppException
@@ -14,10 +12,9 @@ from app.core.securite import (
     Get_expiry_time,
 )
 from app.infra.redis import RedisClient
-from app.schema.auth.mobile.auth import (
-    MobileAuthRequest,
-    MobileAuthResponse,
-)
+
+from app.schema.request.mobile.auth import MobileAuthRequest
+from app.schema.response.mobile.auth import MobileAuthResponse
 from db.generated import user as user_queries
 from db.generated import devices as device_queries
 from db.generated import session as session_queries
@@ -40,9 +37,8 @@ class AuthService:
         self.device_querier = device_querier
         self.session_querier = session_querier
 
-    @staticmethod
     async def mobile_register_login(
-        conn: sqlalchemy.ext.asyncio.AsyncConnection,
+        self,
         redis: RedisClient,
         req: MobileAuthRequest,
     ) -> MobileAuthResponse:
@@ -54,13 +50,13 @@ class AuthService:
             user = existing_user
         else:
             hashed = hash_password(req.password)
-            user = await user_querier.create_user(
+            user = await self.user_querier.create_user(
                 email=req.email, hashed_password=hashed
             )
             if not user:
                 raise AppException.internal_error("Failed to create user")
 
-        user_id = user.id
+        user_id: uuid.UUID = user.id
 
         session_key = constant.RedisKey.UserSessionByUser.value.format(user_id=user_id)
         if await redis.exists(session_key):
@@ -103,13 +99,12 @@ class AuthService:
         return MobileAuthResponse(
             access_token=access_token,
             refresh_token=refresh_token,
-            session_id=str(session.id),
+            session_id=str(),
             expires_in=expiry,
         )
 
-    @staticmethod
     async def refresh_token(
-        conn: sqlalchemy.ext.asyncio.AsyncConnection,
+        self,
         redis: RedisClient,
         refresh_token: str,
     ) -> MobileAuthResponse:
@@ -119,8 +114,7 @@ class AuthService:
         if not session_id:
             raise AppException.unauthorized("Invalid refresh token")
 
-        session_querier = session_queries.AsyncQuerier(conn)
-        session = await session_querier.get_session_by_id(id=uuid.UUID(session_id))
+        session = await self.session_querier.get_session_by_id(id=uuid.UUID(session_id))
 
         if not session:
             raise AppException.unauthorized("Session not found")
@@ -149,8 +143,8 @@ class AuthService:
             expires_in=expiry,
         )
 
-    @staticmethod
     async def logout(
+        self,
         redis: RedisClient,
         user_id: str,
         session_id: str,
@@ -159,14 +153,12 @@ class AuthService:
         await redis.delete(session_key)
         return {"message": "Logged out successfully"}
 
-    @staticmethod
     async def validate_session(
-        conn: sqlalchemy.ext.asyncio.AsyncConnection,
+        self,
         redis: RedisClient,
         session_id: str,
     ) -> bool:
-        session_querier = session_queries.AsyncQuerier(conn)
-        session = await session_querier.get_session_by_id(id=uuid.UUID(session_id))
+        session = await self.session_querier.get_session_by_id(id=uuid.UUID(session_id))
 
         if not session:
             return False

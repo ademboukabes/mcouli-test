@@ -1,6 +1,10 @@
+import logging
+import time
 from contextlib import asynccontextmanager
-
-from fastapi import FastAPI
+import asyncio
+from fastapi import FastAPI, Request, Response
+from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 
 from app.core.config import settings
 from app.infra.minio import init_minio_client
@@ -9,7 +13,93 @@ from app.infra.redis import RedisClient
 from app.router.mobile.auth import router as mobile_auth_router
 
 
-app = FastAPI()
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
+)
+
+logger = logging.getLogger("api")
+
+
+
+class RequestLoggingMiddleware(BaseHTTPMiddleware):
+    async def dispatch(
+        self,
+        request: Request,
+        call_next: RequestResponseEndpoint,
+    ) -> Response:
+
+        start_time = time.time()
+
+        response = await call_next(request)
+
+        process_time = time.time() - start_time
+
+        logger.info(
+            "%s %s status=%s time=%.3fs",
+            request.method,
+            request.url.path,
+            response.status_code,
+            process_time,
+        )
+
+        return response
+
+
+MAX_RETRIES = 5
+RETRY_DELAY = 2  # seconds
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+
+    for attempt in range(1, MAX_RETRIES + 1):
+        try:
+            await init_minio_client(
+                minio_host=settings.MINIO_HOST,
+                minio_port=settings.MINIO_API_PORT,
+                minio_root_user=settings.MINIO_ROOT_USER,
+                minio_root_password=settings.MINIO_ROOT_PASSWORD,
+            )
+            break
+        except Exception as e:
+            print(f"[MINIO] Attempt {attempt} failed: {e}")
+            if attempt == MAX_RETRIES:
+                raise RuntimeError("Cannot connect to MinIO after multiple attempts") from e
+            await asyncio.sleep(RETRY_DELAY)
+
+    RedisClient(
+        host=settings.REDIS_HOST,
+        port=settings.REDIS_PORT,
+        password=settings.REDIS_PASSWORD,
+    )
+
+    await NatsClient.connect()
+
+    yield
+
+    await RedisClient.get_instance().close()
+    await NatsClient.close()
+
+
+
+app = FastAPI(
+    title="multAI API",
+    description="Mobile and Web API for multAI",
+    version="1.0.0",
+    lifespan=lifespan,
+)
+
+
+
+app.add_middleware(RequestLoggingMiddleware)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 
@@ -24,22 +114,3 @@ def health_check():
 
 
 app.include_router(mobile_auth_router, prefix="/mobile")
-
-
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    await init_minio_client(
-        minio_host=settings.MINIO_HOST,
-        minio_port=settings.MINIO_API_PORT,
-        minio_root_user=settings.MINIO_ROOT_USER,
-        minio_root_password=settings.MINIO_ROOT_PASSWORD,
-    )
-    RedisClient(
-        host=settings.REDIS_HOST,
-        port=settings.REDIS_PORT,
-        password=settings.REDIS_PASSWORD,
-    )
-    await NatsClient.connect()
-    yield
-    await RedisClient.close(RedisClient._instance.client)#todo:fix for self 
-    await NatsClient.close()

@@ -10,8 +10,13 @@ ON CONFLICT (user_id, device_id)
 DO UPDATE SET
     last_active = NOW(),
     expires_at = EXCLUDED.expires_at
-RETURNING *;
-
+RETURNING
+    id,
+    user_id,
+    device_id,
+    last_active,
+    expires_at,
+    created_at;
 
 -- name: GetSessionByDevice :one
 SELECT *

@@ -1,4 +1,4 @@
-CREATE TYPE staff_role AS ENUM ('admin', 'multi');
+CREATE TYPE staff_role AS ENUM ('admin','multi_team_lead', 'multi');
 
 CREATE TABLE IF NOT EXISTS staff_users (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),

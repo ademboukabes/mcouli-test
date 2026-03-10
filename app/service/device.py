@@ -1,9 +1,7 @@
-from typing import AsyncIterator
-
 from db.generated import devices as device_queries
 from app.core.securite import  create_totp_secret
 import uuid
-from app.core.exceptions import DBException,AppException
+from app.core.exceptions import DBException,AppException, DBExceptionImpl
 from db.generated.models import UserDevice
 
 
@@ -15,9 +13,9 @@ class DeviceService:
     @staticmethod
     async def create_device(user_id: uuid.UUID,device_name: str,device_type: str)->UserDevice|None:
         try :
-            if await DeviceService.device_querier.count_user_devices(user_id=user_id) >= 3:
+            DeviceCount = await DeviceService.count_devices(user_id=user_id)
+            if  DeviceCount >=3:
                 raise AppException.bad_request("You can only have 3 devices")
-
             return await DeviceService.device_querier.create_device(
                 user_id=user_id,
                 device_name=device_name,
@@ -39,24 +37,34 @@ class DeviceService:
             DBException.handle(e)
     
     @staticmethod
-    async def get_all_devices(user_id:uuid.UUID)->tuple(AsyncIterator[UserDevice],int)
-        devices= DeviceService.device_querier.list_user_devices(user_id=user_id)
-        count = await DeviceService.device_querier.count_user_devices(user_id=user_id)
-        return devices,count
+    async def get_all_devices(user_id: uuid.UUID) -> tuple[list[UserDevice], int]:
+        devices: list[UserDevice] = []
+
+        async for device in DeviceService.device_querier.list_user_devices(user_id=user_id):
+            devices.append(device)
+
+        count = await DeviceService.count_devices(user_id=user_id)
+
+        return devices, count
 
     @staticmethod
     async def get_device_by_id(device_id:uuid.UUID,user_id:uuid.UUID)->UserDevice|None:
         try :
-            return await DeviceService.device_querier.get_device_by_id(id=device_id,user_id=user_id)
+            device =  await DeviceService.device_querier.get_device__by_id(id=device_id)
+            if device is None :
+                raise AppException.not_found("device not found ")
         except Exception as e :
-            DBException.handle(e)
+             raise DBExceptionImpl.handle(e)
 
     @staticmethod
     async  def count_devices(user_id:uuid.UUID)->int:
         try :
-            return await DeviceService.device_querier.count_user_devices(user_id=user_id)
+            count =  await DeviceService.device_querier.count__user__devices(user_id=user_id)
+            if count is None :
+                raise AppException.internal_error("db failed to count ")
+            return count 
         except Exception as e :
-            DBException.handle(e)
+            raise  DBExceptionImpl.handle(e)
     
     
         

@@ -47,11 +47,11 @@ class NatsClient:
     async def subscribe(subject: NatsSubjects, callback: Callable[[Any], Any]) -> None:
         if NatsClient._nc is None:
             await NatsClient.connect()
-
+        assert NatsClient._nc is not None
         async def _wrapper(msg:Msg):
             await callback(msg.data)
 
-        await NatsClient._nc.subscribe(subject.value, cb=_wrapper)#TODO:fix it here 
+        await NatsClient._nc.subscribe(subject.value, cb=_wrapper)# type: ignore 
 
 
     @staticmethod
@@ -76,7 +76,7 @@ class NatsClient:
             await msg.ack()
         if NatsClient._js is None :
             print("no client ")
-        await NatsClient._js.subscribe(
+        await NatsClient._js.subscribe( # type: ignore
             subject=subject.value,
             stream=stream_name,
             durable=durable_name,
