@@ -1,0 +1,5 @@
+INSERT INTO users (email, hashed_password) VALUES ('yasser@yas.y', '$2a$12$W.Nz06uLC.2G6BWcR8SFQ.SXEWDuZn5Q9hp/xFv8U6NChtEd3criu');
+INSERT 0 1
+multi_ai=# INSERT INTO staff_users (email, role, password) VALUES ('yasser@yas.y', 'admin', '$2a$12$W.Nz06uLC.2G6BWcR8SFQ.SXEWDuZn5Q9hp/xFv8U6NChtEd3criu');  
+INSERT 0 1
+pass = 0000

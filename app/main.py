@@ -15,6 +15,17 @@ from app.router.staff import router as staff_router
 from app.router.web import router as web_router
 from app.deps.ai_deps import get_face_embedding_service
 from app.core.logger import configure_logger, logger
+from app.router.mobile.auth import router as mobile_auth_router
+from app.router.web.event import router as web_event_router
+
+
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
+)
+
+logger = logging.getLogger("api")
 
 configure_logger()
 
@@ -41,6 +52,16 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
         )
 
         return response
+
+@app.get("/")
+def read_root():
+    return {"Hello": "World"}
+
+
+@app.get("/health")
+def health_check():
+    return {"status": "healthy"}
+
 
 
 MAX_RETRIES = 5
@@ -110,3 +131,5 @@ def health_check() -> dict[str, str]:
 app.include_router(mobile_router)
 app.include_router(staff_router)
 app.include_router(web_router)
+app.include_router(mobile_auth_router, prefix="/mobile")
+app.include_router(web_event_router, prefix="/web")

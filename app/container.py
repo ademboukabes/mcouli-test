@@ -22,6 +22,7 @@ from db.generated import upload_request_photos as upload_request_photo_queries
 from db.generated import upload_requests as upload_request_queries
 from db.generated import user as user_queries
 
+
 class Container:
     def __init__(
         self,
