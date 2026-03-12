@@ -23,11 +23,21 @@ dependencies = [
 ]
 
 [tool.ruff]
-src = ["app", "migrations", "db"]  
+src = ["app", "migrations", "db"]
 line-length = 88
-select = ["E", "F", "W", "C90"]   
-ignore = ["E501"]                  
-exclude = ["__pycache__", ".venv", ".git", "build", "dist", ".ruff_cache"]
+exclude = [
+    "__pycache__",
+    ".venv",
+    ".git",
+    "build",
+    "dist",
+    ".ruff_cache",
+    "db/generated",
+    "migrations/versions"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "C90"]
+ignore = ["E501"]
 
 [tool.mypy]
 python_version = "3.12"

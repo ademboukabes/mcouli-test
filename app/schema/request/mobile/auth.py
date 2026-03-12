@@ -6,7 +6,7 @@ class MobileAuthRequest(BaseModel):
     password: str
     device_name: str
     device_type: str
-    device_id: str  
+    device_id: str
 
 
 

@@ -42,3 +42,6 @@ get_db:
 
 run-app:
 	uv  run fastapi dev app/main.py 
+
+lint:
+	uv run ruff check .

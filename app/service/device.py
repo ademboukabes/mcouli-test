@@ -24,18 +24,18 @@ class DeviceService:
             )
         except Exception as e :
             DBException.handle(e)
-            
+
     @staticmethod
     async def revoke_device(device_id:uuid.UUID,user_id :uuid.UUID):
         try :
-            #here were cacscading the delete of the session  no need to handle it 
+            #here were cacscading the delete of the session  no need to handle it
             await DeviceService.device_querier.revoke_device(
                 id=device_id,
                 user_id=user_id
             )
         except Exception as e :
             DBException.handle(e)
-    
+
     @staticmethod
     async def get_all_devices(user_id: uuid.UUID) -> tuple[list[UserDevice], int]:
         devices: list[UserDevice] = []
@@ -62,13 +62,12 @@ class DeviceService:
             count =  await DeviceService.device_querier.count__user__devices(user_id=user_id)
             if count is None :
                 raise AppException.internal_error("db failed to count ")
-            return count 
+            return count
         except Exception as e :
             raise  DBExceptionImpl.handle(e)
-    
-    
-        
-        
-    
 
-    
+
+
+
+
+

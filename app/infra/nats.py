@@ -51,7 +51,7 @@ class NatsClient:
         async def _wrapper(msg:Msg):
             await callback(msg.data)
 
-        await NatsClient._nc.subscribe(subject.value, cb=_wrapper)# type: ignore 
+        await NatsClient._nc.subscribe(subject.value, cb=_wrapper)# type: ignore
 
 
     @staticmethod

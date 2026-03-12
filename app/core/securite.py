@@ -17,7 +17,7 @@ def verify_password(password: str, hashed: str) -> bool:
 
 def Get_expiry_time()->int :
     if settings.environment == "dev":
-        expirty = 60 * 60 * 24 * 7 
+        expirty = 60 * 60 * 24 * 7
     else :
         expirty = 60 * 60 * 24
     return expirty
@@ -36,7 +36,7 @@ def decode_access_mobile_token(token: str) -> dict[str, Any]:
         payload = jwt.decode(token, key=settings.jwt_secret, algorithms=[settings.jwt_algorithm])
         return payload
     except jwt.ExpiredSignatureError:
-        raise AppException.unauthorized("Token has expired") 
+        raise AppException.unauthorized("Token has expired")
     except jwt.InvalidTokenError:
         raise AppException.unauthorized("Invalid token")
 
@@ -55,7 +55,7 @@ def decode_refresh_mobile_token(token: str) -> dict[str, Any]:
         raise AppException.unauthorized("Token has expired")
     except jwt.InvalidTokenError:
         raise AppException.unauthorized("Invalid token")
-    
+
 
 def create_totp_secret() -> str:
     return pyotp.random_base32()

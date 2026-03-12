@@ -20,7 +20,7 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    run_sql_up("create-users-table") 
+    run_sql_up("create-users-table")
 
 
 def downgrade() -> None:

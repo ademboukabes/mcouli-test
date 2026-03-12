@@ -67,7 +67,7 @@ async def get_me(
     user = await container.auth_service.user_querier.get_user_by_id(id=current_user.user_id)
     if user is None :
         raise AppException.not_found("user not found")
-    
+
     devices, _ = await container.device_service.get_all_devices(current_user.user_id)
     device_list = [
         DeviceSchema(
@@ -78,7 +78,7 @@ async def get_me(
         )
         for d in devices
     ]
-    
+
     session_schema: Optional[SessionSchema] = None
     sessions_objs = await container.session_service.session_querier.get_session_by_id(
         id=current_user.session_id
@@ -92,8 +92,8 @@ async def get_me(
             expires_at=sessions_objs.expires_at,
         )
 
-    
-    
+
+
     return MeResponse(
         user=UserSchema(id=user.id, email=user.email),
         devices=device_list,

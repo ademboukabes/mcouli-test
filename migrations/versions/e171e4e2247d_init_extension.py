@@ -18,7 +18,7 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    run_sql_up("init_extension") 
+    run_sql_up("init_extension")
 
 
 

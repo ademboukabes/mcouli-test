@@ -2,8 +2,8 @@ import random
 import string
 import uuid
 from fastapi import UploadFile
-from miniopy_async.error import S3Error  
-from miniopy_async.api import Minio  
+from miniopy_async.error import S3Error
+from miniopy_async.api import Minio
 
 from app.core.utils import check_extension
 from app.core.exceptions import AppException

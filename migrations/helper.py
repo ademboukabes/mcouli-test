@@ -18,7 +18,7 @@ def run_sql_up(message: str) -> None:
 
 
 def run_sql_down(message: str) -> None:
-   # write the message here u create it  in th emigration 
+   # write the message here u create it  in th emigration
     path = os.path.join(SQL_DIR, "down", message + ".sql")
     if not os.path.isfile(path):
         raise FileNotFoundError(f"Down SQL file not found: {path}")

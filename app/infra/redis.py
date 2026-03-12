@@ -31,7 +31,7 @@ class RedisClient:
 
     async def expire(self, key: RedisKey | str, seconds: int):
         await self.client.expire(key, seconds)
-    
+
     @classmethod
     def get_instance(cls) -> "RedisClient":
         if cls._instance is None:

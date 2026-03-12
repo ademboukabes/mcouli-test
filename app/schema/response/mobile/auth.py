@@ -23,11 +23,11 @@ class MeResponse(BaseModel):
     user: UserSchema
     devices: List[DeviceSchema]
     sessions: Optional[SessionSchema]
-    
+
 
 
 class MobileAuthResponse(BaseModel):
     access_token: str
     refresh_token: str
-    session_id: str 
-    expires_in: int 
+    session_id: str
+    expires_in: int
