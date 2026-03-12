@@ -15,7 +15,7 @@ class RedisClient:
 
     def __init__(self, host: str, port: int, password: str) -> None:
         if not hasattr(self, "client"):
-            self.client = Redis.from_url(
+            self.client = Redis.from_url( # type: ignore
                 f"redis://{host}:{port}", password=password, decode_responses=True
             )
 

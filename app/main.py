@@ -1,4 +1,3 @@
-import logging
 import time
 from contextlib import asynccontextmanager
 import asyncio
@@ -13,16 +12,9 @@ from app.infra.nats import NatsClient
 from app.infra.redis import RedisClient
 from app.router.mobile.auth import router as mobile_auth_router
 from app.router.staff.drive import router as staff_drive_router
+from app.core.logger import configure_logger, logger
 
-
-
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
-)
-
-logger = logging.getLogger("api")
-
+configure_logger()
 
 
 class RequestLoggingMiddleware(BaseHTTPMiddleware):

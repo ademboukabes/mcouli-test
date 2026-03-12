@@ -19,6 +19,7 @@ from db.generated import user as user_queries
 from db.generated import devices as device_queries
 from db.generated import session as session_queries
 from db.generated.models import User
+from app.core.logger import logger
 
 
 class AuthService:
@@ -43,6 +44,7 @@ class AuthService:
         redis: RedisClient,
         req: MobileAuthRequest,
     ) -> MobileAuthResponse:
+        logger.info("mobile register/login attempt for %s", req.email)
         existing_user = await self.user_querier.get_user_by_email(email=req.email)
         user: User | None = None
 
@@ -50,8 +52,10 @@ class AuthService:
             if not verify_password(req.password, existing_user.hashed_password or ""):
                 raise AppException.unauthorized("Invalid credentials")
             user = existing_user
+            logger.info("existing user login: %s", req.email)
         else:
             hashed = hash_password(req.password)
+            logger.info("creating new user for %s", req.email)
             user = await self.user_querier.create_user(
                 email=req.email, hashed_password=hashed
             )
@@ -68,6 +72,11 @@ class AuthService:
 
         session_count = await self.session_querier.count_user_sessions(user_id=user_id)
         if session_count and session_count >= AuthService.SESSION_LIMIT:
+            logger.warning(
+                "user %s reached session limit %s",
+                req.email,
+                AuthService.SESSION_LIMIT,
+            )
             raise AppException.forbidden("Maximum session limit reached")
 
         device_id = uuid.UUID(req.device_id)
@@ -99,6 +108,7 @@ class AuthService:
         access_token = create_acces_mobile_token(str(session.id))
         refresh_token = create_refresh_mobile_token(str(session.id))
         expiry = Get_expiry_time()
+        logger.info("created session %s for user %s", session.id, user_id)
 
         return MobileAuthResponse(
             access_token=access_token,
