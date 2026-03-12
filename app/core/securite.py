@@ -7,13 +7,21 @@ from app.core.config import settings
 from app.core.exceptions import AppException
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+_BCRYPT_MAX_LEN = 72
+
+
+def _normalize_password(password: str) -> str:
+    return password[:_BCRYPT_MAX_LEN]
 
 
 def hash_password(password: str) -> str:
-    return pwd_context.hash(password)
+    normalized = _normalize_password(password)
+    return pwd_context.hash(normalized)
+
 
 def verify_password(password: str, hashed: str) -> bool:
-    return pwd_context.verify(password, hashed)
+    normalized = _normalize_password(password)
+    return pwd_context.verify(normalized, hashed)
 
 def Get_expiry_time()->int :
     if settings.environment == "dev":
