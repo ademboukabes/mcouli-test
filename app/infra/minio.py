@@ -111,7 +111,7 @@ class DocumentBucket(Bucket):
         super().__init__(DOCUMENTS_BUCKET_NAME, file_prefix)
 
 class WaSimBucket(Bucket):
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__(WA_SIM_BUCKET_NAME, "")
 
     async def put(self, file: UploadFile, object_name: str | None = None) -> str:

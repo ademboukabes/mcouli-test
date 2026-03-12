@@ -18,6 +18,7 @@ from app.schema.response.mobile.auth import MobileAuthResponse
 from db.generated import user as user_queries
 from db.generated import devices as device_queries
 from db.generated import session as session_queries
+from db.generated.models import User
 
 
 class AuthService:
@@ -43,8 +44,9 @@ class AuthService:
         req: MobileAuthRequest,
     ) -> MobileAuthResponse:
         existing_user = await self.user_querier.get_user_by_email(email=req.email)
+        user: User | None = None
 
-        if existing_user:
+        if existing_user is not None:
             if not verify_password(req.password, existing_user.hashed_password or ""):
                 raise AppException.unauthorized("Invalid credentials")
             user = existing_user
@@ -55,6 +57,8 @@ class AuthService:
             )
             if not user:
                 raise AppException.internal_error("Failed to create user")
+
+        assert user is not None
 
         user_id: uuid.UUID = user.id
 

@@ -1,3 +1,5 @@
+from typing import Any
+
 from redis.asyncio import Redis
 from app.core.constant import RedisKey
 
@@ -6,7 +8,7 @@ class RedisClient:
     client: Redis
     _instance = None
 
-    def __new__(cls, *args, **kwargs) -> "RedisClient":
+    def __new__(cls, *args: Any, **kwargs: Any) -> "RedisClient":
         if cls._instance is None:
             cls._instance = super().__new__(cls)
         return cls._instance
