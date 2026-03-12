@@ -21,7 +21,7 @@ depends_on: Union[str, Sequence[str], None] = None
 
 def upgrade() -> None:
     run_sql_up("create_staff_user")
-    
+
 
 
 def downgrade() -> None:

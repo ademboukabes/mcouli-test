@@ -2,7 +2,7 @@ from pydantic import BaseModel
 from app.core.exceptions import AppException, DBExceptionImpl
 from db.generated import session as session_queries
 import uuid
-from db.generated.models import UserSession 
+from db.generated.models import UserSession
 from datetime import datetime,timedelta,timezone
 from app.infra.redis import RedisClient
 from app.core.constant import RedisKey
@@ -19,10 +19,10 @@ class SessionService :
     session_querier : session_queries.AsyncQuerier
     redis : RedisClient
 
-    def init(self,session:session_queries.AsyncQuerier,redis:RedisClient):
+    def init(self, session: session_queries.AsyncQuerier, redis: RedisClient) -> None:
         self.session_querier = session
         self.redis = redis
-    
+
     @staticmethod
     async def create_session(user_id:uuid.UUID,device_id:uuid.UUID)->UpsertSessionRow:
         try :
@@ -33,7 +33,7 @@ class SessionService :
             )
             if session is None :
                 raise AppException.internal_error("session creation failed ")
-            
+
             result = await SessionService.redis.set(
                 key=RedisKey.UserSessionByUser.format(user_id=user_id),
                 value=SessionRedis(
@@ -51,8 +51,8 @@ class SessionService :
             return session
         except Exception as e :
              raise DBExceptionImpl.handle(e)
-            
-        
+
+
 
     @staticmethod
     async def get_session_by_id(session_id:uuid.UUID)->UserSession:
@@ -64,7 +64,7 @@ class SessionService :
         except Exception as e :
             raise DBExceptionImpl.handle(e)
 
-            
+
     @staticmethod
     async def check_session(
         session_id: uuid.UUID,
@@ -125,20 +125,22 @@ class SessionService :
 
 
     @staticmethod
-    async def delete_session(session_id:uuid.UUID,user_id:uuid.UUID,device_id : uuid.UUID):
+    async def delete_session(
+        session_id: uuid.UUID, user_id: uuid.UUID, device_id: uuid.UUID
+    ) -> None:
         try :
             await SessionService.session_querier.delete_session_by_device(user_id=user_id,device_id=device_id)
         except Exception as e :
-           raise  DBExceptionImpl.handle(e)
-    
-    
+            raise DBExceptionImpl.handle(e)
+
+
     @staticmethod
-    async def delete_expired_sessions():
+    async def delete_expired_sessions() -> None:
         try :
             await SessionService.session_querier.delete_expired_sessions()
         except Exception as e :
-           raise  DBExceptionImpl.handle(e)
-    
+            raise DBExceptionImpl.handle(e)
+
     @staticmethod
     async def count_user_sessions(user_id:uuid.UUID)->int:
         try :

@@ -12,8 +12,8 @@ class MobileUserSchema(BaseModel):
     user_id: uuid.UUID
     email: str
     session_id: uuid.UUID
-    
-    
+
+
 async def get_current_mobile_user(
     credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)],
     container: Annotated[Container, Depends(get_container)],

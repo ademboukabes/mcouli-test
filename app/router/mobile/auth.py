@@ -17,7 +17,7 @@ router = APIRouter(prefix="/auth", tags=["mobile-auth"])
 async def mobile_register_login(
     req: MobileAuthRequest,
     container: Container = Depends(get_container),
-):
+) -> MobileAuthResponse:
 
     return await container.auth_service.mobile_register_login(container.redis, req)
 
@@ -26,7 +26,7 @@ async def mobile_register_login(
 async def refresh_token(
     req: RefreshTokenRequest,
     container: Container = Depends(get_container),
-):
+) -> MobileAuthResponse:
 
     return await container.auth_service.refresh_token(container.redis, req.refresh_token)
 
@@ -34,8 +34,8 @@ async def refresh_token(
 @router.post("/logout")
 async def logout(
     container: Container = Depends(get_container),
-    User:MobileUserSchema = Depends(get_current_mobile_user)
-):
+    User: MobileUserSchema = Depends(get_current_mobile_user),
+) -> dict[str, str]:
 
     return await container.auth_service.logout(
         container.redis,
@@ -48,8 +48,8 @@ async def logout(
 async def revoke_device(
     device_id: UUID,
     container: Container = Depends(get_container),
-    current_user:MobileUserSchema = Depends(get_current_mobile_user),
-):
+    current_user: MobileUserSchema = Depends(get_current_mobile_user),
+) -> dict[str, str]:
 
     await container.device_service.revoke_device(
         device_id=device_id,
@@ -60,14 +60,14 @@ async def revoke_device(
 
 @router.get("/me", response_model=MeResponse)
 async def get_me(
-    current_user:MobileUserSchema = Depends(get_current_mobile_user),
+    current_user: MobileUserSchema = Depends(get_current_mobile_user),
     container: Container = Depends(get_container),
-):
+) -> MeResponse:
 
     user = await container.auth_service.user_querier.get_user_by_id(id=current_user.user_id)
     if user is None :
         raise AppException.not_found("user not found")
-    
+
     devices, _ = await container.device_service.get_all_devices(current_user.user_id)
     device_list = [
         DeviceSchema(
@@ -78,7 +78,7 @@ async def get_me(
         )
         for d in devices
     ]
-    
+
     session_schema: Optional[SessionSchema] = None
     sessions_objs = await container.session_service.session_querier.get_session_by_id(
         id=current_user.session_id
@@ -92,8 +92,8 @@ async def get_me(
             expires_at=sessions_objs.expires_at,
         )
 
-    
-    
+
+
     return MeResponse(
         user=UserSchema(id=user.id, email=user.email),
         devices=device_list,

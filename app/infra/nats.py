@@ -3,11 +3,14 @@ from typing import Any, Callable, Optional
 from nats.aio.client import Client as NATS
 from nats.js.client import JetStreamContext
 from nats.js.api import DeliverPolicy, AckPolicy
-from pydantic import BaseModel
-from app.core.config import settings
 from nats.aio.msg import Msg
+from pydantic import BaseModel
+
+from app.core.config import settings
+
+
 class Message(BaseModel):
-        data:dict[str,Any]
+    data: dict[str, Any]
 class NatsSubjects(Enum):
     USER_SIGNUP = "user.signup"
     USER_LOGIN = "user.login"
@@ -20,13 +23,14 @@ class NatsClient:
     @staticmethod
     async def connect() -> None:
         if NatsClient._nc is None:
-            NatsClient._nc = NATS()
-            await NatsClient._nc.connect(
+            nc = NATS()
+            await nc.connect(
                 servers=[f"nats://{settings.NATS_HOST}:{settings.NATS_PORT}"],
                 user=settings.NATS_USER,
                 password=settings.NATS_PASSWORD,
             )
-            NatsClient._js = NatsClient._nc.jetstream() # type: ignore
+            NatsClient._nc = nc
+            NatsClient._js = nc.jetstream()
 
     @staticmethod
     async def close() -> None:
@@ -41,24 +45,29 @@ class NatsClient:
     async def publish(subject: NatsSubjects, message: bytes) -> None:
         if NatsClient._nc is None:
             await NatsClient.connect()
-        await NatsClient._nc.publish(subject.value, message) # type: ignore
+        nc = NatsClient._nc
+        assert nc is not None
+        await nc.publish(subject.value, message)
 
     @staticmethod
     async def subscribe(subject: NatsSubjects, callback: Callable[[Any], Any]) -> None:
         if NatsClient._nc is None:
             await NatsClient.connect()
-        assert NatsClient._nc is not None
-        async def _wrapper(msg:Msg):
+        nc = NatsClient._nc
+        assert nc is not None
+        async def _wrapper(msg: Msg) -> None:
             await callback(msg.data)
 
-        await NatsClient._nc.subscribe(subject.value, cb=_wrapper)# type: ignore 
+        await nc.subscribe(subject.value, cb=_wrapper)
 
 
     @staticmethod
     async def js_publish(subject: NatsSubjects, message: bytes, stream_name: str) -> None:
         if NatsClient._js is None:
             await NatsClient.connect()
-        await NatsClient._js.publish(subject.value, message, stream=stream_name) # type: ignore
+        js = NatsClient._js
+        assert js is not None
+        await js.publish(subject.value, message, stream=stream_name)
 
     @staticmethod
     async def js_subscribe(
@@ -71,12 +80,12 @@ class NatsClient:
         if NatsClient._js is None:
             await NatsClient.connect()
 
-        async def _wrapper(msg:Msg):
+        async def _wrapper(msg: Msg) -> None:
             await callback(msg.data)
             await msg.ack()
-        if NatsClient._js is None :
-            print("no client ")
-        await NatsClient._js.subscribe( # type: ignore
+        js = NatsClient._js
+        assert js is not None
+        await js.subscribe(
             subject=subject.value,
             stream=stream_name,
             durable=durable_name,
