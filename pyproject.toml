@@ -50,9 +50,12 @@ warn_unused_ignores = true
 warn_redundant_casts = true
 follow_imports = "silent"
 files = ["app", "db", "migrations"]
-
+exclude = [
+    "db/generated"
+]
 [dependency-groups]
 dev = [
     "mypy>=1.19.1",
     "ruff>=0.15.5",
+    "types-passlib>=1.7.4",
 ]

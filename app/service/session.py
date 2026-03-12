@@ -19,7 +19,7 @@ class SessionService :
     session_querier : session_queries.AsyncQuerier
     redis : RedisClient
 
-    def init(self,session:session_queries.AsyncQuerier,redis:RedisClient):
+    def init(self, session: session_queries.AsyncQuerier, redis: RedisClient) -> None:
         self.session_querier = session
         self.redis = redis
 
@@ -125,19 +125,21 @@ class SessionService :
 
 
     @staticmethod
-    async def delete_session(session_id:uuid.UUID,user_id:uuid.UUID,device_id : uuid.UUID):
+    async def delete_session(
+        session_id: uuid.UUID, user_id: uuid.UUID, device_id: uuid.UUID
+    ) -> None:
         try :
             await SessionService.session_querier.delete_session_by_device(user_id=user_id,device_id=device_id)
         except Exception as e :
-           raise  DBExceptionImpl.handle(e)
+            raise DBExceptionImpl.handle(e)
 
 
     @staticmethod
-    async def delete_expired_sessions():
+    async def delete_expired_sessions() -> None:
         try :
             await SessionService.session_querier.delete_expired_sessions()
         except Exception as e :
-           raise  DBExceptionImpl.handle(e)
+            raise DBExceptionImpl.handle(e)
 
     @staticmethod
     async def count_user_sessions(user_id:uuid.UUID)->int:

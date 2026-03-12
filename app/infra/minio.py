@@ -15,7 +15,7 @@ WA_SIM_BUCKET_NAME = "wa-sim"
 
 async def init_minio_client(
     minio_host: str, minio_port: int, minio_root_user: str, minio_root_password: str
-):
+) -> None:
     Bucket.client = Minio(
         f"{minio_host}:{minio_port}",
         access_key=minio_root_user,
@@ -75,7 +75,7 @@ class Bucket:
         content_type = (
             res.content_type if res.content_type else "application/octet-stream"
         )
-        filename = res.headers.get("x-amz-meta-filename", f"{object_name}") # type: ignore
+        filename = res.headers.get("x-amz-meta-filename", f"{object_name}")
 
         res.close()
         return (data, filename, content_type)
