@@ -40,3 +40,8 @@ warn_unused_ignores = true
 warn_redundant_casts = true
 follow_imports = "silent"
 files = ["app", "db", "migrations"]
+
+[dependency-groups]
+dev = [
+    "flake8>=7.3.0",
+]
