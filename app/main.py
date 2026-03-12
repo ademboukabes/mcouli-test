@@ -84,8 +84,6 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-
-
 app.add_middleware(RequestLoggingMiddleware)
 
 app.add_middleware(
