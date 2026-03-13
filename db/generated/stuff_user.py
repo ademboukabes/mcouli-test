@@ -50,8 +50,8 @@ WHERE id = :p1
 LIST_STAFF_USERS = """-- name: list_staff_users \\:many
 SELECT id, email, role, created_at, updated_at, password
 FROM staff_users
-WHERE (:p1\\:\\:text IS NULL OR email ILIKE '%' || :p1 || '%')
-  AND (:p2\\:\\:text IS NULL OR role = :p2)
+WHERE (COALESCE(:p1, '') = '' OR email ILIKE '%' || :p1 || '%')
+  AND (COALESCE(:p2, '') = '' OR role\\:\\:text = :p2)
 ORDER BY
   CASE WHEN :p3 = 'email' AND :p4 = 'asc' THEN email END ASC,
   CASE WHEN :p3 = 'created_at' AND :p4 = 'asc' THEN created_at END ASC,
@@ -64,8 +64,8 @@ LIMIT :p5 OFFSET :p6
 
 @dataclasses.dataclass()
 class ListStaffUsersParams:
-    column_1: str
-    column_2: str
+    column_1: Optional[Any]
+    column_2: Optional[Any]
     column_3: Optional[Any]
     column_4: Optional[Any]
     limit: int

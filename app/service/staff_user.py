@@ -1,7 +1,9 @@
+
+from app.core.logger import logger
 from typing import Literal, Optional
 import uuid
 
-from app.core.exceptions import AppException, DBException
+from app.core.exceptions import AppException, DBException, DBExceptionImpl
 from app.core.securite import hash_password
 from db.generated import stuff_user as staff_queries
 from db.generated.stuff_user import ListStaffUsersParams
@@ -19,12 +21,17 @@ class StaffUserService:
     ) -> StaffUser:
         try:
             hashed_password = hash_password(password)
-            user = await self.staff_user_querier.create_multi(email=email,password=hashed_password,role=role)    
+            user = await self.staff_user_querier.create_multi(
+                email=email,
+                password=hashed_password,
+                role=role,
+            )
             if user is None:
                 raise AppException.internal_error("Failed to create staff user")
             return user
         except Exception as exc:
-            raise DBException.handle(exc)
+            logger.error("Failed to create staff user: %s", exc)
+            raise DBExceptionImpl.handle(exc)
 
     async def update_staff_user(
         self, *, id: uuid.UUID, email: Optional[str], role: StaffRole
@@ -37,6 +44,7 @@ class StaffUserService:
                 raise AppException.not_found("Staff user not found")
             return user
         except Exception as exc:
+            logger.error("Failed to update staff user: %s", exc)
             raise DBException.handle(exc)
 
     async def delete_staff_user(self, *, id: uuid.UUID) -> StaffUser:
@@ -58,17 +66,25 @@ class StaffUserService:
         sort_by: Literal["created_at", "email"],
         sort_direction: Literal["asc", "desc"],
     ) -> list[StaffUser]:
-        normalized_search = search.strip() if search and search.strip() else None
-        params = ListStaffUsersParams(
-            column_1=normalized_search,
-            column_2=role.value if role else None,
-            column_3=sort_by,
-            column_4=sort_direction,
-            limit=limit,
-            offset=offset,
-        )
+        try:
+            if search is not None:
+                normalized_search = search.strip() 
+            else:
+                normalized_search = None
+            
+            params = ListStaffUsersParams(
+                column_1=normalized_search,               
+                column_2=role.value if role is not None else None ,      
+                column_3=sort_by,
+                column_4=sort_direction,
+                limit=limit,
+                offset=offset,
+            )
 
-        result: list[StaffUser] = []
-        async for user in self.staff_user_querier.list_staff_users(params):
-            result.append(user)
-        return result
+            result: list[StaffUser] = []
+            async for user in self.staff_user_querier.list_staff_users(params):
+                result.append(user)
+            return result
+        except Exception as exc:
+            logger.error("Failed to list staff users: %s", exc)
+            raise DBException.handle(exc)

@@ -5,10 +5,9 @@ from fastapi import APIRouter, Depends, Query, status
 
 from app.container import Container, get_container
 from app.core.logger import logger
-from app.deps.staff_auth import get_current_staff_user
 from app.schema.request.web.staff_user import StaffUserCreateRequest, StaffUserUpdateRequest
 from app.schema.response.web.staff_user import StaffUserSchema
-from db.generated.models import StaffRole, StaffUser
+from db.generated.models import StaffRole
 
 router = APIRouter(prefix="/staff-users")
 
@@ -22,7 +21,6 @@ async def list_staff_users(
     sort_by: Literal["created_at", "email"] = Query(default="created_at"),
     sort_direction: Literal["asc", "desc"] = Query(default="desc"),
     container: Container = Depends(get_container),
-    current_staff_user: StaffUser = Depends(get_current_staff_user),
 ) -> list[StaffUserSchema]:
     staff_users = await container.staff_user_service.list_staff_users(
         limit=limit,
@@ -48,7 +46,6 @@ async def list_staff_users(
 async def create_staff_user(
     req: StaffUserCreateRequest,
     container: Container = Depends(get_container),
-    current_staff_user: StaffUser = Depends(get_current_staff_user),
 ) -> StaffUserSchema:
     staff_user = await container.staff_user_service.create_staff_user(
         email=req.email, password=req.password, role=StaffRole(req.role)
@@ -68,7 +65,6 @@ async def update_staff_user(
     staff_user_id: UUID,
     req: StaffUserUpdateRequest,
     container: Container = Depends(get_container),
-    current_staff_user: StaffUser = Depends(get_current_staff_user),
 ) -> StaffUserSchema:
     staff_user = await container.staff_user_service.update_staff_user(
         id=staff_user_id, email=req.email, role=StaffRole(req.role)
@@ -87,7 +83,6 @@ async def update_staff_user(
 async def delete_staff_user(
     staff_user_id: UUID,
     container: Container = Depends(get_container),
-    current_staff_user: StaffUser = Depends(get_current_staff_user),
 ) -> StaffUserSchema:
     staff_user = await container.staff_user_service.delete_staff_user(id=staff_user_id)
     logger.info("deleted staff user %s", staff_user_id)

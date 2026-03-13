@@ -21,8 +21,8 @@ WHERE email = $1;
 -- name: ListStaffUsers :many
 SELECT *
 FROM staff_users
-WHERE ($1::text IS NULL OR email ILIKE '%' || $1 || '%')
-  AND ($2::text IS NULL OR role = $2)
+WHERE (COALESCE($1, '') = '' OR email ILIKE '%' || $1 || '%')
+  AND (COALESCE($2, '') = '' OR role::text = $2)
 ORDER BY
   CASE WHEN $3 = 'email' AND $4 = 'asc' THEN email END ASC,
   CASE WHEN $3 = 'created_at' AND $4 = 'asc' THEN created_at END ASC,
