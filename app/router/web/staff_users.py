@@ -9,7 +9,7 @@ from app.schema.request.web.staff_user import StaffUserCreateRequest, StaffUserU
 from app.schema.response.web.staff_user import StaffUserSchema
 from db.generated.models import StaffUser, StaffRole
 
-router = APIRouter(prefix="/staff-users", tags=["web-staff-users"])
+router = APIRouter(prefix="/staff-users")
 
 
 

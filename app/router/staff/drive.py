@@ -12,7 +12,7 @@ from app.schema.response.staff.drive import (
 from db.generated.models import StaffUser
 
 
-router = APIRouter(prefix="/drive", tags=["staff-drive"])
+router = APIRouter(prefix="/drive")
 
 
 @router.get("/connect", response_model=GoogleDriveConnectResponse)

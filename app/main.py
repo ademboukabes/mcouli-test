@@ -10,8 +10,9 @@ from app.core.config import settings
 from app.infra.minio import init_minio_client
 from app.infra.nats import NatsClient
 from app.infra.redis import RedisClient
-from app.router.mobile.auth import router as mobile_auth_router
-from app.router.staff.drive import router as staff_drive_router
+from app.router.mobile import router as mobile_router
+from app.router.staff import router as staff_router
+from app.router.web import router as web_router
 from app.core.logger import configure_logger, logger
 
 configure_logger()
@@ -107,5 +108,6 @@ def health_check() -> dict[str, str]:
     return {"status": "healthy"}
 
 
-app.include_router(mobile_auth_router, prefix="/mobile")
-app.include_router(staff_drive_router, prefix="/staff")
+app.include_router(mobile_router)
+app.include_router(staff_router)
+app.include_router(web_router)

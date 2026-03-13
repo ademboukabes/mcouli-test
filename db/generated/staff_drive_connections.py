@@ -10,7 +10,7 @@ import uuid
 import sqlalchemy
 import sqlalchemy.ext.asyncio
 
-from generated import models
+from db.generated import models
 
 
 GET_ACTIVE_STAFF_DRIVE_CONNECTION_BY_STAFF_USER_ID = """-- name: get_active_staff_drive_connection_by_staff_user_id \\:one

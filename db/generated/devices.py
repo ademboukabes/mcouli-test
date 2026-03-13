@@ -9,7 +9,7 @@ import uuid
 import sqlalchemy
 import sqlalchemy.ext.asyncio
 
-from generated import models
+from db.generated import models
 
 
 COUNT__USER__DEVICES = """-- name: count__user__devices \\:one

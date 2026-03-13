@@ -14,7 +14,7 @@ sql:
       - out: "generated"              
         plugin: py
         options:
-          package: "generated" 
+          package: "db.generated" 
           emit_sync_querier: false
           emit_async_querier: true 
           emit_models: true        
