@@ -12,6 +12,7 @@ from app.infra.minio import init_minio_client
 from app.infra.nats import NatsClient
 from app.infra.redis import RedisClient
 from app.router.mobile.auth import router as mobile_auth_router
+from app.router.staff.drive import router as staff_drive_router
 
 
 
@@ -115,3 +116,4 @@ def health_check() -> dict[str, str]:
 
 
 app.include_router(mobile_auth_router, prefix="/mobile")
+app.include_router(staff_drive_router, prefix="/staff")

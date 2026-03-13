@@ -36,6 +36,14 @@ class Settings(BaseSettings):
     encryption_key: str
     totp_issuer: str = "multAI"
 
+    # Google Drive OAuth
+    GOOGLE_CLIENT_ID: str = ""
+    GOOGLE_CLIENT_SECRET: str = ""
+    GOOGLE_REDIRECT_URI: str = ""
+    GOOGLE_OAUTH_SCOPES: str = (
+        "https://www.googleapis.com/auth/drive.readonly openid email profile"
+    )
+
     class Config:
         env_file = ".env"
         extra = "ignore"

@@ -29,6 +29,23 @@ class StaffUser:
 
 
 @dataclasses.dataclass()
+class StaffDriveConnection:
+    id: uuid.UUID
+    staff_user_id: uuid.UUID
+    provider: str
+    google_email: str
+    google_account_id: str
+    access_token: str
+    refresh_token: Optional[str]
+    token_expires_at: Optional[datetime.datetime]
+    scopes: str
+    connected_at: datetime.datetime
+    revoked_at: Optional[datetime.datetime]
+    created_at: datetime.datetime
+    updated_at: datetime.datetime
+
+
+@dataclasses.dataclass()
 class User:
     id: uuid.UUID
     email: str

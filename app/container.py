@@ -5,9 +5,12 @@ from app.infra.redis import RedisClient
 from db.generated import user as user_queries
 from db.generated import session as session_queries
 from db.generated import devices as device_queries
+from db.generated import stuff_user as staff_user_queries
+from db.generated import staff_drive_connections as staff_drive_queries
 from app.service.users import AuthService
 from app.service.session import SessionService
 from app.service.device import DeviceService
+from app.service.staff_drive import StaffDriveService
 
 
 
@@ -21,6 +24,8 @@ class Container:
         self.user_querier = user_queries.AsyncQuerier(conn)
         self.session_querier = session_queries.AsyncQuerier(conn)
         self.device_querier = device_queries.AsyncQuerier(conn)
+        self.staff_user_querier = staff_user_queries.AsyncQuerier(conn)
+        self.staff_drive_querier = staff_drive_queries.AsyncQuerier(conn)
 
         # services
         self.session_service = SessionService()
@@ -38,6 +43,12 @@ class Container:
             user_querier=self.user_querier,
             device_querier=self.device_querier,
             session_querier=self.session_querier,
+        )
+
+        self.staff_drive_service = StaffDriveService(
+            staff_user_querier=self.staff_user_querier,
+            drive_connection_querier=self.staff_drive_querier,
+            redis=self.redis,
         )
 
 
