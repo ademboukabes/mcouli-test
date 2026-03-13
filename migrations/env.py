@@ -1,4 +1,7 @@
 from logging.config import fileConfig
+import os
+from pathlib import Path
+from urllib.parse import quote_plus
 
 from sqlalchemy import engine_from_config
 from sqlalchemy import pool
@@ -24,6 +27,39 @@ target_metadata = None
 # can be acquired:
 # my_important_option = config.get_main_option("my_important_option")
 # ... etc.
+
+
+def _load_project_env() -> dict[str, str]:
+    env_values: dict[str, str] = {}
+    env_path = Path(__file__).resolve().parents[1] / ".env"
+    if not env_path.exists():
+        return env_values
+
+    for raw_line in env_path.read_text().splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        env_values[key.strip()] = value.strip().strip("\"'")
+
+    return env_values
+
+
+def _get_setting(name: str, default: str = "") -> str:
+    return os.getenv(name, _load_project_env().get(name, default))
+
+
+def _database_url() -> str:
+    user = quote_plus(_get_setting("POSTGRES_USER", "postgres"))
+    password = quote_plus(_get_setting("POSTGRES_PASSWORD", ""))
+    host = _get_setting("POSTGRES_HOST", "localhost")
+    port = _get_setting("POSTGRES_PORT", "5432")
+    db_name = quote_plus(_get_setting("POSTGRES_DB", "postgres"))
+
+    return f"postgresql+psycopg://{user}:{password}@{host}:{port}/{db_name}"
+
+
+config.set_main_option("sqlalchemy.url", _database_url())
 
 
 def run_migrations_offline() -> None:
