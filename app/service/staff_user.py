@@ -1,9 +1,10 @@
-from typing import  Optional
+from typing import Literal, Optional
 import uuid
 
 from app.core.exceptions import AppException, DBException
 from app.core.securite import hash_password
 from db.generated import stuff_user as staff_queries
+from db.generated.stuff_user import ListStaffUsersParams
 from db.generated.models import StaffUser, StaffRole
 
 
@@ -47,8 +48,27 @@ class StaffUserService:
         except Exception as exc:
             raise DBException.handle(exc)
 
-    async def list_staff_users(self, *, limit: int, offset: int) -> list[StaffUser]:
-        result:list[StaffUser] = []
-        async for user in self.staff_user_querier.get_all_staff_users(limit=limit, offset=offset):
+    async def list_staff_users(
+        self,
+        *,
+        limit: int,
+        offset: int,
+        search: str | None,
+        role: StaffRole | None,
+        sort_by: Literal["created_at", "email"],
+        sort_direction: Literal["asc", "desc"],
+    ) -> list[StaffUser]:
+        normalized_search = search.strip() if search and search.strip() else None
+        params = ListStaffUsersParams(
+            column_1=normalized_search,
+            column_2=role.value if role else None,
+            column_3=sort_by,
+            column_4=sort_direction,
+            limit=limit,
+            offset=offset,
+        )
+
+        result: list[StaffUser] = []
+        async for user in self.staff_user_querier.list_staff_users(params):
             result.append(user)
         return result

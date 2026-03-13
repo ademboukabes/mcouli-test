@@ -2,6 +2,7 @@
 # versions:
 #   sqlc v1.30.0
 # source: stuff_user.sql
+import dataclasses
 from typing import Any, AsyncIterator, Optional
 import uuid
 
@@ -32,14 +33,6 @@ RETURNING id, email, role, created_at, updated_at, password
 """
 
 
-GET_ALL_STAFF_USERS = """-- name: get_all_staff_users \\:many
-SELECT id, email, role, created_at, updated_at, password
-FROM staff_users
-ORDER BY created_at DESC
-LIMIT :p1 OFFSET :p2
-"""
-
-
 GET_STAFF_USER_BY_EMAIL = """-- name: get_staff_user_by_email \\:one
 SELECT id, email, role, created_at, updated_at, password
 FROM staff_users
@@ -52,6 +45,31 @@ SELECT id, email, role, created_at, updated_at, password
 FROM staff_users
 WHERE id = :p1
 """
+
+
+LIST_STAFF_USERS = """-- name: list_staff_users \\:many
+SELECT id, email, role, created_at, updated_at, password
+FROM staff_users
+WHERE (:p1\\:\\:text IS NULL OR email ILIKE '%' || :p1 || '%')
+  AND (:p2\\:\\:text IS NULL OR role = :p2)
+ORDER BY
+  CASE WHEN :p3 = 'email' AND :p4 = 'asc' THEN email END ASC,
+  CASE WHEN :p3 = 'created_at' AND :p4 = 'asc' THEN created_at END ASC,
+  CASE WHEN :p3 = 'email' AND :p4 = 'desc' THEN email END DESC,
+  CASE WHEN :p3 = 'created_at' AND :p4 = 'desc' THEN created_at END DESC,
+  created_at DESC
+LIMIT :p5 OFFSET :p6
+"""
+
+
+@dataclasses.dataclass()
+class ListStaffUsersParams:
+    column_1: str
+    column_2: str
+    column_3: Optional[Any]
+    column_4: Optional[Any]
+    limit: int
+    offset: int
 
 
 UPDATE_STAFF_USER = """-- name: update_staff_user \\:one
@@ -105,18 +123,6 @@ class AsyncQuerier:
             password=row[5],
         )
 
-    async def get_all_staff_users(self, *, limit: int, offset: int) -> AsyncIterator[models.StaffUser]:
-        result = await self._conn.stream(sqlalchemy.text(GET_ALL_STAFF_USERS), {"p1": limit, "p2": offset})
-        async for row in result:
-            yield models.StaffUser(
-                id=row[0],
-                email=row[1],
-                role=row[2],
-                created_at=row[3],
-                updated_at=row[4],
-                password=row[5],
-            )
-
     async def get_staff_user_by_email(self, *, email: Optional[str]) -> Optional[models.StaffUser]:
         row = (await self._conn.execute(sqlalchemy.text(GET_STAFF_USER_BY_EMAIL), {"p1": email})).first()
         if row is None:
@@ -142,6 +148,25 @@ class AsyncQuerier:
             updated_at=row[4],
             password=row[5],
         )
+
+    async def list_staff_users(self, arg: ListStaffUsersParams) -> AsyncIterator[models.StaffUser]:
+        result = await self._conn.stream(sqlalchemy.text(LIST_STAFF_USERS), {
+            "p1": arg.column_1,
+            "p2": arg.column_2,
+            "p3": arg.column_3,
+            "p4": arg.column_4,
+            "p5": arg.limit,
+            "p6": arg.offset,
+        })
+        async for row in result:
+            yield models.StaffUser(
+                id=row[0],
+                email=row[1],
+                role=row[2],
+                created_at=row[3],
+                updated_at=row[4],
+                password=row[5],
+            )
 
     async def update_staff_user(self, *, id: uuid.UUID, email: Optional[str], role: Any) -> Optional[models.StaffUser]:
         row = (await self._conn.execute(sqlalchemy.text(UPDATE_STAFF_USER), {"p1": id, "p2": email, "p3": role})).first()

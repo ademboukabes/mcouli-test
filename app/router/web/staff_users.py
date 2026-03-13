@@ -1,17 +1,47 @@
+from typing import Literal
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Query, status
 
 from app.container import Container, get_container
 from app.core.logger import logger
 from app.deps.staff_auth import get_current_staff_user
 from app.schema.request.web.staff_user import StaffUserCreateRequest, StaffUserUpdateRequest
 from app.schema.response.web.staff_user import StaffUserSchema
-from db.generated.models import StaffUser, StaffRole
+from db.generated.models import StaffRole, StaffUser
 
 router = APIRouter(prefix="/staff-users")
 
 
+@router.get("/", response_model=list[StaffUserSchema])
+async def list_staff_users(
+    limit: int = Query(20, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+    search: str | None = Query(default=None),
+    role: StaffRole | None = Query(default=None),
+    sort_by: Literal["created_at", "email"] = Query(default="created_at"),
+    sort_direction: Literal["asc", "desc"] = Query(default="desc"),
+    container: Container = Depends(get_container),
+    current_staff_user: StaffUser = Depends(get_current_staff_user),
+) -> list[StaffUserSchema]:
+    staff_users = await container.staff_user_service.list_staff_users(
+        limit=limit,
+        offset=offset,
+        search=search,
+        role=role,
+        sort_by=sort_by,
+        sort_direction=sort_direction,
+    )
+    return [
+        StaffUserSchema(
+            id=user.id,
+            email=user.email,
+            role=user.role,
+            created_at=user.created_at,
+            updated_at=user.updated_at
+        )
+        for user in staff_users
+    ]
 
 
 @router.post("/", response_model=StaffUserSchema, status_code=status.HTTP_201_CREATED)

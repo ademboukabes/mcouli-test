@@ -18,11 +18,18 @@ SELECT *
 FROM staff_users
 WHERE email = $1;
 
--- name: GetAllStaffUsers :many
+-- name: ListStaffUsers :many
 SELECT *
 FROM staff_users
-ORDER BY created_at DESC
-LIMIT $1 OFFSET $2;
+WHERE ($1::text IS NULL OR email ILIKE '%' || $1 || '%')
+  AND ($2::text IS NULL OR role = $2)
+ORDER BY
+  CASE WHEN $3 = 'email' AND $4 = 'asc' THEN email END ASC,
+  CASE WHEN $3 = 'created_at' AND $4 = 'asc' THEN created_at END ASC,
+  CASE WHEN $3 = 'email' AND $4 = 'desc' THEN email END DESC,
+  CASE WHEN $3 = 'created_at' AND $4 = 'desc' THEN created_at END DESC,
+  created_at DESC
+LIMIT $5 OFFSET $6;
 
 -- name: UpdateStaffUser :one
 UPDATE staff_users
