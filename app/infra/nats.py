@@ -30,7 +30,7 @@ class NatsClient:
                 password=settings.NATS_PASSWORD,
             )
             NatsClient._nc = nc
-            NatsClient._js = nc.jetstream() # type: ignore
+            NatsClient._js = nc.jetstream()
 
     @staticmethod
     async def close() -> None:
@@ -58,7 +58,7 @@ class NatsClient:
         async def _wrapper(msg: Msg) -> None:
             await callback(msg.data)
 
-        await nc.subscribe(subject.value, cb=_wrapper) # type: ignore
+        await nc.subscribe(subject.value, cb=_wrapper)
 
 
     @staticmethod

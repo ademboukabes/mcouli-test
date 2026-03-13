@@ -45,3 +45,5 @@ run-app:
 
 lint:
 	uv run ruff check .
+check_type:
+	uv run mypy .

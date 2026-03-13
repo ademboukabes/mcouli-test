@@ -8,12 +8,15 @@ from db.generated.models import UserDevice
 class DeviceService:
     device_querier: device_queries.AsyncQuerier
 
-    def init(self, device_querier: device_queries.AsyncQuerier) -> None:
+    def init(self: "DeviceService", device_querier: device_queries.AsyncQuerier) -> None:
         self.device_querier = device_querier
 
     async def create_device(
-        self,
-        user_id: uuid.UUID, device_name: str, device_type: str, id: uuid.UUID | None = None
+        self: "DeviceService",
+        user_id: uuid.UUID,
+        device_name: str,
+        device_type: str,
+        id: uuid.UUID | None = None,
     ) -> UserDevice | None:
         try :
             DeviceCount = await self.count_devices(user_id=user_id)
@@ -29,10 +32,10 @@ class DeviceService:
         except Exception as e :
             raise DBException.handle(e)
 
-    @staticmethod
     async def revoke_device(
-        self,
-        device_id: uuid.UUID, user_id: uuid.UUID
+        self: "DeviceService",
+        device_id: uuid.UUID,
+        user_id: uuid.UUID,
     ) -> None:
         try :
             #here were cacscading the delete of the session  no need to handle it
@@ -43,7 +46,7 @@ class DeviceService:
         except Exception as e :
             raise DBException.handle(e)
 
-    async def get_all_devices(self,user_id: uuid.UUID) -> tuple[list[UserDevice], int]:
+    async def get_all_devices(self: "DeviceService", user_id: uuid.UUID) -> tuple[list[UserDevice], int]:
         devices: list[UserDevice] = []
 
         async for device in self.device_querier.list_user_devices(user_id=user_id):
@@ -54,8 +57,9 @@ class DeviceService:
         return devices, count
 
     async def get_device_by_id(
-        self,
-        device_id: uuid.UUID, user_id: uuid.UUID
+        self: "DeviceService",
+        device_id: uuid.UUID,
+        user_id: uuid.UUID,
     ) -> UserDevice:
         try :
             device =  await self.device_querier.get_device__by_id(id=device_id)
@@ -65,7 +69,7 @@ class DeviceService:
         except Exception as e :
             raise DBExceptionImpl.handle(e)
 
-    async def count_devices(self,user_id: uuid.UUID) -> int:
+    async def count_devices(self: "DeviceService", user_id: uuid.UUID) -> int:
         try :
             count =  await self.device_querier.count__user__devices(user_id=user_id)
             if count is None :
@@ -73,6 +77,5 @@ class DeviceService:
             return count
         except Exception as e :
             raise  DBExceptionImpl.handle(e)
-
 
 
