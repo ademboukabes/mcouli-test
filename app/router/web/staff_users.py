@@ -3,7 +3,6 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, status
 
 from app.container import Container, get_container
-from app.core.exceptions import AppException
 from app.core.logger import logger
 from app.deps.staff_auth import get_current_staff_user
 from app.schema.request.web.staff_user import StaffUserCreateRequest, StaffUserUpdateRequest
@@ -27,7 +26,10 @@ async def create_staff_user(
     logger.info("created staff user %s", req.email or "<no-email>")
     return StaffUserSchema(
         id=staff_user.id,
-        
+        email=staff_user.email,
+        role=staff_user.role,
+        created_at=staff_user.created_at,
+        updated_at=staff_user.updated_at
     )
 
 
@@ -42,7 +44,13 @@ async def update_staff_user(
         id=staff_user_id, email=req.email, role=StaffRole(req.role)
     )
     logger.info("updated staff user %s", staff_user_id)
-    return StaffUserSchema.from_orm(staff_user)
+    return StaffUserSchema(
+        id=staff_user.id,
+        email=staff_user.email,
+        role=staff_user.role,
+        created_at=staff_user.created_at,
+        updated_at=staff_user.updated_at
+    )
 
 
 @router.delete("/{staff_user_id}", response_model=StaffUserSchema)
@@ -53,4 +61,10 @@ async def delete_staff_user(
 ) -> StaffUserSchema:
     staff_user = await container.staff_user_service.delete_staff_user(id=staff_user_id)
     logger.info("deleted staff user %s", staff_user_id)
-    return StaffUserSchema.from_orm(staff_user)
+    return StaffUserSchema(
+        id=staff_user.id,
+        email=staff_user.email,
+        role=staff_user.role,
+        created_at=staff_user.created_at,
+        updated_at=staff_user.updated_at
+    )
