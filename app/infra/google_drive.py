@@ -33,6 +33,22 @@ class GoogleUserInfo:
 
 class GoogleDriveClient:
     @staticmethod
+    def _require_str(data: dict[str, object], key: str) -> str:
+        value = data.get(key)
+        if not isinstance(value, str) or not value:
+            raise AppException.bad_request(f"Google response missing '{key}'")
+        return value
+
+    @staticmethod
+    def _optional_str(data: dict[str, object], key: str) -> str | None:
+        value = data.get(key)
+        if value is None:
+            return None
+        if not isinstance(value, str):
+            raise AppException.bad_request(f"Google response field '{key}' is invalid")
+        return value
+
+    @staticmethod
     def validate_settings() -> None:
         if (
             not settings.GOOGLE_CLIENT_ID
@@ -77,11 +93,13 @@ class GoogleDriveClient:
             expires_at = datetime.now(timezone.utc) + timedelta(seconds=expires_in)
 
         return GoogleTokenResponse(
-            access_token=data["access_token"],
-            refresh_token=data.get("refresh_token"),
+            access_token=GoogleDriveClient._require_str(data, "access_token"),
+            refresh_token=GoogleDriveClient._optional_str(data, "refresh_token"),
             expires_at=expires_at,
-            scope=data.get("scope", settings.GOOGLE_OAUTH_SCOPES),
-            token_type=data.get("token_type", "Bearer"),
+            scope=GoogleDriveClient._optional_str(data, "scope")
+            or settings.GOOGLE_OAUTH_SCOPES,
+            token_type=GoogleDriveClient._optional_str(data, "token_type")
+            or "Bearer",
         )
 
     @staticmethod
@@ -91,8 +109,8 @@ class GoogleDriveClient:
             headers={"Authorization": f"Bearer {access_token}"},
         )
         return GoogleUserInfo(
-            id=data["id"],
-            email=data["email"],
+            id=GoogleDriveClient._require_str(data, "id"),
+            email=GoogleDriveClient._require_str(data, "email"),
             verified_email=bool(data.get("verified_email", False)),
         )
 
