@@ -11,6 +11,7 @@ from app.service.users import AuthService
 from app.service.session import SessionService
 from app.service.device import DeviceService
 from app.service.staff_drive import StaffDriveService
+from app.service.staff_user import StaffUserService
 
 
 
@@ -49,6 +50,11 @@ class Container:
             staff_user_querier=self.staff_user_querier,
             drive_connection_querier=self.staff_drive_querier,
             redis=self.redis,
+        )
+
+        self.staff_user_service = StaffUserService()
+        self.staff_user_service.init(
+            staff_user_querier=self.staff_user_querier,
         )
 
 

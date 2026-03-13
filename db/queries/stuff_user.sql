@@ -23,3 +23,14 @@ SELECT *
 FROM staff_users
 ORDER BY created_at DESC
 LIMIT $1 OFFSET $2;
+
+-- name: UpdateStaffUser :one
+UPDATE staff_users
+SET email = $2, discord_id = $3, role = $4, updated_at = NOW()
+WHERE id = $1
+RETURNING *;
+
+-- name: DeleteStaffUser :one
+DELETE FROM staff_users
+WHERE id = $1
+RETURNING *;

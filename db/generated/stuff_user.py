@@ -46,6 +46,19 @@ FROM staff_users
 WHERE id = :p1
 """
 
+UPDATE_STAFF_USER = """-- name: update_staff_user \\:one
+UPDATE staff_users
+SET email = :p2, discord_id = :p3, role = :p4, updated_at = NOW()
+WHERE id = :p1
+RETURNING id, discord_id, email, role, created_at, updated_at
+"""
+
+DELETE_STAFF_USER = """-- name: delete_staff_user \\:one
+DELETE FROM staff_users
+WHERE id = :p1
+RETURNING id, discord_id, email, role, created_at, updated_at
+"""
+
 
 class AsyncQuerier:
     def __init__(self, conn: sqlalchemy.ext.asyncio.AsyncConnection):
@@ -104,6 +117,32 @@ class AsyncQuerier:
 
     async def get_staff_user_by_id(self, *, id: uuid.UUID) -> Optional[models.StaffUser]:
         row = (await self._conn.execute(sqlalchemy.text(GET_STAFF_USER_BY_ID), {"p1": id})).first()
+        if row is None:
+            return None
+        return models.StaffUser(
+            id=row[0],
+            discord_id=row[1],
+            email=row[2],
+            role=row[3],
+            created_at=row[4],
+            updated_at=row[5],
+        )
+
+    async def update_staff_user(self, *, id: uuid.UUID, email: Optional[str], discord_id: str, role: str) -> Optional[models.StaffUser]:
+        row = (await self._conn.execute(sqlalchemy.text(UPDATE_STAFF_USER), {"p1": id, "p2": email, "p3": discord_id, "p4": role})).first()
+        if row is None:
+            return None
+        return models.StaffUser(
+            id=row[0],
+            discord_id=row[1],
+            email=row[2],
+            role=row[3],
+            created_at=row[4],
+            updated_at=row[5],
+        )
+
+    async def delete_staff_user(self, *, id: uuid.UUID) -> Optional[models.StaffUser]:
+        row = (await self._conn.execute(sqlalchemy.text(DELETE_STAFF_USER), {"p1": id})).first()
         if row is None:
             return None
         return models.StaffUser(
