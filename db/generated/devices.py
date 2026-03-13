@@ -2,13 +2,14 @@
 # versions:
 #   sqlc v1.30.0
 # source: devices.sql
-from typing import AsyncIterator, Optional
+import dataclasses
+from typing import Any, AsyncIterator, Optional
 import uuid
 
 import sqlalchemy
 import sqlalchemy.ext.asyncio
 
-from . import models
+from generated import models
 
 
 COUNT__USER__DEVICES = """-- name: count__user__devices \\:one
@@ -30,6 +31,15 @@ INSERT INTO user_devices (
 )
 RETURNING id, user_id, device_name, device_type, totp_secret, is_2fa_enabled, last_active, created_at
 """
+
+
+@dataclasses.dataclass()
+class CreateDeviceParams:
+    column_1: Optional[Any]
+    user_id: uuid.UUID
+    device_name: Optional[str]
+    device_type: Optional[str]
+    totp_secret: Optional[str]
 
 
 ENABLE_DEVICE2_FA = """-- name: enable_device2_fa \\:exec
@@ -79,13 +89,13 @@ class AsyncQuerier:
             return None
         return row[0]
 
-    async def create_device(self, *, id: Optional[uuid.UUID], user_id: uuid.UUID, device_name: Optional[str], device_type: Optional[str], totp_secret: Optional[str]) -> Optional[models.UserDevice]:
+    async def create_device(self, arg: CreateDeviceParams) -> Optional[models.UserDevice]:
         row = (await self._conn.execute(sqlalchemy.text(CREATE_DEVICE), {
-            "p1": id,
-            "p2": user_id,
-            "p3": device_name,
-            "p4": device_type,
-            "p5": totp_secret,
+            "p1": arg.column_1,
+            "p2": arg.user_id,
+            "p3": arg.device_name,
+            "p4": arg.device_type,
+            "p5": arg.totp_secret,
         })).first()
         if row is None:
             return None

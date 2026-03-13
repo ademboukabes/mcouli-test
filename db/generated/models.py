@@ -8,9 +8,34 @@ from typing import Any, Optional
 import uuid
 
 
+class EventStatus(str, enum.Enum):
+    DRAFT = "draft"
+    SCHEDULED = "scheduled"
+    ARCHIVED = "archived"
+
+
+class PhotoStatus(str, enum.Enum):
+    PENDING = "pending"
+    APPROVED = "approved"
+    REJECTED = "rejected"
+
+
+class ProcessingJobStatus(str, enum.Enum):
+    PENDING = "pending"
+    RUNNING = "running"
+    COMPLETED = "completed"
+    FAILED = "failed"
+
+
 class StaffRole(str, enum.Enum):
     ADMIN = "admin"
     MULTI = "multi"
+
+
+class UploadRequestStatus(str, enum.Enum):
+    PENDING = "pending"
+    APPROVED = "approved"
+    REJECTED = "rejected"
 
 
 @dataclasses.dataclass()
@@ -19,13 +44,85 @@ class AlembicVersion:
 
 
 @dataclasses.dataclass()
-class StaffUser:
+class Event:
     id: uuid.UUID
-    discord_id: str
-    email: Optional[str]
-    role: Any
+    name: str
+    event_code: str
+    event_date: datetime.datetime
+    status: Any
+    created_by: uuid.UUID
     created_at: datetime.datetime
-    updated_at: datetime.datetime
+    archived_at: Optional[datetime.datetime]
+
+
+@dataclasses.dataclass()
+class EventParticipant:
+    id: uuid.UUID
+    event_id: uuid.UUID
+    user_id: uuid.UUID
+    joined_at: datetime.datetime
+
+
+@dataclasses.dataclass()
+class FaceMatch:
+    id: uuid.UUID
+    photo_face_id: uuid.UUID
+    user_id: uuid.UUID
+    confidence: float
+    created_at: datetime.datetime
+
+
+@dataclasses.dataclass()
+class Notification:
+    id: uuid.UUID
+    user_id: uuid.UUID
+    type: str
+    payload: Any
+    read_at: Optional[datetime.datetime]
+    created_at: datetime.datetime
+
+
+@dataclasses.dataclass()
+class Photo:
+    id: uuid.UUID
+    event_id: uuid.UUID
+    uploaded_by: Optional[uuid.UUID]
+    storage_key: str
+    taken_at: Optional[datetime.datetime]
+    day_number: Optional[int]
+    visibility: str
+    status: Any
+    created_at: datetime.datetime
+
+
+@dataclasses.dataclass()
+class PhotoApproval:
+    id: uuid.UUID
+    photo_id: uuid.UUID
+    user_id: uuid.UUID
+    decision: str
+    decided_at: datetime.datetime
+
+
+@dataclasses.dataclass()
+class PhotoFace:
+    id: uuid.UUID
+    photo_id: uuid.UUID
+    face_index: int
+    embedding: Optional[Any]
+    bbox: Optional[str]
+    created_at: datetime.datetime
+
+
+@dataclasses.dataclass()
+class ProcessingJob:
+    id: uuid.UUID
+    photo_id: uuid.UUID
+    job_type: str
+    status: Any
+    attempts: int
+    created_at: datetime.datetime
+    completed_at: Optional[datetime.datetime]
 
 
 @dataclasses.dataclass()
@@ -46,6 +143,28 @@ class StaffDriveConnection:
 
 
 @dataclasses.dataclass()
+class StaffUser:
+    id: uuid.UUID
+    email: Optional[str]
+    role: Any
+    created_at: datetime.datetime
+    updated_at: datetime.datetime
+    password: str
+
+
+@dataclasses.dataclass()
+class UploadRequest:
+    id: uuid.UUID
+    event_id: uuid.UUID
+    drive_file_id: str
+    requested_by: uuid.UUID
+    approved_by: Optional[uuid.UUID]
+    status: Any
+    created_at: datetime.datetime
+    approved_at: Optional[datetime.datetime]
+
+
+@dataclasses.dataclass()
 class User:
     id: uuid.UUID
     email: str
@@ -63,6 +182,15 @@ class UserDevice:
     totp_secret: Optional[str]
     is_2fa_enabled: bool
     last_active: datetime.datetime
+    created_at: datetime.datetime
+
+
+@dataclasses.dataclass()
+class UserPhoto:
+    id: uuid.UUID
+    user_id: uuid.UUID
+    photo_id: uuid.UUID
+    visibility: str
     created_at: datetime.datetime
 
 

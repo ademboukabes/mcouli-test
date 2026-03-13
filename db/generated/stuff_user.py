@@ -2,31 +2,38 @@
 # versions:
 #   sqlc v1.30.0
 # source: stuff_user.sql
-from typing import AsyncIterator, Optional
+from typing import Any, AsyncIterator, Optional
 import uuid
 
 import sqlalchemy
 import sqlalchemy.ext.asyncio
 
-from . import models
+from generated import models
 
 
 CREATE_ADMIN = """-- name: create_admin \\:one
-INSERT INTO staff_users (email, discord_id, role)
+INSERT INTO staff_users (email, password, role)
 VALUES (:p1, :p2, 'admin')
-RETURNING id, discord_id, email, role, created_at, updated_at
+RETURNING id, email, role, created_at, updated_at, password
 """
 
 
 CREATE_MULTI = """-- name: create_multi \\:one
-INSERT INTO staff_users (email, discord_id, role)
-VALUES (:p1, :p2, 'multi')
-RETURNING id, discord_id, email, role, created_at, updated_at
+INSERT INTO staff_users (email, password, role)
+VALUES (:p1, :p2, :p3)
+RETURNING id, email, role, created_at, updated_at, password
+"""
+
+
+DELETE_STAFF_USER = """-- name: delete_staff_user \\:one
+DELETE FROM staff_users
+WHERE id = :p1
+RETURNING id, email, role, created_at, updated_at, password
 """
 
 
 GET_ALL_STAFF_USERS = """-- name: get_all_staff_users \\:many
-SELECT id, discord_id, email, role, created_at, updated_at
+SELECT id, email, role, created_at, updated_at, password
 FROM staff_users
 ORDER BY created_at DESC
 LIMIT :p1 OFFSET :p2
@@ -34,29 +41,24 @@ LIMIT :p1 OFFSET :p2
 
 
 GET_STAFF_USER_BY_EMAIL = """-- name: get_staff_user_by_email \\:one
-SELECT id, discord_id, email, role, created_at, updated_at
+SELECT id, email, role, created_at, updated_at, password
 FROM staff_users
 WHERE email = :p1
 """
 
 
 GET_STAFF_USER_BY_ID = """-- name: get_staff_user_by_id \\:one
-SELECT id, discord_id, email, role, created_at, updated_at
+SELECT id, email, role, created_at, updated_at, password
 FROM staff_users
 WHERE id = :p1
 """
 
+
 UPDATE_STAFF_USER = """-- name: update_staff_user \\:one
 UPDATE staff_users
-SET email = :p2, discord_id = :p3, role = :p4, updated_at = NOW()
+SET email = :p2,  role = :p3, updated_at = NOW()
 WHERE id = :p1
-RETURNING id, discord_id, email, role, created_at, updated_at
-"""
-
-DELETE_STAFF_USER = """-- name: delete_staff_user \\:one
-DELETE FROM staff_users
-WHERE id = :p1
-RETURNING id, discord_id, email, role, created_at, updated_at
+RETURNING id, email, role, created_at, updated_at, password
 """
 
 
@@ -64,81 +66,30 @@ class AsyncQuerier:
     def __init__(self, conn: sqlalchemy.ext.asyncio.AsyncConnection):
         self._conn = conn
 
-    async def create_admin(self, *, email: Optional[str], discord_id: str) -> Optional[models.StaffUser]:
-        row = (await self._conn.execute(sqlalchemy.text(CREATE_ADMIN), {"p1": email, "p2": discord_id})).first()
+    async def create_admin(self, *, email: Optional[str], password: str) -> Optional[models.StaffUser]:
+        row = (await self._conn.execute(sqlalchemy.text(CREATE_ADMIN), {"p1": email, "p2": password})).first()
         if row is None:
             return None
         return models.StaffUser(
             id=row[0],
-            discord_id=row[1],
-            email=row[2],
-            role=row[3],
-            created_at=row[4],
-            updated_at=row[5],
+            email=row[1],
+            role=row[2],
+            created_at=row[3],
+            updated_at=row[4],
+            password=row[5],
         )
 
-    async def create_multi(self, *, email: Optional[str], discord_id: str) -> Optional[models.StaffUser]:
-        row = (await self._conn.execute(sqlalchemy.text(CREATE_MULTI), {"p1": email, "p2": discord_id})).first()
+    async def create_multi(self, *, email: Optional[str], password: str, role: Any) -> Optional[models.StaffUser]:
+        row = (await self._conn.execute(sqlalchemy.text(CREATE_MULTI), {"p1": email, "p2": password, "p3": role})).first()
         if row is None:
             return None
         return models.StaffUser(
             id=row[0],
-            discord_id=row[1],
-            email=row[2],
-            role=row[3],
-            created_at=row[4],
-            updated_at=row[5],
-        )
-
-    async def get_all_staff_users(self, *, limit: int, offset: int) -> AsyncIterator[models.StaffUser]:
-        result = await self._conn.stream(sqlalchemy.text(GET_ALL_STAFF_USERS), {"p1": limit, "p2": offset})
-        async for row in result:
-            yield models.StaffUser(
-                id=row[0],
-                discord_id=row[1],
-                email=row[2],
-                role=row[3],
-                created_at=row[4],
-                updated_at=row[5],
-            )
-
-    async def get_staff_user_by_email(self, *, email: Optional[str]) -> Optional[models.StaffUser]:
-        row = (await self._conn.execute(sqlalchemy.text(GET_STAFF_USER_BY_EMAIL), {"p1": email})).first()
-        if row is None:
-            return None
-        return models.StaffUser(
-            id=row[0],
-            discord_id=row[1],
-            email=row[2],
-            role=row[3],
-            created_at=row[4],
-            updated_at=row[5],
-        )
-
-    async def get_staff_user_by_id(self, *, id: uuid.UUID) -> Optional[models.StaffUser]:
-        row = (await self._conn.execute(sqlalchemy.text(GET_STAFF_USER_BY_ID), {"p1": id})).first()
-        if row is None:
-            return None
-        return models.StaffUser(
-            id=row[0],
-            discord_id=row[1],
-            email=row[2],
-            role=row[3],
-            created_at=row[4],
-            updated_at=row[5],
-        )
-
-    async def update_staff_user(self, *, id: uuid.UUID, email: Optional[str], discord_id: str, role: str) -> Optional[models.StaffUser]:
-        row = (await self._conn.execute(sqlalchemy.text(UPDATE_STAFF_USER), {"p1": id, "p2": email, "p3": discord_id, "p4": role})).first()
-        if row is None:
-            return None
-        return models.StaffUser(
-            id=row[0],
-            discord_id=row[1],
-            email=row[2],
-            role=row[3],
-            created_at=row[4],
-            updated_at=row[5],
+            email=row[1],
+            role=row[2],
+            created_at=row[3],
+            updated_at=row[4],
+            password=row[5],
         )
 
     async def delete_staff_user(self, *, id: uuid.UUID) -> Optional[models.StaffUser]:
@@ -147,9 +98,60 @@ class AsyncQuerier:
             return None
         return models.StaffUser(
             id=row[0],
-            discord_id=row[1],
-            email=row[2],
-            role=row[3],
-            created_at=row[4],
-            updated_at=row[5],
+            email=row[1],
+            role=row[2],
+            created_at=row[3],
+            updated_at=row[4],
+            password=row[5],
+        )
+
+    async def get_all_staff_users(self, *, limit: int, offset: int) -> AsyncIterator[models.StaffUser]:
+        result = await self._conn.stream(sqlalchemy.text(GET_ALL_STAFF_USERS), {"p1": limit, "p2": offset})
+        async for row in result:
+            yield models.StaffUser(
+                id=row[0],
+                email=row[1],
+                role=row[2],
+                created_at=row[3],
+                updated_at=row[4],
+                password=row[5],
+            )
+
+    async def get_staff_user_by_email(self, *, email: Optional[str]) -> Optional[models.StaffUser]:
+        row = (await self._conn.execute(sqlalchemy.text(GET_STAFF_USER_BY_EMAIL), {"p1": email})).first()
+        if row is None:
+            return None
+        return models.StaffUser(
+            id=row[0],
+            email=row[1],
+            role=row[2],
+            created_at=row[3],
+            updated_at=row[4],
+            password=row[5],
+        )
+
+    async def get_staff_user_by_id(self, *, id: uuid.UUID) -> Optional[models.StaffUser]:
+        row = (await self._conn.execute(sqlalchemy.text(GET_STAFF_USER_BY_ID), {"p1": id})).first()
+        if row is None:
+            return None
+        return models.StaffUser(
+            id=row[0],
+            email=row[1],
+            role=row[2],
+            created_at=row[3],
+            updated_at=row[4],
+            password=row[5],
+        )
+
+    async def update_staff_user(self, *, id: uuid.UUID, email: Optional[str], role: Any) -> Optional[models.StaffUser]:
+        row = (await self._conn.execute(sqlalchemy.text(UPDATE_STAFF_USER), {"p1": id, "p2": email, "p3": role})).first()
+        if row is None:
+            return None
+        return models.StaffUser(
+            id=row[0],
+            email=row[1],
+            role=row[2],
+            created_at=row[3],
+            updated_at=row[4],
+            password=row[5],
         )

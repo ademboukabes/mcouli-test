@@ -1,11 +1,11 @@
 -- name: CreateAdmin :one
-INSERT INTO staff_users (email, discord_id, role)
+INSERT INTO staff_users (email, password, role)
 VALUES ($1, $2, 'admin')
 RETURNING *;
 
 -- name: CreateMulti :one
-INSERT INTO staff_users (email, discord_id, role)
-VALUES ($1, $2, 'multi')
+INSERT INTO staff_users (email, password, role)
+VALUES ($1, $2, $3)
 RETURNING *;
 
 -- name: GetStaffUserByID :one
@@ -26,7 +26,7 @@ LIMIT $1 OFFSET $2;
 
 -- name: UpdateStaffUser :one
 UPDATE staff_users
-SET email = $2, discord_id = $3, role = $4, updated_at = NOW()
+SET email = $2,  role = $3, updated_at = NOW()
 WHERE id = $1
 RETURNING *;
 

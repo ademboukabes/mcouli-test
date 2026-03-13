@@ -83,11 +83,15 @@ class AuthService:
         expires_at = datetime.now(timezone.utc) + timedelta(days=7)
 
         device = await self.device_querier.create_device(
-            id=device_id,
+            arg=device_queries.CreateDeviceParams(
+            column_1=device_id,
             user_id=user_id,
             device_name=req.device_name,
             device_type=req.device_type,
             totp_secret=None,
+                
+            )
+        
         )
 
         if not device:
