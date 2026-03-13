@@ -20,12 +20,13 @@ WHERE user_id = :p1
 
 CREATE_DEVICE = """-- name: create_device \\:one
 INSERT INTO user_devices (
+    id,
     user_id,
     device_name,
     device_type,
     totp_secret
 ) VALUES (
-    :p1, :p2, :p3, :p4
+    COALESCE(:p1, uuid_generate_v4()), :p2, :p3, :p4, :p5
 )
 RETURNING id, user_id, device_name, device_type, totp_secret, is_2fa_enabled, last_active, created_at
 """
@@ -78,12 +79,13 @@ class AsyncQuerier:
             return None
         return row[0]
 
-    async def create_device(self, *, user_id: uuid.UUID, device_name: Optional[str], device_type: Optional[str], totp_secret: Optional[str]) -> Optional[models.UserDevice]:
+    async def create_device(self, *, id: Optional[uuid.UUID], user_id: uuid.UUID, device_name: Optional[str], device_type: Optional[str], totp_secret: Optional[str]) -> Optional[models.UserDevice]:
         row = (await self._conn.execute(sqlalchemy.text(CREATE_DEVICE), {
-            "p1": user_id,
-            "p2": device_name,
-            "p3": device_type,
-            "p4": totp_secret,
+            "p1": id,
+            "p2": user_id,
+            "p3": device_name,
+            "p4": device_type,
+            "p5": totp_secret,
         })).first()
         if row is None:
             return None

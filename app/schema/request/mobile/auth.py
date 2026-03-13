@@ -1,4 +1,5 @@
 from pydantic import BaseModel, EmailStr
+from uuid import UUID
 
 
 class MobileAuthRequest(BaseModel):
@@ -6,7 +7,7 @@ class MobileAuthRequest(BaseModel):
     password: str
     device_name: str
     device_type: str
-    device_id: str
+    device_id: UUID
 
 
 
@@ -14,5 +15,4 @@ class MobileAuthRequest(BaseModel):
 
 class RefreshTokenRequest(BaseModel):
     refresh_token: str
-
 

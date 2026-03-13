@@ -1,11 +1,12 @@
 -- name: CreateDevice :one
 INSERT INTO user_devices (
+    id,
     user_id,
     device_name,
     device_type,
     totp_secret
 ) VALUES (
-    $1, $2, $3, $4
+    COALESCE($1, uuid_generate_v4()), $2, $3, $4, $5
 )
 RETURNING *;
 

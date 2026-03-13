@@ -11,15 +11,16 @@ class DeviceService:
     def init(self, device_querier: device_queries.AsyncQuerier) -> None:
         self.device_querier = device_querier
 
-    @staticmethod
     async def create_device(
-        user_id: uuid.UUID, device_name: str, device_type: str
+        self,
+        user_id: uuid.UUID, device_name: str, device_type: str, id: uuid.UUID | None = None
     ) -> UserDevice | None:
         try :
-            DeviceCount = await DeviceService.count_devices(user_id=user_id)
+            DeviceCount = await self.count_devices(user_id=user_id)
             if  DeviceCount >=3:
                 raise AppException.bad_request("You can only have 3 devices")
-            return await DeviceService.device_querier.create_device(
+            return await self.device_querier.create_device(
+                id=id,
                 user_id=user_id,
                 device_name=device_name,
                 device_type=device_type,
@@ -30,50 +31,48 @@ class DeviceService:
 
     @staticmethod
     async def revoke_device(
+        self,
         device_id: uuid.UUID, user_id: uuid.UUID
     ) -> None:
         try :
             #here were cacscading the delete of the session  no need to handle it
-            await DeviceService.device_querier.revoke_device(
+            await self.device_querier.revoke_device(
                 id=device_id,
                 user_id=user_id
             )
         except Exception as e :
             raise DBException.handle(e)
 
-    @staticmethod
-    async def get_all_devices(user_id: uuid.UUID) -> tuple[list[UserDevice], int]:
+    async def get_all_devices(self,user_id: uuid.UUID) -> tuple[list[UserDevice], int]:
         devices: list[UserDevice] = []
 
-        async for device in DeviceService.device_querier.list_user_devices(user_id=user_id):
+        async for device in self.device_querier.list_user_devices(user_id=user_id):
             devices.append(device)
 
-        count = await DeviceService.count_devices(user_id=user_id)
+        count = await self.count_devices(user_id=user_id)
 
         return devices, count
 
-    @staticmethod
     async def get_device_by_id(
+        self,
         device_id: uuid.UUID, user_id: uuid.UUID
     ) -> UserDevice:
         try :
-            device =  await DeviceService.device_querier.get_device__by_id(id=device_id)
+            device =  await self.device_querier.get_device__by_id(id=device_id)
             if device is None :
                 raise AppException.not_found("device not found ")
             return device
         except Exception as e :
             raise DBExceptionImpl.handle(e)
 
-    @staticmethod
-    async def count_devices(user_id: uuid.UUID) -> int:
+    async def count_devices(self,user_id: uuid.UUID) -> int:
         try :
-            count =  await DeviceService.device_querier.count__user__devices(user_id=user_id)
+            count =  await self.device_querier.count__user__devices(user_id=user_id)
             if count is None :
                 raise AppException.internal_error("db failed to count ")
             return count
         except Exception as e :
             raise  DBExceptionImpl.handle(e)
-
 
 
 

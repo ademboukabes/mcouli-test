@@ -79,10 +79,11 @@ class AuthService:
             )
             raise AppException.forbidden("Maximum session limit reached")
 
-        device_id = uuid.UUID(req.device_id)
+        device_id = req.device_id
         expires_at = datetime.now(timezone.utc) + timedelta(days=7)
 
         device = await self.device_querier.create_device(
+            id=device_id,
             user_id=user_id,
             device_name=req.device_name,
             device_type=req.device_type,
@@ -113,7 +114,7 @@ class AuthService:
         return MobileAuthResponse(
             access_token=access_token,
             refresh_token=refresh_token,
-            session_id=str(),
+        session_id=str(session.id),
             expires_in=expiry,
         )
 
