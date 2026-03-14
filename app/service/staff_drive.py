@@ -75,9 +75,9 @@ class StaffDriveService:
             refresh_token=encrypted_refresh_token,
             token_expires_at=token.expires_at,
             scopes=token.scope,
-                
+
             )
-        
+
         )
         if connection is None:
             raise AppException.internal_error("Failed to save Google Drive connection")

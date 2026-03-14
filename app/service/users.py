@@ -89,9 +89,9 @@ class AuthService:
             device_name=req.device_name,
             device_type=req.device_type,
             totp_secret=None,
-                
+
             )
-        
+
         )
 
         if not device:

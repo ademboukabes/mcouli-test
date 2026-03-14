@@ -1,5 +1,5 @@
 
-from sqlalchemy.exc import IntegrityError, SQLAlchemyError
+from sqlalchemy.exc import SQLAlchemyError
 
 from app.core.logger import logger
 from typing import Literal, Optional
@@ -43,7 +43,7 @@ class StaffUserService:
         except Exception as exc:
             logger.error("Failed to create staff user: %s", exc)
             raise DBException.handle(exc)
- 
+
 
     async def update_staff_user(
         self, *, id: uuid.UUID, email: Optional[str], role: StaffRole
@@ -80,13 +80,13 @@ class StaffUserService:
     ) -> list[StaffUser]:
         try:
             if search is not None:
-                normalized_search = search.strip() 
+                normalized_search = search.strip()
             else:
                 normalized_search = None
-            
+
             params = ListStaffUsersParams(
-                column_1=normalized_search,               
-                column_2=role.value if role is not None else None ,      
+                column_1=normalized_search,
+                column_2=role.value if role is not None else None ,
                 column_3=sort_by,
                 column_4=sort_direction,
                 limit=limit,

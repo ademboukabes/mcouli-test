@@ -44,6 +44,6 @@ run-app:
 	uv  run fastapi dev app/main.py 
 
 lint:
-	uv run ruff check .
+	uv run ruff check . --fix
 check_type:
 	uv run mypy .

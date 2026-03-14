@@ -30,7 +30,7 @@ class DeviceService:
                 device_type=device_type,
                 totp_secret=create_totp_secret(),
                 )
-  
+
             )
         except Exception as e :
             raise DBException.handle(e)
