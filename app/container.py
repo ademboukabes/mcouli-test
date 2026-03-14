@@ -22,6 +22,14 @@ from db.generated import upload_request_photos as upload_request_photo_queries
 from db.generated import upload_requests as upload_request_queries
 from db.generated import user as user_queries
 
+from db.generated import events as event_queries
+from db.generated import eventParticipant as participant_queries
+from db.generated import stuff_user as staff_queries
+from app.service.users import AuthService
+from app.service.session import SessionService
+from app.service.device import DeviceService
+from app.service.web.eventService import EventService
+from app.service.web.auth import WebAuthService
 
 class Container:
     def __init__(
@@ -43,6 +51,10 @@ class Container:
         self.upload_request_photo_querier = upload_request_photo_queries.AsyncQuerier(conn)
         self.photo_querier = photo_queries.AsyncQuerier(conn)
         self.staff_notification_querier = staff_notification_queries.AsyncQuerier(conn)
+        self.event_querier = event_queries.AsyncQuerier(conn)
+        self.participant_querier = participant_queries.AsyncQuerier(conn)
+        self.staff_querier = staff_queries.AsyncQuerier(conn)
+        
 
         # services
         self.session_service = SessionService()
@@ -81,8 +93,17 @@ class Container:
         )
 
         self.staff_user_service = StaffUserService()
+        
         self.staff_user_service.init(
             staff_user_querier=self.staff_user_querier,
+        self.event_service = EventService(
+            e_querier=self.event_querier,
+            p_querier=self.participant_querier,
+        )
+
+        self.web_auth_service = WebAuthService(
+            staff_querier=self.staff_querier,
+            session_querier=self.session_querier,
         )
 
 async def get_container(

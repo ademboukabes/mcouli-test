@@ -2,8 +2,9 @@
 # versions:
 #   sqlc v1.30.0
 # source: events.sql
+import dataclasses
 import datetime
-from typing import AsyncIterator, Optional
+from typing import Any, AsyncIterator, Optional
 import uuid
 
 import sqlalchemy
@@ -13,10 +14,19 @@ from db.generated import models
 
 
 CREATE_EVENT = """-- name: create_event \\:one
-INSERT INTO events (name, qr_code_hash, event_date)
-VALUES (:p1, :p2, :p3)
-RETURNING id, name, qr_code_hash, event_date, created_at
+INSERT INTO events (name, event_code, event_date, status, created_by)
+VALUES (:p1, :p2, :p3, :p4, :p5)
+RETURNING id, name, event_code, event_date, status, created_by, created_at, archived_at
 """
+
+
+@dataclasses.dataclass()
+class CreateEventParams:
+    name: str
+    event_code: str
+    event_date: datetime.datetime
+    status: Any
+    created_by: uuid.UUID
 
 
 DELETE_EVENT = """-- name: delete_event \\:exec
@@ -25,22 +35,52 @@ WHERE id = :p1
 """
 
 
-GET_EVENT_BY_HASH = """-- name: get_event_by_hash \\:one
-SELECT id, name, qr_code_hash, event_date, created_at FROM events 
-WHERE qr_code_hash = :p1
+GET_EVENT_BY_CODE = """-- name: get_event_by_code \\:one
+SELECT id, name, event_code, event_date, status, created_by, created_at, archived_at FROM events 
+WHERE event_code = :p1
 """
 
 
 GET_EVENT_BY_ID = """-- name: get_event_by_id \\:one
-SELECT id, name, qr_code_hash, event_date, created_at FROM events 
+SELECT id, name, event_code, event_date, status, created_by, created_at, archived_at FROM events 
 WHERE id = :p1
 """
 
 
+GET_EVENTS_BY_DATE_RANGE = """-- name: get_events_by_date_range \\:many
+SELECT id, name, event_code, event_date, status, created_by, created_at, archived_at FROM events 
+WHERE event_date >= :p1 AND event_date <= :p2
+ORDER BY event_date ASC
+"""
+
+
+GET_EVENTS_BY_NAME = """-- name: get_events_by_name \\:many
+SELECT id, name, event_code, event_date, status, created_by, created_at, archived_at FROM events 
+WHERE name ILIKE '%' || :p1 || '%'
+ORDER BY event_date DESC
+"""
+
+
+GET_EVENTS_BY_STATUS = """-- name: get_events_by_status \\:many
+SELECT id, name, event_code, event_date, status, created_by, created_at, archived_at FROM events 
+WHERE status = :p1
+ORDER BY event_date DESC
+"""
+
+
 LIST_EVENTS = """-- name: list_events \\:many
-SELECT id, name, qr_code_hash, event_date, created_at FROM events 
+SELECT id, name, event_code, event_date, status, created_by, created_at, archived_at FROM events 
 ORDER BY event_date DESC 
 LIMIT :p1 OFFSET :p2
+"""
+
+
+UPDATE_EVENT_STATUS = """-- name: update_event_status \\:one
+UPDATE events 
+SET status = :p2, 
+    archived_at = CASE WHEN :p2 = 'archived'\\:\\:event_status THEN NOW() ELSE archived_at END
+WHERE id = :p1
+RETURNING id, name, event_code, event_date, status, created_by, created_at, archived_at
 """
 
 
@@ -48,31 +88,43 @@ class AsyncQuerier:
     def __init__(self, conn: sqlalchemy.ext.asyncio.AsyncConnection):
         self._conn = conn
 
-    async def create_event(self, *, name: str, qr_code_hash: str, event_date: datetime.datetime) -> Optional[models.Event]:
-        row = (await self._conn.execute(sqlalchemy.text(CREATE_EVENT), {"p1": name, "p2": qr_code_hash, "p3": event_date})).first()
+    async def create_event(self, arg: CreateEventParams) -> Optional[models.Event]:
+        row = (await self._conn.execute(sqlalchemy.text(CREATE_EVENT), {
+            "p1": arg.name,
+            "p2": arg.event_code,
+            "p3": arg.event_date,
+            "p4": arg.status,
+            "p5": arg.created_by,
+        })).first()
         if row is None:
             return None
         return models.Event(
             id=row[0],
             name=row[1],
-            qr_code_hash=row[2],
+            event_code=row[2],
             event_date=row[3],
-            created_at=row[4],
+            status=row[4],
+            created_by=row[5],
+            created_at=row[6],
+            archived_at=row[7],
         )
 
     async def delete_event(self, *, id: uuid.UUID) -> None:
         await self._conn.execute(sqlalchemy.text(DELETE_EVENT), {"p1": id})
 
-    async def get_event_by_hash(self, *, qr_code_hash: str) -> Optional[models.Event]:
-        row = (await self._conn.execute(sqlalchemy.text(GET_EVENT_BY_HASH), {"p1": qr_code_hash})).first()
+    async def get_event_by_code(self, *, event_code: str) -> Optional[models.Event]:
+        row = (await self._conn.execute(sqlalchemy.text(GET_EVENT_BY_CODE), {"p1": event_code})).first()
         if row is None:
             return None
         return models.Event(
             id=row[0],
             name=row[1],
-            qr_code_hash=row[2],
+            event_code=row[2],
             event_date=row[3],
-            created_at=row[4],
+            status=row[4],
+            created_by=row[5],
+            created_at=row[6],
+            archived_at=row[7],
         )
 
     async def get_event_by_id(self, *, id: uuid.UUID) -> Optional[models.Event]:
@@ -82,10 +134,55 @@ class AsyncQuerier:
         return models.Event(
             id=row[0],
             name=row[1],
-            qr_code_hash=row[2],
+            event_code=row[2],
             event_date=row[3],
-            created_at=row[4],
+            status=row[4],
+            created_by=row[5],
+            created_at=row[6],
+            archived_at=row[7],
         )
+
+    async def get_events_by_date_range(self, *, start_date: datetime.datetime, end_date: datetime.datetime) -> AsyncIterator[models.Event]:
+        result = await self._conn.stream(sqlalchemy.text(GET_EVENTS_BY_DATE_RANGE), {"p1": start_date, "p2": end_date})
+        async for row in result:
+            yield models.Event(
+                id=row[0],
+                name=row[1],
+                event_code=row[2],
+                event_date=row[3],
+                status=row[4],
+                created_by=row[5],
+                created_at=row[6],
+                archived_at=row[7],
+            )
+
+    async def get_events_by_name(self, *, dollar_1: Optional[str]) -> AsyncIterator[models.Event]:
+        result = await self._conn.stream(sqlalchemy.text(GET_EVENTS_BY_NAME), {"p1": dollar_1})
+        async for row in result:
+            yield models.Event(
+                id=row[0],
+                name=row[1],
+                event_code=row[2],
+                event_date=row[3],
+                status=row[4],
+                created_by=row[5],
+                created_at=row[6],
+                archived_at=row[7],
+            )
+
+    async def get_events_by_status(self, *, status: Any) -> AsyncIterator[models.Event]:
+        result = await self._conn.stream(sqlalchemy.text(GET_EVENTS_BY_STATUS), {"p1": status})
+        async for row in result:
+            yield models.Event(
+                id=row[0],
+                name=row[1],
+                event_code=row[2],
+                event_date=row[3],
+                status=row[4],
+                created_by=row[5],
+                created_at=row[6],
+                archived_at=row[7],
+            )
 
     async def list_events(self, *, limit: int, offset: int) -> AsyncIterator[models.Event]:
         result = await self._conn.stream(sqlalchemy.text(LIST_EVENTS), {"p1": limit, "p2": offset})
@@ -93,7 +190,25 @@ class AsyncQuerier:
             yield models.Event(
                 id=row[0],
                 name=row[1],
-                qr_code_hash=row[2],
+                event_code=row[2],
                 event_date=row[3],
-                created_at=row[4],
+                status=row[4],
+                created_by=row[5],
+                created_at=row[6],
+                archived_at=row[7],
             )
+
+    async def update_event_status(self, *, id: uuid.UUID, status: Any) -> Optional[models.Event]:
+        row = (await self._conn.execute(sqlalchemy.text(UPDATE_EVENT_STATUS), {"p1": id, "p2": status})).first()
+        if row is None:
+            return None
+        return models.Event(
+            id=row[0],
+            name=row[1],
+            event_code=row[2],
+            event_date=row[3],
+            status=row[4],
+            created_by=row[5],
+            created_at=row[6],
+            archived_at=row[7],
+        )

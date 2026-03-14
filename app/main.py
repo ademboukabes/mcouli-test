@@ -53,15 +53,6 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
 
         return response
 
-@app.get("/")
-def read_root():
-    return {"Hello": "World"}
-
-
-@app.get("/health")
-def health_check():
-    return {"status": "healthy"}
-
 
 
 MAX_RETRIES = 5
