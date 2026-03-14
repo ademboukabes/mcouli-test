@@ -1,7 +1,8 @@
 from abc import ABC, abstractmethod
 
 from fastapi import HTTPException
-import psycopg
+from app.core.logger import logger
+from sqlalchemy.exc import IntegrityError
 
 
 class AppException:
@@ -28,6 +29,9 @@ class AppException:
     @staticmethod
     def internal_error(detail: str = "Internal server error") -> HTTPException:
         return HTTPException(status_code=500, detail=detail)
+    @staticmethod
+    def conflict(detail :str )->HTTPException:
+        return HTTPException(status_code=409,detail=detail)
 
 
 class DBException(ABC):
@@ -35,48 +39,67 @@ class DBException(ABC):
 
     @staticmethod
     @abstractmethod
-    def handle_unique_violation(exc: psycopg.errors.UniqueViolation) -> HTTPException:
+    def handle_unique_violation(exc: Exception) -> HTTPException:
         """Handle unique constraint violation."""
         pass
 
     @staticmethod
     @abstractmethod
-    def handle_foreign_key_violation(
-        exc: psycopg.errors.ForeignKeyViolation,
-    ) -> HTTPException:
+    def handle_foreign_key_violation(exc: Exception) -> HTTPException:
         """Handle foreign key constraint violation."""
         pass
 
     @staticmethod
     @abstractmethod
-    def handle_check_violation(exc: psycopg.errors.CheckViolation) -> HTTPException:
+    def handle_check_violation(exc: Exception) -> HTTPException:
         """Handle check constraint violation."""
         pass
 
     @staticmethod
     def handle(exc: Exception) -> HTTPException:
-        if isinstance(exc, psycopg.errors.UniqueViolation):
-            return DBExceptionImpl.handle_unique_violation(exc)
-        if isinstance(exc, psycopg.errors.ForeignKeyViolation):
-            return DBExceptionImpl.handle_foreign_key_violation(exc)
-        if isinstance(exc, psycopg.errors.CheckViolation):
-            return DBExceptionImpl.handle_check_violation(exc)
+        logger.error("Database error: %s", exc)
+
+        if isinstance(exc, IntegrityError):
+            orig = getattr(exc, "orig", None)
+            sqlstate = getattr(orig, "sqlstate", None)
+
+            if sqlstate == "23505":
+                logger.error("Unique violation detected")
+                return DBExceptionImpl.handle_unique_violation(exc)
+
+            if sqlstate == "23503":
+                logger.error("Foreign key violation detected")
+                return DBExceptionImpl.handle_foreign_key_violation(exc)
+
+            if sqlstate == "23514":
+                logger.error("Check violation detected")
+                return DBExceptionImpl.handle_check_violation(exc)
+
+        logger.error("Internal server error: %s", exc)
         return HTTPException(status_code=500, detail="Internal server error")
 
 
 class DBExceptionImpl(DBException):
+    """Concrete implementation for asyncpg + SQLAlchemy."""
+
     @staticmethod
-    def handle_unique_violation(exc: psycopg.errors.UniqueViolation) -> HTTPException:
+    def handle_unique_violation(exc: Exception) -> HTTPException:
+        constraint = getattr(exc, "constraint_name", None)
+        if constraint == "staff_users_email_key":
+            return HTTPException(
+                status_code=409,
+                detail="Staff user with this email already exists"
+            )
         return HTTPException(status_code=409, detail="Resource already exists")
 
     @staticmethod
-    def handle_foreign_key_violation(
-        exc: psycopg.errors.ForeignKeyViolation,
-    ) -> HTTPException:
+    def handle_foreign_key_violation(exc: Exception) -> HTTPException:
         return HTTPException(
             status_code=400, detail="Invalid reference to related resource"
         )
 
     @staticmethod
-    def handle_check_violation(exc: psycopg.errors.CheckViolation) -> HTTPException:
-        return HTTPException(status_code=400, detail="Constraint check failed")
+    def handle_check_violation(exc: Exception) -> HTTPException:
+        return HTTPException(
+            status_code=400, detail="Constraint check failed"
+        )

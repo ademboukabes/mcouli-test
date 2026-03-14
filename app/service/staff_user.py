@@ -1,4 +1,6 @@
 
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
+
 from app.core.logger import logger
 from typing import Literal, Optional
 import uuid
@@ -29,9 +31,19 @@ class StaffUserService:
             if user is None:
                 raise AppException.internal_error("Failed to create staff user")
             return user
+        except SQLAlchemyError as exc:
+            logger.error("Database error creating staff user: %s", exc)
+
+            http_exc = DBExceptionImpl.handle(exc)
+
+            if http_exc.status_code == 409:
+                http_exc.detail = f"Staff user with email {email} already exists"
+
+            raise http_exc
         except Exception as exc:
             logger.error("Failed to create staff user: %s", exc)
-            raise DBExceptionImpl.handle(exc)
+            raise DBException.handle(exc)
+ 
 
     async def update_staff_user(
         self, *, id: uuid.UUID, email: Optional[str], role: StaffRole
