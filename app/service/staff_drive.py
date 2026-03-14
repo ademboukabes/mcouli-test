@@ -66,6 +66,7 @@ class StaffDriveService:
         )
 
         connection = await self.drive_connection_querier.upsert_staff_drive_connection(
+            arg=drive_queries.UpsertStaffDriveConnectionParams(
             staff_user_id=staff_user.id,
             provider=self.PROVIDER,
             google_email=user_info.email,
@@ -74,6 +75,9 @@ class StaffDriveService:
             refresh_token=encrypted_refresh_token,
             token_expires_at=token.expires_at,
             scopes=token.scope,
+                
+            )
+        
         )
         if connection is None:
             raise AppException.internal_error("Failed to save Google Drive connection")

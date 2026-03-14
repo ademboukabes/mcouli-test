@@ -23,11 +23,14 @@ class DeviceService:
             if  DeviceCount >=3:
                 raise AppException.bad_request("You can only have 3 devices")
             return await self.device_querier.create_device(
-                id=id,
+                arg=device_queries.CreateDeviceParams(
+                column_1=id,
                 user_id=user_id,
                 device_name=device_name,
                 device_type=device_type,
                 totp_secret=create_totp_secret(),
+                )
+  
             )
         except Exception as e :
             raise DBException.handle(e)

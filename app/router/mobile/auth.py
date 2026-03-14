@@ -10,7 +10,7 @@ from app.deps.auth import MobileUserSchema, get_current_mobile_user
 from app.schema.request.mobile.auth import MobileAuthRequest, RefreshTokenRequest
 from app.schema.response.mobile.auth import MeResponse, DeviceSchema, MobileAuthResponse, SessionSchema, UserSchema
 
-router = APIRouter(prefix="/auth", tags=["mobile-auth"])
+router = APIRouter(prefix="/auth")
 
 
 @router.post("/register-login", response_model=MobileAuthResponse)
