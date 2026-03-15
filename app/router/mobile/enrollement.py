@@ -31,7 +31,7 @@ async def enroll_face(
 
         contents = await file.read()
         if len(contents) > MAX_IMAGE_SIZE:
-            raise AppException.image_format_error(
+            raise AppException.bad_request(
                 f"File {file.filename} exceeds maximum size of {MAX_IMAGE_SIZE} bytes"
             )
 
