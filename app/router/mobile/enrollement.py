@@ -42,7 +42,7 @@ async def enroll_face(
         })
 
     # Pass plain data to the service
-    await container.enrollment_service.enroll_user_faces(
+    await container.auth_service.add_embbed_user(
         user.user_id,
         image_payloads
     )

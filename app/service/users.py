@@ -172,6 +172,14 @@ class AuthService:
         await redis.delete(session_key)
         return {"message": "Logged out successfully"}
 
+    async def add_embbed_user(
+        self,
+        user_id:uuid.UUID,
+        image_payloads:list[ImagePayload],
+        
+    )->dict[str,str]:
+        
+        
     async def validate_session(
         self,
         redis: RedisClient,

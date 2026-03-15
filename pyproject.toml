@@ -21,6 +21,9 @@ dependencies = [
     "pyotp>=2.9.0",
     "redis>=7.2.1",
     "setuptools>=82.0.0",
+    "opencv-python>=4.13.0.92",
+    "numpy>=2.4.3",
+    "insightface>=0.7.3",
 ]
 
 [tool.ruff]
