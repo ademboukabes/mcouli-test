@@ -1,11 +1,10 @@
 from functools import lru_cache
 
-from app.service.face_embedding import FaceEmbedding
+from app.service.face_embedding import FaceEmbeddingService
 
 
 @lru_cache(maxsize=1)
-def get_face_embedding() -> FaceEmbedding:
-    #retuern cached instance of the model in this process
-    face_embedding = FaceEmbedding()
-    face_embedding.prepare()
-    return face_embedding
+def get_face_embedding_service() -> FaceEmbeddingService:
+    """Return a cached FaceEmbeddingService instance warmed up for the process."""
+
+    return FaceEmbeddingService()

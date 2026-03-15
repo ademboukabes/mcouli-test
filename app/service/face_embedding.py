@@ -1,12 +1,18 @@
 from __future__ import annotations
 
-from typing import Any, Sequence, Tuple
+import asyncio
+from typing import Any, Sequence, Tuple, TypedDict
 
 import cv2
 import numpy as np
 from insightface.app import FaceAnalysis  # type: ignore
+from app.core.exceptions import AppException
 
 BBox = Tuple[int, int, int, int]
+class FaceImagePayload(TypedDict):
+    filename: str
+    content_type: str
+    bytes: bytes
 
 
 class FaceEmbedding:
@@ -89,3 +95,46 @@ class FaceEmbedding:
             raise ValueError("Failed to generate embedding for the requested face")
 
         return first_face.embedding.flatten().tolist()
+
+
+class FaceEmbeddingService:
+    def __init__(self, face_embedding: FaceEmbedding | None = None) -> None:
+        self.face_embedding = face_embedding or FaceEmbedding()
+        self.face_embedding.prepare()
+
+    async def compute_average_embedding(
+        self,
+        payloads: Sequence[FaceImagePayload],
+    ) -> list[float]:
+        if not payloads:
+            raise AppException.bad_request("At least one image is required for enrollment")
+
+        embeddings: list[np.ndarray] = []
+        for payload in payloads:
+            image = self._decode_image(payload)
+            try:
+                embedding = await asyncio.to_thread(
+                    self.face_embedding.embed,
+                    image,
+                )
+            except (ValueError, RuntimeError) as exc:
+                raise AppException.bad_request(
+                    f"Face detection failed for {payload['filename']}: {exc}"
+                ) from exc
+
+            embeddings.append(np.array(embedding, dtype=np.float32))
+
+        stacked = np.stack(embeddings, axis=0)
+        averaged = np.mean(stacked, axis=0)
+
+        return averaged.astype(float).tolist()
+
+    def _decode_image(self, payload: FaceImagePayload) -> np.ndarray:
+        buffer = np.frombuffer(payload["bytes"], dtype=np.uint8)
+        image = cv2.imdecode(buffer, cv2.IMREAD_COLOR)
+        if image is None:
+            raise AppException.bad_request(
+                f"Cannot decode the uploaded image {payload['filename']}"
+            )
+
+        return image

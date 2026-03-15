@@ -20,6 +20,7 @@ from db.generated import devices as device_queries
 from db.generated import session as session_queries
 from db.generated.models import User
 from app.core.logger import logger
+from app.service.face_embedding import FaceImagePayload, FaceEmbeddingService
 
 
 class AuthService:
@@ -34,10 +35,12 @@ class AuthService:
         user_querier: user_queries.AsyncQuerier,
         device_querier: device_queries.AsyncQuerier,
         session_querier: session_queries.AsyncQuerier,
+        face_embedding_service: FaceEmbeddingService,
     ):
         self.user_querier = user_querier
         self.device_querier = device_querier
         self.session_querier = session_querier
+        self.face_embedding_service = face_embedding_service
 
     async def mobile_register_login(
         self,
@@ -174,12 +177,20 @@ class AuthService:
 
     async def add_embbed_user(
         self,
-        user_id:uuid.UUID,
-        image_payloads:list[ImagePayload],
-        
-    )->dict[str,str]:
-        
-        
+        user_id: uuid.UUID,
+        image_payloads: list[FaceImagePayload],
+    ) -> dict[str, object]:
+        logger.info("Generating face embeddings for user %s", user_id)
+
+        averaging = await self.face_embedding_service.compute_average_embedding(
+            image_payloads
+        )
+
+        return {
+            "message": "Face enrollment successful",
+            "face_embedding": averaging,
+        }
+
     async def validate_session(
         self,
         redis: RedisClient,
