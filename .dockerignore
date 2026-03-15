@@ -1,0 +1,16 @@
+.git
+.github
+.vscode
+.venv
+.uv-cache
+.mypy_cache
+.ruff_cache
+.pytest_cache
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+*.db
+*.sqlite3
+.env
+db/schema.sql
