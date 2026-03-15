@@ -7,6 +7,8 @@ from db.generated import session as session_queries
 from db.generated import devices as device_queries
 from db.generated import stuff_user as staff_user_queries
 from db.generated import staff_drive_connections as staff_drive_queries
+from app.service.face_embedding import FaceEmbedding
+from app.deps.ai_deps import get_face_embedding
 from app.service.users import AuthService
 from app.service.session import SessionService
 from app.service.device import DeviceService
@@ -17,9 +19,14 @@ from app.service.staff_user import StaffUserService
 
 class Container:
 
-    def __init__(self, conn: sqlalchemy.ext.asyncio.AsyncConnection):
+    def __init__(
+        self,
+        conn: sqlalchemy.ext.asyncio.AsyncConnection,
+        face_embedding: FaceEmbedding | None = None,
+    ):
         # infrastructure
         self.redis = RedisClient.get_instance()
+        self.face_embedding = face_embedding or get_face_embedding()
 
         # queriers
         self.user_querier = user_queries.AsyncQuerier(conn)

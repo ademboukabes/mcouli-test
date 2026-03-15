@@ -13,6 +13,7 @@ from app.infra.redis import RedisClient
 from app.router.mobile import router as mobile_router
 from app.router.staff import router as staff_router
 from app.router.web import router as web_router
+from app.deps.ai_deps import get_face_embedding
 from app.core.logger import configure_logger, logger
 
 configure_logger()
@@ -69,6 +70,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     )
 
     await NatsClient.connect()
+    get_face_embedding()
 
     yield
 
