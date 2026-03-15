@@ -191,3 +191,6 @@ class AuthService:
         redis_session = await redis.get(session_key)
 
         return redis_session == session_id
+
+    async def get_user_by_id(self, user_id: uuid.UUID) -> User | None:
+        return await self.user_querier.get_user_by_id(id=user_id)
