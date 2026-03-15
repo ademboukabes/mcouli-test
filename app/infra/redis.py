@@ -1,6 +1,7 @@
 from typing import Any
 
 from redis.asyncio import Redis
+
 from app.core.constant import RedisKey
 
 

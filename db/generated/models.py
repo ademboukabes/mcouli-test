@@ -144,6 +144,16 @@ class StaffDriveConnection:
 
 
 @dataclasses.dataclass()
+class StaffNotification:
+    id: uuid.UUID
+    staff_user_id: uuid.UUID
+    type: str
+    payload: Any
+    read_at: Optional[datetime.datetime]
+    created_at: datetime.datetime
+
+
+@dataclasses.dataclass()
 class StaffUser:
     id: uuid.UUID
     email: Optional[str]
@@ -157,12 +167,26 @@ class StaffUser:
 class UploadRequest:
     id: uuid.UUID
     event_id: uuid.UUID
-    drive_file_id: str
+    drive_file_id: Optional[str]
     requested_by: uuid.UUID
     approved_by: Optional[uuid.UUID]
     status: Any
+    photo_count: int
     created_at: datetime.datetime
     approved_at: Optional[datetime.datetime]
+    rejection_reason: Optional[str]
+
+
+@dataclasses.dataclass()
+class UploadRequestPhoto:
+    id: uuid.UUID
+    upload_request_id: uuid.UUID
+    drive_file_id: str
+    staging_storage_key: str
+    taken_at: Optional[datetime.datetime]
+    day_number: Optional[int]
+    visibility: str
+    created_at: datetime.datetime
 
 
 @dataclasses.dataclass()
@@ -172,6 +196,9 @@ class User:
     hashed_password: Optional[str]
     created_at: datetime.datetime
     updated_at: datetime.datetime
+    display_name: Optional[str]
+    face_embedding: Optional[Any]
+    deleted_at: Optional[datetime.datetime]
     display_name: Optional[str]
     face_embedding: Optional[Any]
     deleted_at: Optional[datetime.datetime]

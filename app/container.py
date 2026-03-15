@@ -1,24 +1,28 @@
 import sqlalchemy.ext.asyncio
 from fastapi import Depends
+
+from app.deps.ai_deps import get_face_embedding_service
 from app.infra.database import get_db
 from app.infra.redis import RedisClient
-from db.generated import user as user_queries
-from db.generated import session as session_queries
-from db.generated import devices as device_queries
-from db.generated import stuff_user as staff_user_queries
-from db.generated import staff_drive_connections as staff_drive_queries
-from app.service.face_embedding import FaceEmbeddingService
-from app.deps.ai_deps import get_face_embedding_service
-from app.service.users import AuthService
-from app.service.session import SessionService
 from app.service.device import DeviceService
+from app.service.face_embedding import FaceEmbeddingService
+from app.service.session import SessionService
 from app.service.staff_drive import StaffDriveService
+from app.service.staff_notifications import StaffNotificationsService
 from app.service.staff_user import StaffUserService
-
-
+from app.service.upload_requests import UploadRequestsService
+from app.service.users import AuthService
+from db.generated import devices as device_queries
+from db.generated import photos as photo_queries
+from db.generated import session as session_queries
+from db.generated import staff_drive_connections as staff_drive_queries
+from db.generated import staff_notifications as staff_notification_queries
+from db.generated import stuff_user as staff_user_queries
+from db.generated import upload_request_photos as upload_request_photo_queries
+from db.generated import upload_requests as upload_request_queries
+from db.generated import user as user_queries
 
 class Container:
-
     def __init__(
         self,
         conn: sqlalchemy.ext.asyncio.AsyncConnection,
@@ -34,6 +38,10 @@ class Container:
         self.device_querier = device_queries.AsyncQuerier(conn)
         self.staff_user_querier = staff_user_queries.AsyncQuerier(conn)
         self.staff_drive_querier = staff_drive_queries.AsyncQuerier(conn)
+        self.upload_request_querier = upload_request_queries.AsyncQuerier(conn)
+        self.upload_request_photo_querier = upload_request_photo_queries.AsyncQuerier(conn)
+        self.photo_querier = photo_queries.AsyncQuerier(conn)
+        self.staff_notification_querier = staff_notification_queries.AsyncQuerier(conn)
 
         # services
         self.session_service = SessionService()
@@ -60,12 +68,21 @@ class Container:
             redis=self.redis,
         )
 
+        self.staff_notifications_service = StaffNotificationsService(
+            notification_querier=self.staff_notification_querier,
+        )
+
+        self.upload_requests_service = UploadRequestsService(
+            upload_request_querier=self.upload_request_querier,
+            upload_request_photo_querier=self.upload_request_photo_querier,
+            photo_querier=self.photo_querier,
+            staff_notifications_service=self.staff_notifications_service,
+        )
+
         self.staff_user_service = StaffUserService()
         self.staff_user_service.init(
             staff_user_querier=self.staff_user_querier,
         )
-
-
 
 async def get_container(
     conn: sqlalchemy.ext.asyncio.AsyncConnection = Depends(get_db),
