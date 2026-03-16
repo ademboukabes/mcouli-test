@@ -1,4 +1,10 @@
+
 FROM python:3.12-slim
+
+# Install PostgreSQL client libraries and build tools
+RUN apt-get update \
+	&& apt-get install -y --no-install-recommends libpq-dev gcc \
+	&& rm -rf /var/lib/apt/lists/*
 
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
@@ -8,7 +14,8 @@ WORKDIR /app
 RUN pip install --no-cache-dir uv
 
 COPY pyproject.toml uv.lock ./
-RUN uv sync --locked --no-dev
+RUN uv sync --locked --no-dev \
+	&& uv pip install alembic
 
 COPY . .
 

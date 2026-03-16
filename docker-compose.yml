@@ -88,6 +88,19 @@ services:
     networks:
       - multi_network
 
+  migrate:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: multi_migrate
+    env_file:
+      - .env
+    depends_on:
+      - postgres
+    command: alembic upgrade head
+    networks:
+      - multi_network
+
 volumes:
   postgres_data:
   minio_data:
