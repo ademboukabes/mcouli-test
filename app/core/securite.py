@@ -105,6 +105,7 @@ def generate_Acces_token_stuff(user_id: str, role: str) -> str:
     }
     return jwt.encode(payload, key=settings.jwt_secret, algorithm=settings.jwt_algorithm)
 
+<<<<<<< HEAD
 
 
 
@@ -129,3 +130,48 @@ class EmbeddingCrypto:
         data = EmbeddingCrypto._aes.decrypt(nonce, ciphertext, None)
 
         return np.frombuffer(data, dtype=np.float32)
+=======
+def create_access_staff_token(session_id: str, staff_id: str, role: str) -> str:
+    """
+    Generates a staff access token containing the session_id, 
+    allowing for server-side session invalidation.
+    """
+    payload: dict[str, Any] = {
+        "sid": session_id,
+        "sub": staff_id,
+        "role": role,
+        "type": "access",
+        "exp": int(
+            (datetime.now(timezone.utc) + timedelta(seconds=Get_expiry_time())).timestamp()
+        ),
+    }
+    return jwt.encode(payload, key=settings.jwt_secret, algorithm=settings.jwt_algorithm)
+
+
+def create_refresh_staff_token(session_id: str, staff_id: str) -> str:
+    """
+    Generates a longer-lived refresh token for staff web sessions.
+    """
+    payload: dict[str, Any] = {
+        "sid": session_id,
+        "sub": staff_id,
+        "type": "refresh",
+        "exp": int(
+            (datetime.now(timezone.utc) + timedelta(seconds=Get_expiry_time() * 4)).timestamp()
+        ),
+    }
+    return jwt.encode(payload, key=settings.jwt_secret, algorithm=settings.jwt_algorithm)
+
+
+def decode_staff_token(token: str) -> dict[str, Any]:
+    """
+    Universal decoder for staff tokens.
+    """
+    try:
+        payload = jwt.decode(token, key=settings.jwt_secret, algorithms=[settings.jwt_algorithm])
+        return payload
+    except jwt.ExpiredSignatureError:
+        raise AppException.unauthorized("Staff token has expired")
+    except jwt.InvalidTokenError:
+        raise AppException.unauthorized("Invalid staff token")
+>>>>>>> 115b953 (event (create edit archive, + join) after testing)

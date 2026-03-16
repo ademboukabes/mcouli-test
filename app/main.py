@@ -18,6 +18,7 @@ from app.deps.ai_deps import get_face_embedding_service
 from app.core.logger import configure_logger, logger
 from app.router.mobile.auth import router as mobile_auth_router
 from app.router.web.event import router as web_event_router
+from app.router.web.auth import router as web_auth_router
 
 
 
@@ -125,3 +126,4 @@ app.include_router(staff_router)
 app.include_router(web_router)
 app.include_router(mobile_auth_router, prefix="/mobile")
 app.include_router(web_event_router, prefix="/web")
+app.include_router(web_auth_router, prefix="/web")

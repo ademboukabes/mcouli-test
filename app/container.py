@@ -10,6 +10,7 @@ from app.service.session import SessionService
 from app.service.staff_drive import StaffDriveService
 from app.service.staff_notifications import StaffNotificationsService
 from app.service.staff_user import StaffUserService
+<<<<<<< HEAD
 from app.service.upload_requests import UploadRequestsService
 from app.service.users import AuthService
 from db.generated import devices as device_queries
@@ -21,10 +22,14 @@ from db.generated import stuff_user as staff_user_queries
 from db.generated import upload_request_photos as upload_request_photo_queries
 from db.generated import upload_requests as upload_request_queries
 from db.generated import user as user_queries
+=======
+from app.service.staff_session import StaffSessionService
+>>>>>>> 115b953 (event (create edit archive, + join) after testing)
 
 from db.generated import events as event_queries
 from db.generated import eventParticipant as participant_queries
 from db.generated import stuff_user as staff_queries
+from db.generated import staffSessions as staff_session_queries
 from app.service.users import AuthService
 from app.service.session import SessionService
 from app.service.device import DeviceService
@@ -54,6 +59,7 @@ class Container:
         self.event_querier = event_queries.AsyncQuerier(conn)
         self.participant_querier = participant_queries.AsyncQuerier(conn)
         self.staff_querier = staff_queries.AsyncQuerier(conn)
+        self.staff_session_querier = staff_session_queries.AsyncQuerier(conn)
         
 
         # services
@@ -61,6 +67,11 @@ class Container:
         self.session_service.init(
             session=self.session_querier,
             redis=self.redis,
+        )
+
+        self.staff_session_service = StaffSessionService(
+            session=self.staff_session_querier,
+            redis=self.redis
         )
 
         self.device_service = DeviceService()
@@ -104,9 +115,13 @@ class Container:
 
         self.web_auth_service = WebAuthService(
             staff_querier=self.staff_querier,
-            session_querier=self.session_querier,
+            staff_session_service=self.staff_session_service,  # Correct argument name
         )
 
+<<<<<<< HEAD
+=======
+
+>>>>>>> 115b953 (event (create edit archive, + join) after testing)
 async def get_container(
     conn: sqlalchemy.ext.asyncio.AsyncConnection = Depends(get_db),
 ) -> Container:

@@ -1,5 +1,11 @@
+<<<<<<< HEAD
 INSERT INTO users (email, hashed_password) VALUES ('yasser@yas.y', '$2a$12$W.Nz06uLC.2G6BWcR8SFQ.SXEWDuZn5Q9hp/xFv8U6NChtEd3criu');
 INSERT 0 1
 multi_ai=# INSERT INTO staff_users (email, role, password) VALUES ('yasser@yas.y', 'admin', '$2a$12$W.Nz06uLC.2G6BWcR8SFQ.SXEWDuZn5Q9hp/xFv8U6NChtEd3criu');  
+=======
+INSERT INTO users (email, hashed_password) VALUES ('yasser@yas.y', '$2a$12$ciinvH9BsXQ7NKzRs59TCun6Gqjt1lc6.RcpzubdUZ8L8TC3lW3cu');
+INSERT 0 1
+multi_ai=# INSERT INTO staff_users (email, role, password) VALUES ('yasser@yas.y', 'admin', '$2a$12$ciinvH9BsXQ7NKzRs59TCun6Gqjt1lc6.RcpzubdUZ8L8TC3lW3cu');  
+>>>>>>> 115b953 (event (create edit archive, + join) after testing)
 INSERT 0 1
 pass = 0000

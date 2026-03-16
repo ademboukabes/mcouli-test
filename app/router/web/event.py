@@ -8,7 +8,10 @@ from app.deps.auth import (
     MobileUserSchema, 
     get_current_mobile_user, 
 )
-from app.deps.staff_auth import get_current_staff_user
+from app.deps.staff_auth import (
+    StaffUserSchema,
+    get_current_staff_user
+)
 from app.schema.request.web.event import (
     EventCreate,
     JoinEventRequest
@@ -27,10 +30,10 @@ router = APIRouter(prefix="/events", tags=["events"])
 async def create_event(
     req: EventCreate,
     container: Container = Depends(get_container),
-    current_staff: MobileUserSchema = Depends(get_current_staff_user), # Use Staff Dep
+    current_staff: StaffUserSchema = Depends(get_current_staff_user), # Use Staff Dep
 ):
     """Staff Only: Create a new event."""
-    return await container.event_service.create_event(req, current_staff.user_id)
+    return await container.event_service.create_event(req, current_staff.id)
 
 
 @router.post("/{event_id}/archive", response_model=EventResponse)

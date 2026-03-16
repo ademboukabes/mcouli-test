@@ -2,7 +2,7 @@ from typing import Annotated
 import uuid
 
 from fastapi import Depends, Header
-
+from pydantic import BaseModel
 from app.container import Container, get_container
 from app.core.exceptions import AppException
 from db.generated.models import StaffRole, StaffUser
@@ -11,6 +11,14 @@ from db.generated.models import StaffRole, StaffUser
 def _role_value(role: object) -> str:
     return getattr(role, "value", str(role))
 
+class StaffUserSchema(BaseModel):
+    id: uuid.UUID
+    email: str
+    role: str
+    session_id: uuid.UUID
+    
+    class Config:
+        from_attributes = True
 
 async def get_current_staff_user(
     x_staff_user_id: Annotated[str, Header(alias="X-Staff-User-Id")],

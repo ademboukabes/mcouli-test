@@ -144,6 +144,7 @@ class StaffDriveConnection:
 
 
 @dataclasses.dataclass()
+<<<<<<< HEAD
 class StaffNotification:
     id: uuid.UUID
     staff_user_id: uuid.UUID
@@ -151,6 +152,15 @@ class StaffNotification:
     payload: Any
     read_at: Optional[datetime.datetime]
     created_at: datetime.datetime
+=======
+class StaffSession:
+    id: uuid.UUID
+    staff_id: uuid.UUID
+    device_id: uuid.UUID
+    created_at: datetime.datetime
+    last_active: datetime.datetime
+    expires_at: datetime.datetime
+>>>>>>> 115b953 (event (create edit archive, + join) after testing)
 
 
 @dataclasses.dataclass()
