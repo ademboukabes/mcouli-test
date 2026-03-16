@@ -1,11 +1,15 @@
+import base64
 from datetime import datetime, timedelta, timezone
+import os
 from typing import Any
 import jwt
+import numpy as np
 from passlib.context import CryptContext
 import pyotp
 from app.core.config import settings
 from app.core.exceptions import AppException
 from app.core.logger import logger
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -100,3 +104,28 @@ def generate_Acces_token_stuff(user_id: str, role: str) -> str:
         ),
     }
     return jwt.encode(payload, key=settings.jwt_secret, algorithm=settings.jwt_algorithm)
+
+
+
+
+class EmbeddingCrypto:
+    _key: bytes = base64.b64decode(settings.FACE_ENCRYPTION_KEY)
+    _aes: AESGCM = AESGCM(_key)
+
+    @staticmethod
+    def encrypt(embedding: list[float]) -> bytes:
+        data = np.array(embedding, dtype=np.float32).tobytes()
+
+        nonce = os.urandom(12)
+        ciphertext = EmbeddingCrypto._aes.encrypt(nonce, data, None)
+
+        return nonce + ciphertext
+
+    @staticmethod
+    def decrypt(payload: bytes) -> np.ndarray:
+        nonce = payload[:12]
+        ciphertext = payload[12:]
+
+        data = EmbeddingCrypto._aes.decrypt(nonce, ciphertext, None)
+
+        return np.frombuffer(data, dtype=np.float32)

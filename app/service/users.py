@@ -4,6 +4,7 @@ import uuid
 from app.core import constant
 from app.core.exceptions import AppException
 from app.core.securite import (
+    # EmbeddingCrypto,
     hash_password,
     verify_password,
     create_acces_mobile_token,
@@ -179,20 +180,19 @@ class AuthService:
         self,
         user_id: uuid.UUID,
         image_payloads: list[FaceImagePayload],
-    ) -> dict[str, object]:
+    ) ->User:
         logger.info("Generating face embeddings for user %s", user_id)
 
         averaging = await self.face_embedding_service.compute_average_embedding(
             image_payloads
         )
+        #TODO:we encrypt it here we wont store it as plaintext in the db  but the porblmem is were lossing the search as trade of in the vestor so i will let it like this until i found somthing tht fit
+        # encrypted_embedding = EmbeddingCrypto.encrypt(averaging)
         user = await self.user_querier.set_user_embedding(id=user_id,face_embedding=averaging)
         if not user:
             raise AppException.internal_error("Failed to set user embedding")
 
-        return {
-            "message": "Face enrollment successful",
-            "face_embedding": averaging,
-        }
+        return user
 
     async def validate_session(
         self,

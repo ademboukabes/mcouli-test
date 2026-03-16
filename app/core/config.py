@@ -16,6 +16,7 @@ class Settings(BaseSettings):
     NATS_HOST: str
     NATS_PASSWORD: str
     NATS_USER: str
+    
 
     # MinIO
     MINIO_API_PORT: int
@@ -43,6 +44,8 @@ class Settings(BaseSettings):
     GOOGLE_OAUTH_SCOPES: str = (
         "https://www.googleapis.com/auth/drive.readonly openid email profile"
     )
+    
+    FACE_ENCRYPTION_KEY: str 
 
     class Config:
         env_file = ".env"
