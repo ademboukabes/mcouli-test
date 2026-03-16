@@ -29,10 +29,7 @@ class AppException:
     @staticmethod
     def internal_error(detail: str = "Internal server error") -> HTTPException:
         return HTTPException(status_code=500, detail=detail)
-    @staticmethod
-    def conflict(detail :str )->HTTPException:
-        return HTTPException(status_code=409,detail=detail)
-
+    
     @staticmethod
     def conflict(detail: str = "Conflict") -> HTTPException:
         return HTTPException(status_code=409, detail=detail)

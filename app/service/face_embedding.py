@@ -1,19 +1,26 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Any, Sequence, Tuple, TypedDict
+from typing import  List, Literal, Optional, Sequence, Tuple, TypedDict
 
 import cv2
 import numpy as np
 from insightface.app import FaceAnalysis  # type: ignore
 from app.core.exceptions import AppException
 
-BBox = Tuple[int, int, int, int]
+BBox = tuple[int, int, int, int]  # (x1, y1, x2, y2)
 class FaceImagePayload(TypedDict):
     filename: str
     content_type: str
     bytes: bytes
 
+class FaceStub:
+    bbox: Tuple[float, float, float, float]               # bounding box: x1, y1, x2, y2
+    det_score: float                                      # detection confidence score
+    keypoints: List[Tuple[float, float]]                 # facial landmarks
+    gender: Optional[Literal['F','M']] = None            # optional gender
+    age: Optional[int] = None                             # optional age
+    embedding: Optional[np.ndarray] = None   
 
 class FaceEmbedding:
     def __init__(
@@ -44,7 +51,7 @@ class FaceEmbedding:
         if self._initialized:
             return
 
-        self.model.prepare(ctx_id=self.ctx_id, det_size=self.det_size)
+        self.model.prepare(ctx_id=self.ctx_id, det_size=self.det_size) # type: ignore
         self._initialized = True
         print("[FaceEmbedding] model initialized")
 
@@ -52,83 +59,99 @@ class FaceEmbedding:
         self.load_model()
         self.init_model()
 
-    def _normalize_bbox(self, bbox: BBox, image_shape: Tuple[int, int]) -> BBox:
-        height, width = image_shape
-        x1, y1, x2, y2 = (int(round(value)) for value in bbox)
-
-        x1 = max(0, min(width, x1))
-        x2 = max(0, min(width, x2))
-        y1 = max(0, min(height, y1))
-        y2 = max(0, min(height, y2))
-
-        if x2 <= x1 or y2 <= y1:
-            raise ValueError("Invalid bounding box")
-
-        return x1, y1, x2, y2
-
-    def _crop_face(self, image_rgb: np.ndarray, bbox: BBox) -> np.ndarray:
-        x1, y1, x2, y2 = self._normalize_bbox(bbox, image_rgb.shape[:2])
-        return image_rgb[y1:y2, x1:x2]
-
-    def embed(self, image: np.ndarray, bboxes: Sequence[BBox] | None = None) -> list[float]:
-        if self.model is None or not self._initialized:
-            raise RuntimeError("Face embedding model is not ready")
-
-        if bboxes is not None and not bboxes:
+    def embed(self, image: np.ndarray, bboxes: Sequence[BBox]) -> list[float]:
+        if not bboxes:
             raise ValueError("No faces to embed")
 
-        # Convert BGR to RGB and crop to the first bounding box that needs an embedding
-        image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-        faces: list[Any]
+        if self.model is None or not self._initialized:
+            raise RuntimeError("Model not ready. Call `prepare()` first.")
 
-        if bboxes:
-            face_region = self._crop_face(image_rgb, bboxes[0])
-            faces = self.model.get(face_region)
-        else:
-            faces = self.model.get(image_rgb)
+        image_rgb: np.ndarray = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
 
+        faces:list[FaceStub] = self.model.get(image_rgb) # type: ignore
         if not faces:
-            raise ValueError("No faces detected in the provided region")
+            raise ValueError("No faces detected by the model")
 
-        first_face = faces[0]
-        if first_face.embedding is None:
-            raise ValueError("Failed to generate embedding for the requested face")
+        x1, y1, x2, y2 = bboxes[0]
+        target_cx: float = (x1 + x2) / 2
+        target_cy: float = (y1 + y2) / 2
+        
+        best_face: Optional[FaceStub] = None
+        best_dist: float = float('inf')
 
-        return first_face.embedding.flatten().tolist()
+        x1, y1, x2, y2 = bboxes[0]
+        target_cx: float = (x1 + x2) / 2
+        target_cy: float = (y1 + y2) / 2
 
+        for face in faces:
+            fx1, fy1, fx2, fy2 = face.bbox
+            cx: float = (fx1 + fx2) / 2
+            cy: float = (fy1 + fy2) / 2
+            dist: float = np.sqrt((cx - target_cx) ** 2 + (cy - target_cy) ** 2)
 
+            if dist < best_dist:
+                best_dist = dist
+                best_face = face
+
+        if best_face is None or best_face.embedding is None:
+            raise ValueError("Failed to generate embedding for first face")
+
+        embedding: np.ndarray = best_face.embedding.flatten()
+        return embedding.tolist()
+    
+    
 class FaceEmbeddingService:
     def __init__(self, face_embedding: FaceEmbedding | None = None) -> None:
         self.face_embedding = face_embedding or FaceEmbedding()
         self.face_embedding.prepare()
 
     async def compute_average_embedding(
-        self,
-        payloads: Sequence[FaceImagePayload],
-    ) -> list[float]:
+    self,
+    payloads: Sequence[FaceImagePayload],
+        ) -> list[float]:
         if not payloads:
             raise AppException.bad_request("At least one image is required for enrollment")
 
         embeddings: list[np.ndarray] = []
+
         for payload in payloads:
             image = self._decode_image(payload)
+
+            if self.face_embedding.model is None or not self.face_embedding._initialized: # type: ignore
+                raise RuntimeError("Face embedding model not ready. Call `prepare()` first.")
+
+            image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+            faces = self.face_embedding.model.get(image_rgb) 
+            if not faces:
+                raise AppException.bad_request(
+                    f"No faces detected in the uploaded image {payload['filename']}"
+                )
+
+            # Convert Face objects to list of BBoxes
+            bboxes: list[BBox] = []
+            for face in faces:
+                x1, y1, x2, y2 = face.bbox.astype(int)
+                bboxes.append((x1, y1, x2, y2))
+
+            # Step 3: Compute embedding using the AI team's logic
             try:
                 embedding = await asyncio.to_thread(
                     self.face_embedding.embed,
                     image,
+                    bboxes,  # pass precomputed bboxes
                 )
             except (ValueError, RuntimeError) as exc:
                 raise AppException.bad_request(
-                    f"Face detection failed for {payload['filename']}: {exc}"
+                    f"Face embedding failed for {payload['filename']}: {exc}"
                 ) from exc
 
             embeddings.append(np.array(embedding, dtype=np.float32))
 
+        # Step 4: Average embeddings if multiple images
         stacked = np.stack(embeddings, axis=0)
         averaged = np.mean(stacked, axis=0)
 
         return averaged.astype(float).tolist()
-
     def _decode_image(self, payload: FaceImagePayload) -> np.ndarray:
         buffer = np.frombuffer(payload["bytes"], dtype=np.uint8)
         image = cv2.imdecode(buffer, cv2.IMREAD_COLOR)
