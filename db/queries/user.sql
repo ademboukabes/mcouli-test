@@ -29,3 +29,10 @@ SELECT *
 FROM users
 ORDER BY created_at DESC
 LIMIT $1 OFFSET $2;
+
+-- name: SetUserEmbedding :one
+UPDATE users
+SET face_embedding = $1,
+    updated_at = NOW()
+WHERE id = $2
+RETURNING *;

@@ -172,6 +172,9 @@ class User:
     hashed_password: Optional[str]
     created_at: datetime.datetime
     updated_at: datetime.datetime
+    display_name: Optional[str]
+    face_embedding: Optional[Any]
+    deleted_at: Optional[datetime.datetime]
 
 
 @dataclasses.dataclass()

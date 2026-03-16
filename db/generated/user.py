@@ -2,7 +2,7 @@
 # versions:
 #   sqlc v1.30.0
 # source: user.sql
-from typing import AsyncIterator, Optional
+from typing import Any, AsyncIterator, Optional
 import uuid
 
 import sqlalchemy
@@ -14,7 +14,7 @@ from db.generated import models
 CREATE_USER = """-- name: create_user \\:one
 INSERT INTO users (email, hashed_password)
 VALUES (:p1, :p2)
-RETURNING id, email, hashed_password, created_at, updated_at
+RETURNING id, email, hashed_password, created_at, updated_at, display_name, face_embedding, deleted_at
 """
 
 
@@ -25,24 +25,33 @@ WHERE id = :p1
 
 
 GET_USER_BY_EMAIL = """-- name: get_user_by_email \\:one
-SELECT id, email, hashed_password, created_at, updated_at
+SELECT id, email, hashed_password, created_at, updated_at, display_name, face_embedding, deleted_at
 FROM users
 WHERE email = :p1
 """
 
 
 GET_USER_BY_ID = """-- name: get_user_by_id \\:one
-SELECT id, email, hashed_password, created_at, updated_at
+SELECT id, email, hashed_password, created_at, updated_at, display_name, face_embedding, deleted_at
 FROM users
 WHERE id = :p1
 """
 
 
 LIST_USERS = """-- name: list_users \\:many
-SELECT id, email, hashed_password, created_at, updated_at
+SELECT id, email, hashed_password, created_at, updated_at, display_name, face_embedding, deleted_at
 FROM users
 ORDER BY created_at DESC
 LIMIT :p1 OFFSET :p2
+"""
+
+
+SET_USER_EMBEDDING = """-- name: set_user_embedding \\:one
+UPDATE users
+SET face_embedding = :p1,
+    updated_at = NOW()
+WHERE id = :p2
+RETURNING id, email, hashed_password, created_at, updated_at, display_name, face_embedding, deleted_at
 """
 
 
@@ -51,7 +60,7 @@ UPDATE users
 SET hashed_password = :p1,
     updated_at = NOW()
 WHERE id = :p2
-RETURNING id, email, hashed_password, created_at, updated_at
+RETURNING id, email, hashed_password, created_at, updated_at, display_name, face_embedding, deleted_at
 """
 
 
@@ -69,6 +78,9 @@ class AsyncQuerier:
             hashed_password=row[2],
             created_at=row[3],
             updated_at=row[4],
+            display_name=row[5],
+            face_embedding=row[6],
+            deleted_at=row[7],
         )
 
     async def delete_user(self, *, id: uuid.UUID) -> None:
@@ -84,6 +96,9 @@ class AsyncQuerier:
             hashed_password=row[2],
             created_at=row[3],
             updated_at=row[4],
+            display_name=row[5],
+            face_embedding=row[6],
+            deleted_at=row[7],
         )
 
     async def get_user_by_id(self, *, id: uuid.UUID) -> Optional[models.User]:
@@ -96,6 +111,9 @@ class AsyncQuerier:
             hashed_password=row[2],
             created_at=row[3],
             updated_at=row[4],
+            display_name=row[5],
+            face_embedding=row[6],
+            deleted_at=row[7],
         )
 
     async def list_users(self, *, limit: int, offset: int) -> AsyncIterator[models.User]:
@@ -107,7 +125,25 @@ class AsyncQuerier:
                 hashed_password=row[2],
                 created_at=row[3],
                 updated_at=row[4],
+                display_name=row[5],
+                face_embedding=row[6],
+                deleted_at=row[7],
             )
+
+    async def set_user_embedding(self, *, face_embedding: Optional[Any], id: uuid.UUID) -> Optional[models.User]:
+        row = (await self._conn.execute(sqlalchemy.text(SET_USER_EMBEDDING), {"p1": face_embedding, "p2": id})).first()
+        if row is None:
+            return None
+        return models.User(
+            id=row[0],
+            email=row[1],
+            hashed_password=row[2],
+            created_at=row[3],
+            updated_at=row[4],
+            display_name=row[5],
+            face_embedding=row[6],
+            deleted_at=row[7],
+        )
 
     async def update_user_password(self, *, hashed_password: Optional[str], id: uuid.UUID) -> Optional[models.User]:
         row = (await self._conn.execute(sqlalchemy.text(UPDATE_USER_PASSWORD), {"p1": hashed_password, "p2": id})).first()
@@ -119,4 +155,7 @@ class AsyncQuerier:
             hashed_password=row[2],
             created_at=row[3],
             updated_at=row[4],
+            display_name=row[5],
+            face_embedding=row[6],
+            deleted_at=row[7],
         )

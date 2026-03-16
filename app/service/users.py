@@ -185,6 +185,9 @@ class AuthService:
         averaging = await self.face_embedding_service.compute_average_embedding(
             image_payloads
         )
+        user = await self.user_querier.set_user_embedding(id=user_id,face_embedding=averaging)
+        if not user:
+            raise AppException.internal_error("Failed to set user embedding")
 
         return {
             "message": "Face enrollment successful",

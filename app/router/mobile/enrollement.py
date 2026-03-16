@@ -28,7 +28,6 @@ async def enroll_face(
             raise AppException.image_format_error(
                 f"File {file.filename} has unsupported format {file.content_type}"
             )
-        if file.filename 
 
         contents = await file.read()
         if len(contents) > MAX_IMAGE_SIZE:
