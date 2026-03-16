@@ -29,7 +29,7 @@ class AppException:
     @staticmethod
     def internal_error(detail: str = "Internal server error") -> HTTPException:
         return HTTPException(status_code=500, detail=detail)
-    
+
     @staticmethod
     def conflict(detail: str = "Conflict") -> HTTPException:
         return HTTPException(status_code=409, detail=detail)
@@ -45,11 +45,11 @@ class AppException:
     @staticmethod
     def image_quality_error(detail: str = "Image does not meet quality requirements") -> HTTPException:
         return HTTPException(status_code=400, detail=detail)
-    
+
     @staticmethod
     def image_format_error(detail: str = "Unsupported image format") -> HTTPException:
         return HTTPException(status_code=400, detail=detail)
-    
+
 class DBException(ABC):
     """Abstract class to enforce DB error handling."""
 

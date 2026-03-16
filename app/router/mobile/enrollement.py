@@ -21,8 +21,8 @@ async def enroll_face(
         raise AppException.bad_request(
             f"You must upload between {MIN_ENROLL_IMAGES} and {MAX_ENROLL_IMAGES} images for enrollment."
         )
-        
-        
+
+
     image_payloads: list[FaceImagePayload] = []
     for file in files:
         if file.content_type not in IMAGE_ALLOWED_TYPES:
