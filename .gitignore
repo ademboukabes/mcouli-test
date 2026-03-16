@@ -1,3 +1,4 @@
 .env
+.env.staging
 __pycache__
 db/schema.sql
