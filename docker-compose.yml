@@ -70,37 +70,6 @@ services:
     volumes:
       - redis_data:/data
 
-  fastapi:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: multi_fastapi
-    restart: unless-stopped
-    env_file:
-      - .env
-    depends_on:
-      - postgres
-      - redis
-      - nats
-      - minio
-    ports:
-      - "8000:8000"
-    networks:
-      - multi_network
-
-  migrate:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: multi_migrate
-    env_file:
-      - .env
-    depends_on:
-      - postgres
-    command: ["uv", "run", "alembic", "upgrade", "head"]
-    networks:
-      - multi_network
-
 volumes:
   postgres_data:
   minio_data:
