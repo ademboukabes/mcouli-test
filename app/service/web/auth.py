@@ -6,6 +6,7 @@ from app.core.securite import (
     create_acces_mobile_token, 
     create_refresh_mobile_token,
     Get_expiry_time,
+    verify_password
 )
 from app.infra.redis import RedisClient
 from db.generated import stuff_user as staff_queries
@@ -27,15 +28,16 @@ class WebAuthService:
         self,
         redis: RedisClient,
         email: str,
-        discord_id: str,
+        password: str,  # Changed from discord_id
     ) -> WebAuthResponse:
-        # 1. Verify the Staff User exists
+    # 1. Verify the Staff User exists
         staff = await self.staff_querier.get_staff_user_by_email(email=email)
-        
-        if not staff or staff.discord_id != discord_id:
-            raise AppException.unauthorized("Access denied: Not a registered staff member")
+    
+    # FIX: Check password instead of discord_id
+        if not staff or not verify_password(password, staff.password):
+            raise AppException.unauthorized("Invalid email or password")
 
-        # 2. Handle Session (Web uses a virtual device ID)
+    # 2. Handle Session 
         web_device_id = uuid.uuid5(uuid.NAMESPACE_DNS, "web-admin-panel")
         expires_at = datetime.now(timezone.utc) + timedelta(days=1)
 

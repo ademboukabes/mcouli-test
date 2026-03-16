@@ -49,7 +49,8 @@ WHERE id = :p1
 
 GET_EVENTS_BY_DATE_RANGE = """-- name: get_events_by_date_range \\:many
 SELECT id, name, event_code, event_date, status, created_by, created_at, archived_at FROM events 
-WHERE event_date >= :p1 AND event_date <= :p2
+WHERE event_date >= :p1 
+AND event_date <= :p2
 ORDER BY event_date ASC
 """
 

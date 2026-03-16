@@ -3,7 +3,7 @@ import uuid
 
 class WebAuthRequest(BaseModel):
     email: EmailStr
-    discord_id: str
+    password: str
 
 class WebAuthResponse(BaseModel):
     access_token: str

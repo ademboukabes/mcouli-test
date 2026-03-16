@@ -93,9 +93,10 @@ class Container:
         )
 
         self.staff_user_service = StaffUserService()
-        
+
         self.staff_user_service.init(
-            staff_user_querier=self.staff_user_querier,
+            staff_user_querier=self.staff_user_querier,)
+
         self.event_service = EventService(
             e_querier=self.event_querier,
             p_querier=self.participant_querier,

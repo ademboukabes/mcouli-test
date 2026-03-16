@@ -31,13 +31,6 @@ class StaffRole(str, enum.Enum):
     ADMIN = "admin"
     MULTI_TEAM_LEAD = "multi_team_lead"
     MULTI = "multi"
-    MULTI_TEAM_LEAD = "multi_team_lead"
-
-
-class UploadRequestStatus(str, enum.Enum):
-    PENDING = "pending"
-    APPROVED = "approved"
-    REJECTED = "rejected"
 
 
 class UploadRequestStatus(str, enum.Enum):
@@ -68,53 +61,7 @@ class EventParticipant:
     id: uuid.UUID
     event_id: uuid.UUID
     user_id: uuid.UUID
-    type: str
-    payload: Any
-    read_at: Optional[datetime.datetime]
-    created_at: datetime.datetime
-
-
-@dataclasses.dataclass()
-class Photo:
-    id: uuid.UUID
-    event_id: uuid.UUID
-    uploaded_by: Optional[uuid.UUID]
-    storage_key: str
-    taken_at: Optional[datetime.datetime]
-    day_number: Optional[int]
-    visibility: str
-    status: Any
-    created_at: datetime.datetime
-
-
-@dataclasses.dataclass()
-class PhotoApproval:
-    id: uuid.UUID
-    photo_id: uuid.UUID
-    user_id: uuid.UUID
-    decision: str
-    decided_at: datetime.datetime
-
-
-@dataclasses.dataclass()
-class PhotoFace:
-    id: uuid.UUID
-    photo_id: uuid.UUID
-    face_index: int
-    embedding: Optional[Any]
-    bbox: Optional[str]
-    created_at: datetime.datetime
-
-
-@dataclasses.dataclass()
-class ProcessingJob:
-    id: uuid.UUID
-    photo_id: uuid.UUID
-    job_type: str
-    status: Any
-    attempts: int
-    created_at: datetime.datetime
-    completed_at: Optional[datetime.datetime]
+    joined_at: datetime.datetime
 
 
 @dataclasses.dataclass()
@@ -240,18 +187,6 @@ class UploadRequestPhoto:
     day_number: Optional[int]
     visibility: str
     created_at: datetime.datetime
-
-
-@dataclasses.dataclass()
-class UploadRequest:
-    id: uuid.UUID
-    event_id: uuid.UUID
-    drive_file_id: str
-    requested_by: uuid.UUID
-    approved_by: Optional[uuid.UUID]
-    status: Any
-    created_at: datetime.datetime
-    approved_at: Optional[datetime.datetime]
 
 
 @dataclasses.dataclass()
