@@ -97,7 +97,7 @@ services:
       - .env
     depends_on:
       - postgres
-    command: alembic upgrade head
+    command: ["uv", "run", "alembic", "upgrade", "head"]
     networks:
       - multi_network
 
