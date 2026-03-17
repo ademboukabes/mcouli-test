@@ -116,26 +116,16 @@ class StaffSessionService:
         except Exception as e:
             raise DBExceptionImpl.handle(e)
 
-    async def delete_staff_session(
-        self, staff_id: uuid.UUID, device_id: uuid.UUID
-    ) -> dict[str, str]:
-        """Invalidates the session in both DB and Redis."""
+    async def delete_staff_session(self, staff_id: uuid.UUID) -> dict[str, str]:
         try:
-            # 1. Database removal
-            await self.staff_querier.delete_staff_session_by_device(
-                staff_id=staff_id, 
-                device_id=device_id
-            )
-            
-            # 2. Redis removal
-            await self.redis.delete(
-                RedisKey.StaffSessionByStaff.format(staff_id=staff_id)
-            )
-            
+            # Use the existing "delete_all" method from your sqlc code
+            await self.staff_querier.delete_all_staff_sessions(staff_id=staff_id)
+        
+            await self.redis.delete(RedisKey.StaffSessionByStaff.format(staff_id=staff_id))
             return {"message": "Staff logout successful"}
         except Exception as e:
             raise DBExceptionImpl.handle(e)
-
+    
     async def delete_expired_staff_sessions(self) -> None:
         try:
             await self.staff_querier.delete_expired_staff_sessions()

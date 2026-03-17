@@ -1,8 +1,8 @@
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends
 from app.container import Container, get_container
 from app.deps.staff_auth import get_current_staff_user
 from app.schema.auth.web.authSc import WebAuthRequest, WebAuthResponse
-from app.schema.response.web.staff_user import StaffUserSchema # Ensure this path is correct
+from db.generated.models import StaffUser
 
 router = APIRouter(prefix="/auth", tags=["web-auth"])
 
@@ -17,18 +17,12 @@ async def admin_login(
         password=req.password
     )
 
-@router.post("/logout", status_code=status.HTTP_200_OK)
+@router.post("/logout")
 async def staff_logout(
     container: Container = Depends(get_container),
-    current_staff: StaffUserSchema = Depends(get_current_staff_user),
-) -> dict[str, str]:
-    """
-    Staff Only: Invalidate the current web session.
-    Uses the staff id and device_id extracted from the session.
-    """
-    assert current_staff.device_id is not None 
-
+    current_staff: StaffUser = Depends(get_current_staff_user),
+):
+    # Pass ONLY the staff_id
     return await container.staff_session_service.delete_staff_session(
-        staff_id=current_staff.id,
-        device_id=current_staff.device_id
+        staff_id=current_staff.id
     )
