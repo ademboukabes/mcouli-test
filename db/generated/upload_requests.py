@@ -61,26 +61,9 @@ SELECT
     approved_at,
     rejection_reason
 FROM upload_requests
-WHERE requested_by = :p1
+WHERE (:p1 IS NULL OR requested_by = :p1)
+  AND (:p2::upload_request_status IS NULL OR status = :p2::upload_request_status)
 ORDER BY created_at DESC
-"""
-
-
-LIST_PENDING_UPLOAD_REQUESTS = """-- name: list_pending_upload_requests \\:many
-SELECT
-    id,
-    event_id,
-    drive_file_id,
-    requested_by,
-    approved_by,
-    status,
-    photo_count,
-    created_at,
-    approved_at,
-    rejection_reason
-FROM upload_requests
-WHERE status = 'pending'
-ORDER BY created_at ASC
 """
 
 
@@ -170,20 +153,16 @@ class AsyncQuerier:
             return None
         return _row_to_upload_request(row)
 
-    async def list_upload_requests_by_requester(
+    async def list_upload_requests(
         self,
         *,
-        requested_by: uuid.UUID,
+        requested_by: uuid.UUID | None,
+        status: str | None,
     ) -> AsyncIterator[models.UploadRequest]:
         result = await self._conn.stream(
             sqlalchemy.text(LIST_UPLOAD_REQUESTS_BY_REQUESTER),
-            {"p1": requested_by},
+            {"p1": requested_by, "p2": status},
         )
-        async for row in result:
-            yield _row_to_upload_request(row)
-
-    async def list_pending_upload_requests(self) -> AsyncIterator[models.UploadRequest]:
-        result = await self._conn.stream(sqlalchemy.text(LIST_PENDING_UPLOAD_REQUESTS))
         async for row in result:
             yield _row_to_upload_request(row)
 

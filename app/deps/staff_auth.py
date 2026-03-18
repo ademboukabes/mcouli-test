@@ -5,7 +5,11 @@ from fastapi import Depends, Header
 
 from app.container import Container, get_container
 from app.core.exceptions import AppException
-from db.generated.models import StaffUser
+from db.generated.models import StaffRole, StaffUser
+
+
+def _role_value(role: object) -> str:
+    return getattr(role, "value", str(role))
 
 
 async def get_current_staff_user(
@@ -22,3 +26,15 @@ async def get_current_staff_user(
         raise AppException.not_found("Staff user not found")
 
     return staff_user
+
+
+def ensure_multi_team_lead_staff(current_staff_user: StaffUser) -> StaffUser:
+    if _role_value(current_staff_user.role) != StaffRole.MULTI_TEAM_LEAD.value:
+        raise AppException.forbidden("Multi team lead access required")
+    return current_staff_user
+
+
+async def require_multi_team_lead_staff(
+    current_staff_user: Annotated[StaffUser, Depends(get_current_staff_user)],
+) -> StaffUser:
+    return ensure_multi_team_lead_staff(current_staff_user)
