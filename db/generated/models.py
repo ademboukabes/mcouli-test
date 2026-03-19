@@ -29,8 +29,8 @@ class ProcessingJobStatus(str, enum.Enum):
 
 class StaffRole(str, enum.Enum):
     ADMIN = "admin"
-    MULTI = "multi"
     MULTI_TEAM_LEAD = "multi_team_lead"
+    MULTI = "multi"
 
 
 class UploadRequestStatus(str, enum.Enum):
