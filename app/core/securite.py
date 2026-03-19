@@ -108,27 +108,27 @@ def generate_Acces_token_stuff(user_id: str, role: str) -> str:
 
 
 
-class EmbeddingCrypto:
-    _key: bytes = base64.b64decode(settings.FACE_ENCRYPTION_KEY)
-    _aes: AESGCM = AESGCM(_key)
+# class EmbeddingCrypto:
+#     _key: bytes = base64.b64decode(settings.FACE_ENCRYPTION_KEY)
+#     _aes: AESGCM = AESGCM(_key)
 
-    @staticmethod
-    def encrypt(embedding: list[float]) -> bytes:
-        data = np.array(embedding, dtype=np.float32).tobytes()
+#     @staticmethod
+#     def encrypt(embedding: list[float]) -> bytes:
+#         data = np.array(embedding, dtype=np.float32).tobytes()
 
-        nonce = os.urandom(12)
-        ciphertext = EmbeddingCrypto._aes.encrypt(nonce, data, None)
+#         nonce = os.urandom(12)
+#         ciphertext = EmbeddingCrypto._aes.encrypt(nonce, data, None)
 
-        return nonce + ciphertext
+#         return nonce + ciphertext
 
-    @staticmethod
-    def decrypt(payload: bytes) -> np.ndarray:
-        nonce = payload[:12]
-        ciphertext = payload[12:]
+#     @staticmethod
+#     def decrypt(payload: bytes) -> np.ndarray:
+#         nonce = payload[:12]
+#         ciphertext = payload[12:]
 
-        data = EmbeddingCrypto._aes.decrypt(nonce, ciphertext, None)
+#         data = EmbeddingCrypto._aes.decrypt(nonce, ciphertext, None)
 
-        return np.frombuffer(data, dtype=np.float32)
+#         return np.frombuffer(data, dtype=np.float32)
 
 def create_access_staff_token(staff_id: str, role: str) -> str:
     """

@@ -70,9 +70,7 @@ services:
       - redis_data:/data
 
   fastapi:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    image: ghcr.io/microclub-usthb/multai-back:latest
     container_name: multi_fastapi
     restart: unless-stopped
     env_file:
@@ -88,9 +86,7 @@ services:
       - multi_network
 
   migrate:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    image: ghcr.io/microclub-usthb/multai-back:latest
     container_name: multi_migrate
     env_file:
       - .env.staging
