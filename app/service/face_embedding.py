@@ -123,7 +123,28 @@ class FaceEmbeddingService:
 
         embeddings: list[np.ndarray] = []
 
+        for payload in payloads:
+            image = self._decode_image(payload)
+            image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
 
+            # Single detection pass — model.get() already returns embeddings
+            faces: list[FaceStub] = await asyncio.to_thread(
+                self.face_embedding.model.get, image_rgb  # type: ignore
+            )
+
+            if not faces:
+                raise AppException.bad_request(
+                    f"No faces detected in image {payload['filename']}"
+                )
+
+            face = faces[0]
+
+            if face.embedding is None:
+                raise AppException.bad_request(
+                    f"Failed to generate embedding for {payload['filename']}"
+                )
+
+            embeddings.append(face.embedding.astype(np.float32))
 
         stacked = np.stack(embeddings, axis=0)
         averaged = np.mean(stacked, axis=0)
