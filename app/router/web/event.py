@@ -4,7 +4,7 @@ from typing import List, Optional
 
 from app.container import get_container, Container
 
-from app.deps.staff_auth import (
+from app.deps.cookie_auth import (
     get_current_staff_user
 )
 from app.schema.request.web.event import (

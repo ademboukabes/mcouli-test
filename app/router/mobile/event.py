@@ -3,7 +3,7 @@ from typing import List
 from fastapi import APIRouter, Depends
 
 from app.container import Container, get_container
-from app.deps.auth import MobileUserSchema, get_current_mobile_user
+from app.deps.token_auth import MobileUserSchema, get_current_mobile_user
 from app.schema.request.web.event import JoinEventRequest
 from app.schema.response.web.event import JoinEventResponse, UserEventResponse
 

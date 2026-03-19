@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, Query, status
 
 from app.container import Container, get_container
 from app.core.logger import logger
-from app.deps.staff_auth import get_current_staff_user
+from app.deps.cookie_auth import get_current_staff_user
 from app.schema.request.web.staff_user import StaffUserCreateRequest, StaffUserUpdateRequest
 from app.schema.response.web.staff_user import StaffUserSchema
 from db.generated.models import StaffRole, StaffUser

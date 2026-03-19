@@ -1,7 +1,9 @@
+from typing import Annotated
+
 from fastapi import APIRouter, UploadFile, File, Depends
 
 from app.container import Container, get_container
-from app.deps.auth import MobileUserSchema, get_current_mobile_user
+from app.deps.token_auth import MobileUserSchema, get_current_mobile_user
 from app.core.exceptions import AppException
 from app.core.constant import IMAGE_ALLOWED_TYPES, MAX_ENROLL_IMAGES, MAX_IMAGE_SIZE, MIN_ENROLL_IMAGES
 from app.service.face_embedding import FaceImagePayload
@@ -12,7 +14,7 @@ router = APIRouter()
 
 @router.post("/enroll")
 async def enroll_face(
-    files: list[UploadFile] = File(...),
+    files: Annotated[list[UploadFile], File(description="Multiple files")],
     container: Container = Depends(get_container),
     user: MobileUserSchema = Depends(get_current_mobile_user),
 ) -> User:

@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, Query
 from fastapi.responses import Response
 
 from app.container import Container, get_container
-from app.deps.staff_auth import (
+from app.deps.cookie_auth import (
     get_current_staff_user,
     require_multi_team_lead_staff,
 )

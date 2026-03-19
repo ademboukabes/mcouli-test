@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends
 from app.container import Container, get_container
 from fastapi import Response
 
-from app.deps.staff_auth import get_current_staff_user
+from app.deps.cookie_auth import get_current_staff_user
 from app.schema.request.web.auth import WebAuthRequest
 from app.schema.response.web.auth import WebAuthResponse
 from app.schema.response.web.staff_user import StaffUserSchema
