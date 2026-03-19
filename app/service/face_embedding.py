@@ -5,7 +5,7 @@ from typing import List, Literal, Optional, Sequence, Tuple, TypedDict
 
 import cv2
 import numpy as np
-from insightface.app import FaceAnalysis  
+from insightface.app import FaceAnalysis
 from app.core.exceptions import AppException
 
 
@@ -13,7 +13,7 @@ BBox = tuple[int, int, int, int]
 
 
 class FaceImagePayload(TypedDict):
-    filename: str   
+    filename: str
     content_type: str
     bytes: bytes
 
