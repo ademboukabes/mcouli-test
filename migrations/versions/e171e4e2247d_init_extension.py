@@ -1,7 +1,7 @@
 """init_extension
 
 Revision ID: e171e4e2247d
-Revises: 
+Revises:
 Create Date: 2026-02-28 13:58:27.732494
 
 """
@@ -19,8 +19,6 @@ depends_on: Union[str, Sequence[str], None] = None
 
 def upgrade() -> None:
     run_sql_up("init_extension")
-
-
 
 def downgrade() -> None:
     run_sql_down("init_extension")
