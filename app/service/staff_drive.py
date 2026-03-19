@@ -90,6 +90,19 @@ class StaffDriveService:
             provider=self.PROVIDER,
         )
 
+    async def get_active_connection_or_raise(
+        self,
+        staff_user_id: uuid.UUID,
+    ) -> StaffDriveConnection:
+        connection = await self.get_status(staff_user_id)
+        if connection is None:
+            raise AppException.bad_request("Staff Google Drive is not connected")
+        return connection
+
+    async def get_access_token_for_staff_user(self, staff_user_id: uuid.UUID) -> str:
+        connection = await self.get_active_connection_or_raise(staff_user_id)
+        return self.decrypt(connection.access_token)
+
     async def disconnect(self, staff_user_id: uuid.UUID) -> None:
         connection = await self.get_status(staff_user_id)
         if connection is None:

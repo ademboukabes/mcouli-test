@@ -9,9 +9,13 @@ class UploadRequestSchema(BaseModel):
     class UploadRequestPhotoSchema(BaseModel):
         id: UUID
         drive_file_id: str
+        file_name: str
+        mime_type: str
+        size_bytes: int
         taken_at: datetime | None
         day_number: int | None
         visibility: str
+        status: str
         created_at: datetime
 
         @classmethod
@@ -22,9 +26,13 @@ class UploadRequestSchema(BaseModel):
             return cls(
                 id=photo.id,
                 drive_file_id=photo.drive_file_id,
+                file_name=photo.file_name,
+                mime_type=photo.mime_type,
+                size_bytes=photo.size_bytes,
                 taken_at=photo.taken_at,
                 day_number=photo.day_number,
                 visibility=photo.visibility,
+                status=photo.status,
                 created_at=photo.created_at,
             )
 
@@ -74,4 +82,17 @@ class UploadRequestListResponse(BaseModel):
                 UploadRequestSchema.from_models(upload_request, photos)
                 for upload_request, photos in items
             ]
+        )
+
+
+class UploadRequestPhotoListResponse(BaseModel):
+    items: list[UploadRequestSchema.UploadRequestPhotoSchema]
+
+    @classmethod
+    def from_models(
+        cls,
+        photos: list[UploadRequestPhoto],
+    ) -> "UploadRequestPhotoListResponse":
+        return cls(
+            items=[UploadRequestSchema.UploadRequestPhotoSchema.from_model(photo) for photo in photos]
         )

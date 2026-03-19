@@ -7,6 +7,7 @@ from app.infra.redis import RedisClient
 from app.service.device import DeviceService
 from app.service.face_embedding import FaceEmbeddingService
 from app.service.session import SessionService
+from app.service.staged_upload_storage import StagedUploadStorageService
 from app.service.staff_drive import StaffDriveService
 from app.service.staff_notifications import StaffNotificationsService
 from app.service.staff_user import StaffUserService
@@ -83,11 +84,14 @@ class Container:
         self.staff_notifications_service = StaffNotificationsService(
             notification_querier=self.staff_notification_querier,
         )
+        self.staged_upload_storage_service = StagedUploadStorageService()
 
         self.upload_requests_service = UploadRequestsService(
             upload_request_querier=self.upload_request_querier,
             upload_request_photo_querier=self.upload_request_photo_querier,
             photo_querier=self.photo_querier,
+            staged_upload_storage=self.staged_upload_storage_service,
+            staff_drive_service=self.staff_drive_service,
             staff_notifications_service=self.staff_notifications_service,
         )
 

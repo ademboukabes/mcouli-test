@@ -5,6 +5,7 @@ import urllib.parse
 import urllib.request
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
+from email.message import Message
 
 from app.core.exceptions import AppException
 from app.core.config import settings
@@ -13,6 +14,7 @@ from app.core.config import settings
 GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
 GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"
 GOOGLE_USERINFO_URL = "https://www.googleapis.com/oauth2/v2/userinfo"
+GOOGLE_DRIVE_FILES_URL = "https://www.googleapis.com/drive/v3/files/{file_id}"
 
 
 @dataclass
@@ -29,6 +31,20 @@ class GoogleUserInfo:
     id: str
     email: str
     verified_email: bool
+
+
+@dataclass
+class GoogleDriveFileMetadata:
+    id: str
+    name: str
+    mime_type: str
+    size_bytes: int
+
+
+@dataclass
+class GoogleDriveFileDownload:
+    metadata: GoogleDriveFileMetadata
+    content: bytes
 
 
 class GoogleDriveClient:
@@ -107,12 +123,63 @@ class GoogleDriveClient:
         data = await GoogleDriveClient._get_json(
             GOOGLE_USERINFO_URL,
             headers={"Authorization": f"Bearer {access_token}"},
+            error_context="Google user info request",
         )
         return GoogleUserInfo(
             id=GoogleDriveClient._require_str(data, "id"),
             email=GoogleDriveClient._require_str(data, "email"),
             verified_email=bool(data.get("verified_email", False)),
         )
+
+    @staticmethod
+    async def get_file_metadata(
+        *,
+        access_token: str,
+        file_id: str,
+    ) -> GoogleDriveFileMetadata:
+        data = await GoogleDriveClient._get_json(
+            GOOGLE_DRIVE_FILES_URL.format(file_id=urllib.parse.quote(file_id, safe="")),
+            headers={"Authorization": f"Bearer {access_token}"},
+            query_params={
+                "fields": "id,name,mimeType,size",
+                "supportsAllDrives": "true",
+            },
+            error_context="Google Drive file metadata request",
+        )
+        size_raw = data.get("size", "0")
+        if not isinstance(size_raw, (str, int)):
+            raise AppException.bad_request("Google Drive file size is invalid")
+        try:
+            size_bytes = int(size_raw)
+        except (TypeError, ValueError) as exc:
+            raise AppException.bad_request("Google Drive file size is invalid") from exc
+
+        return GoogleDriveFileMetadata(
+            id=GoogleDriveClient._require_str(data, "id"),
+            name=GoogleDriveClient._require_str(data, "name"),
+            mime_type=GoogleDriveClient._require_str(data, "mimeType"),
+            size_bytes=size_bytes,
+        )
+
+    @staticmethod
+    async def download_file(
+        *,
+        access_token: str,
+        file_id: str,
+    ) -> GoogleDriveFileDownload:
+        metadata = await GoogleDriveClient.get_file_metadata(
+            access_token=access_token,
+            file_id=file_id,
+        )
+        content, _, _ = await GoogleDriveClient._get_bytes(
+            GOOGLE_DRIVE_FILES_URL.format(file_id=urllib.parse.quote(file_id, safe="")),
+            headers={"Authorization": f"Bearer {access_token}"},
+            query_params={
+                "alt": "media",
+                "supportsAllDrives": "true",
+            },
+        )
+        return GoogleDriveFileDownload(metadata=metadata, content=content)
 
     @staticmethod
     async def _post_form(url: str, payload: dict[str, str]) -> dict[str, object]:
@@ -144,20 +211,53 @@ class GoogleDriveClient:
     async def _get_json(
         url: str,
         headers: dict[str, str] | None = None,
+        query_params: dict[str, str] | None = None,
+        error_context: str = "Google API request",
     ) -> dict[str, object]:
         def _request() -> dict[str, object]:
-            request = urllib.request.Request(url, headers=headers or {}, method="GET")
+            final_url = url
+            if query_params:
+                final_url = f"{url}?{urllib.parse.urlencode(query_params)}"
+            request = urllib.request.Request(final_url, headers=headers or {}, method="GET")
             try:
                 with urllib.request.urlopen(request, timeout=15) as response:
                     return json.loads(response.read().decode("utf-8"))
             except urllib.error.HTTPError as exc:
                 details = exc.read().decode("utf-8", errors="ignore")
                 raise AppException.bad_request(
-                    f"Google user info request failed: {details or exc.reason}"
+                    f"{error_context} failed: {details or exc.reason}"
                 ) from exc
             except urllib.error.URLError as exc:
                 raise AppException.internal_error(
                     "Unable to reach Google APIs"
                 ) from exc
+
+        return await asyncio.to_thread(_request)
+
+    @staticmethod
+    async def _get_bytes(
+        url: str,
+        headers: dict[str, str] | None = None,
+        query_params: dict[str, str] | None = None,
+    ) -> tuple[bytes, str, str]:
+        def _request() -> tuple[bytes, str, str]:
+            final_url = url
+            if query_params:
+                final_url = f"{url}?{urllib.parse.urlencode(query_params)}"
+            request = urllib.request.Request(final_url, headers=headers or {}, method="GET")
+            try:
+                with urllib.request.urlopen(request, timeout=30) as response:
+                    body = response.read()
+                    response_headers: Message = response.headers
+                    content_type = response_headers.get_content_type()
+                    file_name = response_headers.get_filename() or ""
+                    return body, content_type, file_name
+            except urllib.error.HTTPError as exc:
+                details = exc.read().decode("utf-8", errors="ignore")
+                raise AppException.bad_request(
+                    f"Google file download failed: {details or exc.reason}"
+                ) from exc
+            except urllib.error.URLError as exc:
+                raise AppException.internal_error("Unable to download file from Google Drive") from exc
 
         return await asyncio.to_thread(_request)
