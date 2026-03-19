@@ -13,4 +13,6 @@ __pycache__
 *.db
 *.sqlite3
 .env
+.env.staging
+.env.*
 db/schema.sql
