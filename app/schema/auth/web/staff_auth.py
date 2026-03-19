@@ -7,12 +7,12 @@ class StaffUserSchema(BaseModel):
     email: str
     role: str
     session_id: uuid.UUID
-    
+
     class Config:
         from_attributes = True
 
 class StaffJWTPayload(TypedDict):
-    sub: str   
+    sub: str
     role: str
-    type: str  
+    type: str
     exp: int

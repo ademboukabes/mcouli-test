@@ -52,7 +52,7 @@ class Container:
         self.event_querier = event_queries.AsyncQuerier(conn)
         self.participant_querier = participant_queries.AsyncQuerier(conn)
         self.staff_querier = staff_queries.AsyncQuerier(conn)
-        
+
 
         # services
         self.session_service = SessionService()

@@ -1,7 +1,6 @@
 import base64
 from datetime import datetime, timedelta, timezone
 import os
-from typing import Any
 from typing import Any, cast, Dict
 import jwt
 import numpy as np
@@ -133,7 +132,7 @@ class EmbeddingCrypto:
 
 def create_access_staff_token(staff_id: str, role: str) -> str:
     """
-    Pure stateless token generation. 
+    Pure stateless token generation.
     No session_id required.
     """
     payload: StaffJWTPayload = {
@@ -143,11 +142,10 @@ def create_access_staff_token(staff_id: str, role: str) -> str:
         "exp": int(
             (datetime.now(timezone.utc) + timedelta(seconds=Get_expiry_time())).timestamp()
         ),
-        
     }
     return jwt.encode(
-        cast(Dict[str, Any], payload), 
-        key=settings.jwt_secret, 
+        cast(Dict[str, Any], payload),
+        key=settings.jwt_secret,
         algorithm=settings.jwt_algorithm
     )
 
@@ -167,8 +165,8 @@ def create_refresh_staff_token(staff_id: str, role: str) -> str:
     }
     # Using cast to handle the Pylance dict[str, Any] quirk
     return jwt.encode(
-        cast(Dict[str, Any], payload), 
-        key=settings.jwt_secret, 
+        cast(Dict[str, Any], payload),
+        key=settings.jwt_secret,
         algorithm=settings.jwt_algorithm
     )
 
@@ -178,8 +176,8 @@ def decode_staff_token(token: str) -> StaffJWTPayload:
     """
     try:
         payload = jwt.decode(
-            token, 
-            key=settings.jwt_secret, 
+            token,
+            key=settings.jwt_secret,
             algorithms=[settings.jwt_algorithm]
         )
         # Cast the result to our TypedDict for better downstream typing

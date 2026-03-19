@@ -33,7 +33,7 @@ class WebAuthService:
         # 2. Generate Stateless Tokens
         # We only pass staff_id and role. No more session_id.
         access_token = create_access_staff_token(
-            staff_id=str(staff.id), 
+            staff_id=str(staff.id),
             role=staff.role
         )
 

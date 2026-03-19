@@ -8,4 +8,4 @@ class EventCreate(BaseModel):
     status: Optional[str] = "draft"
 
 class JoinEventRequest(BaseModel):
-    event_code: str  
+    event_code: str

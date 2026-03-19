@@ -6,7 +6,7 @@ router = APIRouter(prefix="/auth", tags=["web-auth"])
 
 @router.post("/login", response_model=WebAuthResponse)
 async def admin_login(
-    req: WebAuthRequest, 
+    req: WebAuthRequest,
     container: Container = Depends(get_container),
 ) -> WebAuthResponse:
     """Authenticates a staff member and creates a session."""

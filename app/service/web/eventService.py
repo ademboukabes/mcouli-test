@@ -19,8 +19,8 @@ from db.generated import models
 
 class EventService:
     def __init__(
-        self, 
-        e_querier: event_queries.AsyncQuerier, 
+        self,
+        e_querier: event_queries.AsyncQuerier,
         p_querier: participant_queries.AsyncQuerier
     ):
         self.e_querier = e_querier
@@ -55,12 +55,12 @@ class EventService:
     # --- Retrieval & Filtering ---
 
     async def list_events(
-        self, 
-        limit: int = 10, 
-        offset: int = 0, 
+        self,
+        limit: int = 10,
+        offset: int = 0,
         status: Optional[models.EventStatus] = None
     ) -> List[EventResponse]:
-        
+
         params = event_queries.ListEventsParams(
             limit=limit,
             offset=offset,
@@ -70,8 +70,8 @@ class EventService:
             search_name=None,
             sort_order='date_desc'
         )
-        
-        events: List[EventResponse] = [] 
+
+        events: List[EventResponse] = []
         async for e in self.e_querier.list_events(params):
             events.append(EventResponse.model_validate(e))
         return events
@@ -89,7 +89,7 @@ class EventService:
         event = await self.e_querier.get_event_by_code(event_code=code)
         if not event:
             raise AppException.not_found("Invalid QR Code")
-        
+
         if event.status == "archived":
             raise AppException.forbidden("This event is already closed.")
 
@@ -102,7 +102,7 @@ class EventService:
         join_record = await self.p_querier.join_event(event_id=event.id, user_id=user_id)
         if not join_record:
             raise AppException.internal_error("Failed to join event")
-            
+
         return JoinEventResponse.model_validate(join_record)
 
     async def get_event_attendees(self, event_id: uuid.UUID) -> List[ParticipantResponse]:

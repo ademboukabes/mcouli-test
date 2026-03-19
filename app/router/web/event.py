@@ -5,8 +5,8 @@ from typing import List, Optional
 from app.container import get_container, Container
 # Import both dependency types
 from app.deps.auth import (
-    MobileUserSchema, 
-    get_current_mobile_user, 
+    MobileUserSchema,
+    get_current_mobile_user,
 )
 from app.deps.staff_auth import (
     get_current_staff_user
@@ -31,18 +31,18 @@ async def list_events(
     limit: int = 10,
     offset: int = 0,
     name: Optional[str] = None,
-    status: Optional[models.EventStatus] = None, 
+    status: Optional[models.EventStatus] = None,
     container: Container = Depends(get_container),
-    current_staff: models.StaffUser = Depends(get_current_staff_user), 
+    current_staff: models.StaffUser = Depends(get_current_staff_user),
 ):
     """Staff Only: List all events with optional filters."""
-    
+
     if name:
         return await container.event_service.find_events_by_name(name)
-    
+
     return await container.event_service.list_events(
-        limit=limit, 
-        offset=offset, 
+        limit=limit,
+        offset=offset,
         status=status
     )
 
@@ -50,7 +50,7 @@ async def list_events(
 async def create_event(
     req: EventCreate,
     container: Container = Depends(get_container),
-    current_staff: models.StaffUser = Depends(get_current_staff_user), 
+    current_staff: models.StaffUser = Depends(get_current_staff_user),
 ):
     """Staff Only: Create a new event."""
     return await container.event_service.create_event(req, current_staff.id)
@@ -95,7 +95,7 @@ async def join_event(
 ):
     """Mobile User Only: Join an event by scanning QR code."""
     return await container.event_service.join_event_by_code(
-        user_id=current_user.user_id, 
+        user_id=current_user.user_id,
         code=req.event_code
     )
 
