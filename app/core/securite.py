@@ -107,9 +107,6 @@ def generate_Acces_token_stuff(user_id: str, role: str) -> str:
     }
     return jwt.encode(payload, key=settings.jwt_secret, algorithm=settings.jwt_algorithm)
 
-<<<<<<< HEAD
-<<<<<<< HEAD
-
 
 
 class EmbeddingCrypto:
@@ -133,11 +130,8 @@ class EmbeddingCrypto:
         data = EmbeddingCrypto._aes.decrypt(nonce, ciphertext, None)
 
         return np.frombuffer(data, dtype=np.float32)
-=======
-def create_access_staff_token(session_id: str, staff_id: str, role: str) -> str:
-=======
+
 def create_access_staff_token(staff_id: str, role: str) -> str:
->>>>>>> 469aad3 (finale changes (before rebase))
     """
     Pure stateless token generation. 
     No session_id required.
@@ -194,4 +188,3 @@ def decode_staff_token(token: str) -> StaffJWTPayload:
         raise AppException.unauthorized("Staff token has expired")
     except jwt.InvalidTokenError:
         raise AppException.unauthorized("Invalid staff token")
->>>>>>> 115b953 (event (create edit archive, + join) after testing)

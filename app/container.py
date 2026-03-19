@@ -26,9 +26,6 @@ from db.generated import user as user_queries
 from db.generated import events as event_queries
 from db.generated import eventParticipant as participant_queries
 from db.generated import stuff_user as staff_queries
-from app.service.users import AuthService
-from app.service.session import SessionService
-from app.service.device import DeviceService
 from app.service.web.eventService import EventService
 from app.service.web.auth import WebAuthService
 

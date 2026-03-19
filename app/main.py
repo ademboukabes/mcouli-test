@@ -14,9 +14,6 @@ from app.router.mobile.auth import router as mobile_router
 from app.router.staff import router as staff_router
 from app.router.web import router as web_router
 from app.deps.ai_deps import get_face_embedding_service
-from app.router.web.auth import router as web_router_auth
-from app.router.web.event import router as web_router_event
-from app.router.web.staff_users import router as web_router_staff
 from app.core.logger import configure_logger, logger
 
 
@@ -114,8 +111,6 @@ def health_check() -> dict[str, str]:
     return {"status": "healthy"}
 
 
-app.include_router(mobile_router, prefix="/mobile")
+app.include_router(mobile_router)
 app.include_router(staff_router)
-app.include_router(web_router_auth, prefix="/web")
-app.include_router(web_router_event, prefix="/web")
-app.include_router(web_router_staff, prefix="/web")
+app.include_router(web_router)
