@@ -186,9 +186,14 @@ class AuthService:
         averaging = await self.face_embedding_service.compute_average_embedding(
             image_payloads
         )
+        # pgvector accepts input like: "[0.1, 0.2, ...]". Convert list to a vector literal.
+        vector_literal = "[" + ", ".join(str(x) for x in averaging) + "]"
         #TODO:we encrypt it here we wont store it as plaintext in the db  but the porblmem is were lossing the search as trade of in the vestor so i will let it like this until i found somthing tht fit
         # encrypted_embedding = EmbeddingCrypto.encrypt(averaging)
-        user = await self.user_querier.set_user_embedding(id=user_id,face_embedding=averaging)
+        user = await self.user_querier.set_user_embedding(
+            dollar_1=vector_literal,
+            id=user_id,
+        )
         if not user:
             raise AppException.internal_error("Failed to set user embedding")
 

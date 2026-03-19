@@ -31,7 +31,7 @@ async def enroll_face(
                 },
             },
         ),
-    ] = File(...),
+    ],
     container: Container = Depends(get_container),
     user: MobileUserSchema = Depends(get_current_mobile_user),
 ) -> User:
