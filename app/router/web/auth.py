@@ -20,7 +20,7 @@ async def admin_login(
     )
     r.set_cookie(
         key="access_token",
-        value=authResponse,
+        value=authResponse.access_token,
         httponly=True,
         secure=True,
         samesite="strict",

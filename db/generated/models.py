@@ -29,8 +29,8 @@ class ProcessingJobStatus(str, enum.Enum):
 
 class StaffRole(str, enum.Enum):
     ADMIN = "admin"
-    MULTI_TEAM_LEAD = "multi_team_lead"
     MULTI = "multi"
+    MULTI_TEAM_LEAD = "multi_team_lead"
 
 
 class UploadRequestStatus(str, enum.Enum):
@@ -171,9 +171,9 @@ class UploadRequest:
     requested_by: uuid.UUID
     approved_by: Optional[uuid.UUID]
     status: Any
-    photo_count: int
     created_at: datetime.datetime
     approved_at: Optional[datetime.datetime]
+    photo_count: int
     rejection_reason: Optional[str]
 
 

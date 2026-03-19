@@ -48,7 +48,7 @@ async def list_upload_requests(
     requests = await container.upload_requests_service.list_requests(
         current_staff_user=current_staff_user,
         scope=scope,
-        status=status.value if status is not None else None,
+        status=status
     )
     return UploadRequestListResponse.from_models(
         [(item.request, item.photos) for item in requests]

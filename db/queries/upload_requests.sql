@@ -17,8 +17,8 @@ WHERE id = $1;
 -- name: ListUploadRequests :many
 SELECT *
 FROM upload_requests
-WHERE ($1::uuid IS NULL OR requested_by = $1)
-  AND ($2::upload_request_status IS NULL OR status = $2)
+WHERE requested_by = $1::uuid
+  AND status  = COALESCE(sqlc.narg('p2')::upload_request_status, status)
 ORDER BY created_at DESC;
 
 -- name: ApproveUploadRequest :one

@@ -128,13 +128,14 @@ def generate_Acces_token_stuff(user_id: str, role: str) -> str:
 
 
 class StaffJWTPayload(BaseModel):
-    sub: str         # JWT standard key is 'sub', not 'subs'
+    sub: str        
     role: str
     type: Literal["access", "refresh"]
     exp: int
 
     class Config:
-        frozen = True  # make payload immutable (optional)
+        frozen = True 
+        # immutable class 
 
 
 def create_access_staff_token(staff_id: str, role: str) -> str:

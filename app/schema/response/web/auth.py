@@ -1,3 +1,8 @@
+import uuid
+
+from pydantic import BaseModel
+
+
 class WebAuthResponse(BaseModel):
     access_token: str
     user_id: uuid.UUID

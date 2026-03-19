@@ -22,7 +22,7 @@ async def get_current_staff_user(
 ) -> StaffUser:
     # 1. Decode the JWT
     payload = decode_staff_token(token)
-    staff_id_str = payload.get("sub")
+    staff_id_str = payload.sub
 
     if not staff_id_str:
         raise AppException.unauthorized("Token missing subject")
