@@ -1,6 +1,6 @@
-from typing import Annotated
+from typing import Annotated, List
 
-from fastapi import APIRouter, UploadFile, File, Depends
+from fastapi import APIRouter, File, UploadFile,  Depends
 
 from app.container import Container, get_container
 from app.deps.token_auth import MobileUserSchema, get_current_mobile_user
@@ -14,7 +14,24 @@ router = APIRouter()
 
 @router.post("/enroll")
 async def enroll_face(
-    files: Annotated[list[UploadFile], File(description="Multiple files")],
+   files: Annotated[
+        List[UploadFile],
+        File(
+            description="Upload one or more face images",
+            openapi_examples={
+                "single_file": {
+                    "summary": "One file example",
+                    "description": "Example of uploading one file",
+                    "value": "example.jpg"
+                },
+                "multiple_files": {
+                    "summary": "Multiple files example",
+                    "description": "Example of uploading multiple files",
+                    "value": ["face1.png", "face2.png"]
+                },
+            },
+        ),
+    ] = File(...),
     container: Container = Depends(get_container),
     user: MobileUserSchema = Depends(get_current_mobile_user),
 ) -> User:

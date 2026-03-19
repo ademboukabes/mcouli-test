@@ -9,7 +9,7 @@ from app.deps.cookie_auth import (
 )
 from app.schema.request.web.event import (
     EventCreate,
-    
+
 )
 from app.schema.response.web.event import (
     EventResponse,

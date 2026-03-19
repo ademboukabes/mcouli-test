@@ -318,6 +318,7 @@ dependencies = [
     { name = "pydantic-settings" },
     { name = "pyjwt" },
     { name = "pyotp" },
+    { name = "python-multipart" },
     { name = "redis" },
     { name = "setuptools" },
 ]
@@ -349,6 +350,7 @@ requires-dist = [
     { name = "pydantic-settings", specifier = ">=2.13.1" },
     { name = "pyjwt", specifier = ">=2.11.0" },
     { name = "pyotp", specifier = ">=2.9.0" },
+    { name = "python-multipart", specifier = ">=0.0.22" },
     { name = "redis", specifier = ">=7.2.1" },
     { name = "setuptools", specifier = ">=82.0.0" },
 ]

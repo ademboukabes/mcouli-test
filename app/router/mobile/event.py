@@ -13,7 +13,7 @@ router = APIRouter(prefix="/event")
 async def join_event(
     req: JoinEventRequest,
     container: Container = Depends(get_container),
-    current_user: MobileUserSchema = Depends(get_current_mobile_user), 
+    current_user: MobileUserSchema = Depends(get_current_mobile_user),
 )-> JoinEventResponse:
     return await container.event_service.join_event_by_code(
         user_id=current_user.user_id,
@@ -24,6 +24,6 @@ async def join_event(
 @router.get("/me", response_model=List[UserEventResponse])
 async def get_my_joined_events(
     container: Container = Depends(get_container),
-    current_user: MobileUserSchema = Depends(get_current_mobile_user), 
+    current_user: MobileUserSchema = Depends(get_current_mobile_user),
 )-> List[UserEventResponse]:
     return await container.event_service.get_my_events(current_user.user_id)
