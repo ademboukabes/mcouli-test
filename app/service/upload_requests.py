@@ -174,7 +174,7 @@ class UploadRequestsService:
                 day_number=photo.day_number,
                 visibility=photo.visibility,
                 status="staged",
-                )     
+                )
             )
         except IntegrityError:
             try:
@@ -396,7 +396,7 @@ class UploadRequestsService:
                     day_number=staged_photo.day_number,
                     visibility=staged_photo.visibility,
                     )
-                    
+
                 )
                 if created_photo is None:
                     raise AppException.internal_error("Failed to finalize staged photo")

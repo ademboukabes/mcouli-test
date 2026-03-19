@@ -5,6 +5,7 @@ from fastapi import Response
 from app.deps.staff_auth import get_current_staff_user
 from app.schema.request.web.auth import WebAuthRequest
 from app.schema.response.web.auth import WebAuthResponse
+from app.schema.response.web.staff_user import StaffUserSchema
 from db.generated.models import StaffUser
 router = APIRouter(prefix="/auth")
 
@@ -30,9 +31,14 @@ async def admin_login(
     return authResponse
 
 
-@router.get("/me",response_model=WebAuthResponse)
+@router.get("/me",response_model=StaffUserSchema)
 async def get_me_admin(
     user:StaffUser = Depends(get_current_staff_user),
-    container:Container = Depends(get_container)
 ):
-    return user
+    return StaffUserSchema(
+        id=user.id,
+        created_at=user.created_at,
+        role=user.role,
+        updated_at=user.updated_at,
+        email=user.email
+    )

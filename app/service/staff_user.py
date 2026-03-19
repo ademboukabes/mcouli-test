@@ -101,8 +101,8 @@ class StaffUserService:
         except Exception as exc:
             logger.error("Failed to list staff users: %s", exc)
             raise DBException.handle(exc)
-        
-        
+
+
     async def admin_login(
         self,
         email: str,
@@ -114,7 +114,7 @@ class StaffUserService:
             logger.info(f'user:{staff.email}') # type: ignore
             raise AppException.unauthorized("Invalid email or password")
 
-       
+
         access_token = create_access_staff_token(
             staff_id=str(staff.id),
             role=staff.role
@@ -128,7 +128,7 @@ class StaffUserService:
 
     async def Get_stuff_user(
             self,
-            stuff_id:uuid.UUID 
+            stuff_id:uuid.UUID
     )->StaffUser:
         stuff:StaffUser|None = await self.staff_user_querier.get_staff_user_by_id(id=stuff_id)
         if stuff is None:

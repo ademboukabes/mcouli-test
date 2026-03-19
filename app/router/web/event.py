@@ -3,22 +3,16 @@ from fastapi import APIRouter, Depends, status
 from typing import List, Optional
 
 from app.container import get_container, Container
-# Import both dependency types
-from app.deps.auth import (
-    MobileUserSchema,
-    get_current_mobile_user,
-)
+
 from app.deps.staff_auth import (
     get_current_staff_user
 )
 from app.schema.request.web.event import (
     EventCreate,
-    JoinEventRequest
+    
 )
 from app.schema.response.web.event import (
     EventResponse,
-    JoinEventResponse,
-    UserEventResponse,
 )
 
 from db.generated import models
@@ -85,25 +79,3 @@ async def draft_event(
     """Staff Only: Move an event back to draft status."""
     return await container.event_service.update_status(event_id, "draft")
 
-# --- MOBILE PROTECTED ENDPOINTS (App) ---
-
-@router.post("/join", response_model=JoinEventResponse)
-async def join_event(
-    req: JoinEventRequest,
-    container: Container = Depends(get_container),
-    current_user: MobileUserSchema = Depends(get_current_mobile_user), # Use Mobile Dep
-)-> JoinEventResponse:
-    """Mobile User Only: Join an event by scanning QR code."""
-    return await container.event_service.join_event_by_code(
-        user_id=current_user.user_id,
-        code=req.event_code
-    )
-
-
-@router.get("/me", response_model=List[UserEventResponse])
-async def get_my_joined_events(
-    container: Container = Depends(get_container),
-    current_user: MobileUserSchema = Depends(get_current_mobile_user), # Use Mobile Dep
-)-> List[UserEventResponse]:
-    """Mobile User Only: Get history of joined events."""
-    return await container.event_service.get_my_events(current_user.user_id)
