@@ -61,7 +61,7 @@ async def archive_event(
     event_id: uuid.UUID,
     container: Container = Depends(get_container),
     current_staff: models.StaffUser = Depends(get_current_staff_user), # Use Staff Dep
-):
+)-> EventResponse:
     """Staff Only: Archive an event."""
     return await container.event_service.update_status(event_id, "archived")
 
