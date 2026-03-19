@@ -7,9 +7,11 @@ from app.infra.redis import RedisClient
 from app.service.device import DeviceService
 from app.service.face_embedding import FaceEmbeddingService
 from app.service.session import SessionService
+from app.service.staged_upload_storage import StagedUploadStorageService
 from app.service.staff_drive import StaffDriveService
 from app.service.staff_notifications import StaffNotificationsService
 from app.service.staff_user import StaffUserService
+
 from app.service.upload_requests import UploadRequestsService
 from app.service.users import AuthService
 from db.generated import devices as device_queries
@@ -21,6 +23,12 @@ from db.generated import stuff_user as staff_user_queries
 from db.generated import upload_request_photos as upload_request_photo_queries
 from db.generated import upload_requests as upload_request_queries
 from db.generated import user as user_queries
+
+from db.generated import events as event_queries
+from db.generated import eventParticipant as participant_queries
+from db.generated import stuff_user as staff_queries
+from app.service.web.eventService import EventService
+from app.service.web.auth import WebAuthService
 
 class Container:
     def __init__(
@@ -42,6 +50,10 @@ class Container:
         self.upload_request_photo_querier = upload_request_photo_queries.AsyncQuerier(conn)
         self.photo_querier = photo_queries.AsyncQuerier(conn)
         self.staff_notification_querier = staff_notification_queries.AsyncQuerier(conn)
+        self.event_querier = event_queries.AsyncQuerier(conn)
+        self.participant_querier = participant_queries.AsyncQuerier(conn)
+        self.staff_querier = staff_queries.AsyncQuerier(conn)
+
 
         # services
         self.session_service = SessionService()
@@ -49,6 +61,7 @@ class Container:
             session=self.session_querier,
             redis=self.redis,
         )
+
 
         self.device_service = DeviceService()
         self.device_service.init(
@@ -71,18 +84,31 @@ class Container:
         self.staff_notifications_service = StaffNotificationsService(
             notification_querier=self.staff_notification_querier,
         )
+        self.staged_upload_storage_service = StagedUploadStorageService()
 
         self.upload_requests_service = UploadRequestsService(
             upload_request_querier=self.upload_request_querier,
             upload_request_photo_querier=self.upload_request_photo_querier,
             photo_querier=self.photo_querier,
+            staged_upload_storage=self.staged_upload_storage_service,
+            staff_drive_service=self.staff_drive_service,
             staff_notifications_service=self.staff_notifications_service,
         )
 
         self.staff_user_service = StaffUserService()
+
         self.staff_user_service.init(
-            staff_user_querier=self.staff_user_querier,
+            staff_user_querier=self.staff_user_querier,)
+
+        self.event_service = EventService(
+            e_querier=self.event_querier,
+            p_querier=self.participant_querier,
         )
+
+        self.web_auth_service = WebAuthService(
+            staff_querier=self.staff_querier
+        )
+
 
 async def get_container(
     conn: sqlalchemy.ext.asyncio.AsyncConnection = Depends(get_db),

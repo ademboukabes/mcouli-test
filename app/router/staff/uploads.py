@@ -2,6 +2,7 @@ from typing import Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query
+from fastapi.responses import Response
 
 from app.container import Container, get_container
 from app.deps.staff_auth import (
@@ -14,6 +15,7 @@ from app.schema.request.staff.uploads import (
 )
 from app.schema.response.staff.uploads import (
     UploadRequestListResponse,
+    UploadRequestPhotoListResponse,
     UploadRequestSchema,
 )
 from db.generated.models import StaffUser, UploadRequestStatus
@@ -51,6 +53,48 @@ async def list_upload_requests(
     return UploadRequestListResponse.from_models(
         [(item.request, item.photos) for item in requests]
     )
+
+
+@router.get("/{request_id}", response_model=UploadRequestSchema)
+async def get_upload_request(
+    request_id: UUID,
+    current_staff_user: StaffUser = Depends(get_current_staff_user),
+    container: Container = Depends(get_container),
+) -> UploadRequestSchema:
+    upload_request = await container.upload_requests_service.get_request_details(
+        request_id=request_id,
+        current_staff_user=current_staff_user,
+    )
+    return UploadRequestSchema.from_models(upload_request.request, upload_request.photos)
+
+
+@router.get("/{request_id}/photos", response_model=UploadRequestPhotoListResponse)
+async def list_upload_request_photos(
+    request_id: UUID,
+    current_staff_user: StaffUser = Depends(get_current_staff_user),
+    container: Container = Depends(get_container),
+) -> UploadRequestPhotoListResponse:
+    upload_request = await container.upload_requests_service.get_request_details(
+        request_id=request_id,
+        current_staff_user=current_staff_user,
+    )
+    return UploadRequestPhotoListResponse.from_models(upload_request.photos)
+
+
+@router.get("/{request_id}/photos/{photo_id}/preview")
+async def preview_upload_request_photo(
+    request_id: UUID,
+    photo_id: UUID,
+    current_staff_user: StaffUser = Depends(get_current_staff_user),
+    container: Container = Depends(get_container),
+) -> Response:
+    preview = await container.upload_requests_service.get_request_photo_preview(
+        request_id=request_id,
+        photo_id=photo_id,
+        current_staff_user=current_staff_user,
+    )
+    headers = {"Content-Disposition": f'inline; filename="{preview.file_name}"'}
+    return Response(content=preview.data, media_type=preview.content_type, headers=headers)
 
 
 @router.post("/{request_id}/approve", response_model=UploadRequestSchema)

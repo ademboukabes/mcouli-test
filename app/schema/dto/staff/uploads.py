@@ -5,9 +5,6 @@ from datetime import datetime
 @dataclass(frozen=True)
 class UploadPhotoInput:
     drive_file_id: str
-    file_name: str
-    mime_type: str
-    size_bytes: int
     taken_at: datetime | None
     day_number: int | None
     visibility: str

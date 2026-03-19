@@ -29,8 +29,8 @@ class ProcessingJobStatus(str, enum.Enum):
 
 class StaffRole(str, enum.Enum):
     ADMIN = "admin"
-    MULTI = "multi"
     MULTI_TEAM_LEAD = "multi_team_lead"
+    MULTI = "multi"
 
 
 class UploadRequestStatus(str, enum.Enum):
@@ -182,10 +182,15 @@ class UploadRequestPhoto:
     id: uuid.UUID
     upload_request_id: uuid.UUID
     drive_file_id: str
+    file_name: str
+    mime_type: str
+    size_bytes: int
     staging_storage_key: str
+    final_storage_key: Optional[str]
     taken_at: Optional[datetime.datetime]
     day_number: Optional[int]
     visibility: str
+    status: str
     created_at: datetime.datetime
 
 
@@ -196,9 +201,6 @@ class User:
     hashed_password: Optional[str]
     created_at: datetime.datetime
     updated_at: datetime.datetime
-    display_name: Optional[str]
-    face_embedding: Optional[Any]
-    deleted_at: Optional[datetime.datetime]
     display_name: Optional[str]
     face_embedding: Optional[Any]
     deleted_at: Optional[datetime.datetime]

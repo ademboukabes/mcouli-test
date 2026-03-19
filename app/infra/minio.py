@@ -1,7 +1,9 @@
+import io
 import random
 import string
 import uuid
 from fastapi import UploadFile
+from miniopy_async.commonconfig import CopySource
 from miniopy_async.error import S3Error
 from miniopy_async.api import Minio
 
@@ -36,6 +38,11 @@ class Bucket:
         self.bucket_name = bucket_name
         self.file_prefix = file_prefix
 
+    def _object_path(self, object_name: str) -> str:
+        if self.file_prefix:
+            return f"{self.file_prefix}/{object_name}"
+        return object_name
+
     async def put(self, file: UploadFile, object_name: str | None = None) -> str:
         if object_name is None:
             object_name = str(uuid.uuid4())
@@ -48,7 +55,7 @@ class Bucket:
 
         await self.client.put_object(
             bucket_name=self.bucket_name,
-            object_name=f"{self.file_prefix}/{object_name}",
+            object_name=self._object_path(object_name),
             data=file.file,
             length=-1,
             part_size=10 * 1024 * 1024,
@@ -63,7 +70,7 @@ class Bucket:
         try:
             res = await self.client.get_object(
                 bucket_name=self.bucket_name,
-                object_name=f"{self.file_prefix}/{object_name}",
+                object_name=self._object_path(object_name),
             )
         except S3Error as e:
             if e.code == "NoSuchKey":
@@ -83,8 +90,38 @@ class Bucket:
     async def delete(self, object_name: str) -> None:
         await self.client.remove_object(
             bucket_name=self.bucket_name,
-            object_name=f"{self.file_prefix}/{object_name}",
+            object_name=self._object_path(object_name),
         )
+
+    async def put_bytes(
+        self,
+        *,
+        data: bytes,
+        object_name: str,
+        content_type: str,
+        filename: str | None = None,
+    ) -> str:
+        await self.client.put_object(
+            bucket_name=self.bucket_name,
+            object_name=self._object_path(object_name),
+            data=io.BytesIO(data),
+            length=len(data),
+            part_size=10 * 1024 * 1024,
+            content_type=content_type,
+            metadata={"filename": filename or object_name},
+        )
+        return object_name
+
+    async def copy(self, *, source_object_name: str, target_object_name: str) -> str:
+        await self.client.copy_object(
+            bucket_name=self.bucket_name,
+            object_name=self._object_path(target_object_name),
+            source=CopySource(
+                self.bucket_name,
+                self._object_path(source_object_name),
+            ),
+        )
+        return target_object_name
 
 image_ext_content_type_map = {
     "apng": ["image/apng"],

@@ -47,3 +47,9 @@ lint:
 	uv run ruff check . --fix
 check_type:
 	uv run mypy .
+
+up_stage:
+	docker compose -f docker-compose.staging.yml up -d
+
+down_stage:
+	docker compose -f docker-compose.staging.yml down

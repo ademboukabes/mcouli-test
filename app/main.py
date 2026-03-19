@@ -10,11 +10,14 @@ from app.core.config import settings
 from app.infra.minio import init_minio_client
 from app.infra.nats import NatsClient
 from app.infra.redis import RedisClient
-from app.router.mobile import router as mobile_router
+from app.router.mobile.auth import router as mobile_router
 from app.router.staff import router as staff_router
 from app.router.web import router as web_router
 from app.deps.ai_deps import get_face_embedding_service
 from app.core.logger import configure_logger, logger
+
+
+
 
 configure_logger()
 
@@ -41,6 +44,7 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
         )
 
         return response
+
 
 
 MAX_RETRIES = 5

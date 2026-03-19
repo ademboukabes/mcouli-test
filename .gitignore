@@ -2,3 +2,8 @@
 .env.staging
 __pycache__
 db/schema.sql
+
+.vscode/settings.json
+
+db.txt
+

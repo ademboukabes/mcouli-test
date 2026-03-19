@@ -15,6 +15,9 @@ class NatsSubjects(Enum):
     USER_SIGNUP = "user.signup"
     USER_LOGIN = "user.login"
     USER_LOGOUT = "user.logout"
+    STAFF_UPLOAD_REQUEST_CREATED = "staff.upload_request.created"
+    STAFF_UPLOAD_REQUEST_APPROVED = "staff.upload_request.approved"
+    STAFF_UPLOAD_REQUEST_REJECTED = "staff.upload_request.rejected"
 
 class NatsClient:
     _nc: Optional[NATS] = None

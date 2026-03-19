@@ -5,7 +5,7 @@ from typing import List, Literal, Optional, Sequence, Tuple, TypedDict
 
 import cv2
 import numpy as np
-from insightface.app import FaceAnalysis  # type: ignore
+from insightface.app import FaceAnalysis
 from app.core.exceptions import AppException
 
 
@@ -124,43 +124,27 @@ class FaceEmbeddingService:
         embeddings: list[np.ndarray] = []
 
         for payload in payloads:
-
             image = self._decode_image(payload)
-
-            if (
-                self.face_embedding.model is None
-                or not self.face_embedding._initialized # type: ignore
-            ):
-                raise RuntimeError("Face embedding model not ready")
-
             image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
 
-            faces: list[FaceStub] = self.face_embedding.model.get(image_rgb)  # type: ignore
+            # Single detection pass — model.get() already returns embeddings
+            faces: list[FaceStub] = await asyncio.to_thread(
+                self.face_embedding.model.get, image_rgb  # type: ignore
+            )
 
             if not faces:
                 raise AppException.bad_request(
                     f"No faces detected in image {payload['filename']}"
                 )
 
-            bboxes: list[BBox] = []
+            face = faces[0]
 
-            for face in faces:
-                fx1, fy1, fx2, fy2 = face.bbox
-                bboxes.append((int(fx1), int(fy1), int(fx2), int(fy2)))
-
-            try:
-                embedding = await asyncio.to_thread(
-                    self.face_embedding.embed,
-                    image,
-                    bboxes,
+            if face.embedding is None:
+                raise AppException.bad_request(
+                    f"Failed to generate embedding for {payload['filename']}"
                 )
 
-            except (ValueError, RuntimeError) as exc:
-                raise AppException.bad_request(
-                    f"Face embedding failed for {payload['filename']}: {exc}"
-                ) from exc
-
-            embeddings.append(np.array(embedding, dtype=np.float32))
+            embeddings.append(face.embedding.astype(np.float32))
 
         stacked = np.stack(embeddings, axis=0)
         averaged = np.mean(stacked, axis=0)

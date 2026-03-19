@@ -1,15 +1,12 @@
-import base64
 from datetime import datetime, timedelta, timezone
-import os
-from typing import Any
+from typing import Any, cast, Dict
 import jwt
-import numpy as np
 from passlib.context import CryptContext
 import pyotp
 from app.core.config import settings
 from app.core.exceptions import AppException
 from app.core.logger import logger
-from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+from app.schema.auth.web.staff_auth import StaffJWTPayload
 
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -107,25 +104,81 @@ def generate_Acces_token_stuff(user_id: str, role: str) -> str:
 
 
 
+# class EmbeddingCrypto:
+#     _key: bytes = base64.b64decode(settings.FACE_ENCRYPTION_KEY)
+#     _aes: AESGCM = AESGCM(_key)
 
-class EmbeddingCrypto:
-    _key: bytes = base64.b64decode(settings.FACE_ENCRYPTION_KEY)
-    _aes: AESGCM = AESGCM(_key)
+#     @staticmethod
+#     def encrypt(embedding: list[float]) -> bytes:
+#         data = np.array(embedding, dtype=np.float32).tobytes()
 
-    @staticmethod
-    def encrypt(embedding: list[float]) -> bytes:
-        data = np.array(embedding, dtype=np.float32).tobytes()
+#         nonce = os.urandom(12)
+#         ciphertext = EmbeddingCrypto._aes.encrypt(nonce, data, None)
 
-        nonce = os.urandom(12)
-        ciphertext = EmbeddingCrypto._aes.encrypt(nonce, data, None)
+#         return nonce + ciphertext
 
-        return nonce + ciphertext
+#     @staticmethod
+#     def decrypt(payload: bytes) -> np.ndarray:
+#         nonce = payload[:12]
+#         ciphertext = payload[12:]
 
-    @staticmethod
-    def decrypt(payload: bytes) -> np.ndarray:
-        nonce = payload[:12]
-        ciphertext = payload[12:]
+#         data = EmbeddingCrypto._aes.decrypt(nonce, ciphertext, None)
 
-        data = EmbeddingCrypto._aes.decrypt(nonce, ciphertext, None)
+#         return np.frombuffer(data, dtype=np.float32)
 
-        return np.frombuffer(data, dtype=np.float32)
+def create_access_staff_token(staff_id: str, role: str) -> str:
+    """
+    Pure stateless token generation.
+    No session_id required.
+    """
+    payload: StaffJWTPayload = {
+        "sub": staff_id, # Standard JWT claim for 'Subject'
+        "role": role,
+        "type": "access",
+        "exp": int(
+            (datetime.now(timezone.utc) + timedelta(seconds=Get_expiry_time())).timestamp()
+        ),
+    }
+    return jwt.encode(
+        cast(Dict[str, Any], payload),
+        key=settings.jwt_secret,
+        algorithm=settings.jwt_algorithm
+    )
+
+
+def create_refresh_staff_token(staff_id: str, role: str) -> str:
+    """
+    Generates a longer-lived refresh token for staff web sessions.
+    Now purely stateless—no session_id required.
+    """
+    payload: StaffJWTPayload = {
+        "sub": staff_id,
+        "role": role,
+        "type": "refresh",
+        "exp": int(
+            (datetime.now(timezone.utc) + timedelta(seconds=Get_expiry_time() * 4)).timestamp()
+        ),
+    }
+    # Using cast to handle the Pylance dict[str, Any] quirk
+    return jwt.encode(
+        cast(Dict[str, Any], payload),
+        key=settings.jwt_secret,
+        algorithm=settings.jwt_algorithm
+    )
+
+def decode_staff_token(token: str) -> StaffJWTPayload:
+    """
+    Decodes the token and returns the typed payload.
+    """
+    try:
+        payload = jwt.decode(
+            token,
+            key=settings.jwt_secret,
+            algorithms=[settings.jwt_algorithm]
+        )
+        # Cast the result to our TypedDict for better downstream typing
+        return cast(StaffJWTPayload, payload)
+    except jwt.ExpiredSignatureError:
+        raise AppException.unauthorized("Staff token has expired")
+    except jwt.InvalidTokenError:
+        raise AppException.unauthorized("Invalid staff token")
