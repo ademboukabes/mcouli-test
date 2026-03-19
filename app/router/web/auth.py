@@ -34,7 +34,7 @@ async def admin_login(
 @router.get("/me",response_model=StaffUserSchema)
 async def get_me_admin(
     user:StaffUser = Depends(get_current_staff_user),
-):
+) -> StaffUserSchema:
     return StaffUserSchema(
         id=user.id,
         created_at=user.created_at,
