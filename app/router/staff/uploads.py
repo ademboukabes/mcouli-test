@@ -21,7 +21,7 @@ from app.schema.response.staff.uploads import (
 from db.generated.models import StaffUser, UploadRequestStatus
 
 
-router = APIRouter(prefix="/uploads", tags=["staff-uploads"])
+router = APIRouter(prefix="/uploads")
 
 
 @router.post("/request", response_model=UploadRequestSchema)

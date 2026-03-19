@@ -23,7 +23,7 @@ from app.schema.response.web.event import (
 
 from db.generated import models
 
-router = APIRouter(prefix="/events", tags=["events"])
+router = APIRouter(prefix="/events")
 
 
 @router.get("/", response_model=List[EventResponse])

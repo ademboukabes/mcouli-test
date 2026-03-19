@@ -1,16 +1,35 @@
 from fastapi import APIRouter, Depends
 from app.container import Container, get_container
-from app.schema.auth.web.authSc import WebAuthRequest, WebAuthResponse
+from fastapi import Response
 
-router = APIRouter(prefix="/auth", tags=["web-auth"])
+from app.schema.request.web.auth import WebAuthRequest
+from app.schema.response.web.auth import WebAuthResponse
+router = APIRouter(prefix="/auth")
 
-@router.post("/login", response_model=WebAuthResponse)
+@router.post("/login", response_model=WebAuthResponse,description="so here both the dahbsoard will authneticate from this endpoitn ")
 async def admin_login(
+    
     req: WebAuthRequest,
+    r:Response,
     container: Container = Depends(get_container),
 ) -> WebAuthResponse:
-    """Authenticates a staff member and creates a session."""
-    return await container.web_auth_service.admin_login(
+
+    authResponse = await container.staff_user_service.admin_login(
         email=req.email,
         password=req.password
     )
+    r.set_cookie(
+        key="access_token",
+        value=authResponse,
+        httponly=True,
+        secure=True,
+        samesite="strict",
+        max_age=60 * 60 * 24 * 7,
+    )
+    return authResponse
+@router.get("/me",response_model=WebAuthResponse)
+async def get_me_admin(
+    
+    container:Container = Depends(get_container)
+):
+    pass

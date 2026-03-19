@@ -9,7 +9,7 @@ from app.schema.response.staff.notifications import (
 from db.generated.models import StaffUser
 
 
-router = APIRouter(prefix="/notifications", tags=["staff-notifications"])
+router = APIRouter(prefix="/notifications")
 
 
 @router.get("", response_model=StaffNotificationListResponse)
