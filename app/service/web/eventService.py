@@ -1,6 +1,6 @@
+import secrets
 import uuid
-import datetime
-from typing import List
+from typing import List, Optional
 from app.core.exceptions import AppException
 from app.schema.request.web.event import (
     EventCreate
@@ -15,6 +15,7 @@ from app.schema.response.web.event import (
 # Ensure these imports match your actual folder structure
 from db.generated import events as event_queries
 from db.generated import eventParticipant as participant_queries
+from db.generated import models
 
 class EventService:
     def __init__(
@@ -28,9 +29,10 @@ class EventService:
     # --- Core Event Management ---
 
     async def create_event(self, req: EventCreate, creator_id: uuid.UUID) -> EventResponse:
+        code_created:str = secrets.token_urlsafe(8)
         params = event_queries.CreateEventParams(
             name=req.name,
-            event_code=req.event_code,
+            event_code=code_created,
             event_date=req.event_date,
             status=req.status or "draft",
             created_by=creator_id
@@ -52,22 +54,31 @@ class EventService:
 
     # --- Retrieval & Filtering ---
 
-    async def list_events(self, limit: int = 10, offset: int = 0) -> List[EventResponse]:
-        # Tell Pylance this is a list of EventResponse objects
+    async def list_events(
+        self, 
+        limit: int = 10, 
+        offset: int = 0, 
+        status: Optional[models.EventStatus] = None
+    ) -> List[EventResponse]:
+        
+        params = event_queries.ListEventsParams(
+            limit=limit,
+            offset=offset,
+            status=status,
+            start_date=None,
+            end_date=None,
+            search_name=None,
+            sort_order='date_desc'
+        )
+        
         events: List[EventResponse] = [] 
-        async for e in self.e_querier.list_events(limit=limit, offset=offset):
+        async for e in self.e_querier.list_events(params):
             events.append(EventResponse.model_validate(e))
         return events
 
     async def find_events_by_name(self, name_query: str) -> List[EventResponse]:
         events: List[EventResponse] = []
         async for e in self.e_querier.get_events_by_name(dollar_1=name_query):
-            events.append(EventResponse.model_validate(e))
-        return events
-
-    async def get_by_date_range(self, start: datetime.datetime, end: datetime.datetime) -> List[EventResponse]:
-        events: List[EventResponse] = []
-        async for e in self.e_querier.get_events_by_date_range(start_date=start, end_date=end):
             events.append(EventResponse.model_validate(e))
         return events
 

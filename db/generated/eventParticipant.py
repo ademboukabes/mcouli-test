@@ -83,6 +83,61 @@ WHERE event_id = :p1 AND user_id = :p2
 """
 
 
+LIST_USER_EVENTS = """-- name: list_user_events \\:many
+SELECT 
+    e.id, 
+    e.name, 
+    e.event_date, 
+    e.status,
+    ep.joined_at
+FROM events e
+JOIN event_participants ep ON e.id = ep.event_id
+WHERE ep.user_id = :p1
+    -- Optional Status Filter
+    AND (:p4\\:\\:text IS NULL OR e.status = :p4)
+    -- Optional Date Range Filters
+    AND (:p5\\:\\:timestamptz IS NULL OR e.event_date >= :p5)
+    AND (:p6\\:\\:timestamptz IS NULL OR e.event_date <= :p6)
+ORDER BY 
+    -- Sort by joined_at
+    CASE WHEN :p7\\:\\:text = 'joined_at' AND :p8\\:\\:boolean THEN ep.joined_at END DESC,
+    CASE WHEN :p7\\:\\:text = 'joined_at' AND NOT :p8\\:\\:boolean THEN ep.joined_at END ASC,
+    
+    -- Sort by event_date
+    CASE WHEN :p7\\:\\:text = 'event_date' AND :p8\\:\\:boolean THEN e.event_date END DESC,
+    CASE WHEN :p7\\:\\:text = 'event_date' AND NOT :p8\\:\\:boolean THEN e.event_date END ASC,
+    
+    -- Sort by name
+    CASE WHEN :p7\\:\\:text = 'name' AND :p8\\:\\:boolean THEN e.name END DESC,
+    CASE WHEN :p7\\:\\:text = 'name' AND NOT :p8\\:\\:boolean THEN e.name END ASC,
+
+    -- Default fallback if no sort matches
+    ep.joined_at DESC
+LIMIT :p2 OFFSET :p3
+"""
+
+
+@dataclasses.dataclass()
+class ListUserEventsParams:
+    user_id: uuid.UUID
+    limit: int
+    offset: int
+    status: Optional[str]
+    start_date: Optional[datetime.datetime]
+    end_date: Optional[datetime.datetime]
+    sort_field: str
+    sort_desc: bool
+
+
+@dataclasses.dataclass()
+class ListUserEventsRow:
+    id: uuid.UUID
+    name: str
+    event_date: datetime.datetime
+    status: Any
+    joined_at: datetime.datetime
+
+
 class AsyncQuerier:
     def __init__(self, conn: sqlalchemy.ext.asyncio.AsyncConnection):
         self._conn = conn
@@ -132,3 +187,23 @@ class AsyncQuerier:
 
     async def leave_event(self, *, event_id: uuid.UUID, user_id: uuid.UUID) -> None:
         await self._conn.execute(sqlalchemy.text(LEAVE_EVENT), {"p1": event_id, "p2": user_id})
+
+    async def list_user_events(self, arg: ListUserEventsParams) -> AsyncIterator[ListUserEventsRow]:
+        result = await self._conn.stream(sqlalchemy.text(LIST_USER_EVENTS), {
+            "p1": arg.user_id,
+            "p2": arg.limit,
+            "p3": arg.offset,
+            "p4": arg.status,
+            "p5": arg.start_date,
+            "p6": arg.end_date,
+            "p7": arg.sort_field,
+            "p8": arg.sort_desc,
+        })
+        async for row in result:
+            yield ListUserEventsRow(
+                id=row[0],
+                name=row[1],
+                event_date=row[2],
+                status=row[3],
+                joined_at=row[4],
+            )

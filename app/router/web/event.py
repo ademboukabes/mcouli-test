@@ -9,7 +9,6 @@ from app.deps.auth import (
     get_current_mobile_user, 
 )
 from app.deps.staff_auth import (
-    StaffUserSchema,
     get_current_staff_user
 )
 from app.schema.request.web.event import (
@@ -22,15 +21,36 @@ from app.schema.response.web.event import (
     UserEventResponse,
 )
 
+from db.generated import models
+
 router = APIRouter(prefix="/events", tags=["events"])
 
-# --- STAFF PROTECTED ENDPOINTS (Web Panel) ---
+
+@router.get("/", response_model=List[EventResponse])
+async def list_events(
+    limit: int = 10,
+    offset: int = 0,
+    name: Optional[str] = None,
+    status: Optional[models.EventStatus] = None, 
+    container: Container = Depends(get_container),
+    current_staff: models.StaffUser = Depends(get_current_staff_user), 
+):
+    """Staff Only: List all events with optional filters."""
+    
+    if name:
+        return await container.event_service.find_events_by_name(name)
+    
+    return await container.event_service.list_events(
+        limit=limit, 
+        offset=offset, 
+        status=status
+    )
 
 @router.post("/", response_model=EventResponse, status_code=status.HTTP_201_CREATED)
 async def create_event(
     req: EventCreate,
     container: Container = Depends(get_container),
-    current_staff: StaffUserSchema = Depends(get_current_staff_user), # Use Staff Dep
+    current_staff: models.StaffUser = Depends(get_current_staff_user), 
 ):
     """Staff Only: Create a new event."""
     return await container.event_service.create_event(req, current_staff.id)
@@ -40,7 +60,7 @@ async def create_event(
 async def archive_event(
     event_id: uuid.UUID,
     container: Container = Depends(get_container),
-    current_staff: MobileUserSchema = Depends(get_current_staff_user), # Use Staff Dep
+    current_staff: models.StaffUser = Depends(get_current_staff_user), # Use Staff Dep
 ):
     """Staff Only: Archive an event."""
     return await container.event_service.update_status(event_id, "archived")
@@ -50,22 +70,20 @@ async def archive_event(
 async def schedule_event(
     event_id: uuid.UUID,
     container: Container = Depends(get_container),
-    current_staff: MobileUserSchema = Depends(get_current_staff_user), # Use Staff Dep
+    current_staff: models.StaffUser = Depends(get_current_staff_user), # Use Staff Dep
 ):
     """Staff Only: Move to scheduled."""
     return await container.event_service.update_status(event_id, "scheduled")
 
 
-@router.delete("/{event_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_event(
+@router.post("/{event_id}/draft", response_model=EventResponse)
+async def draft_event(
     event_id: uuid.UUID,
     container: Container = Depends(get_container),
-    current_staff: MobileUserSchema = Depends(get_current_staff_user), # Use Staff Dep
+    current_staff: models.StaffUser = Depends(get_current_staff_user),
 ):
-    """Staff Only: Delete an event."""
-    await container.event_service.delete_event(event_id)
-    return None
-
+    """Staff Only: Move an event back to draft status."""
+    return await container.event_service.update_status(event_id, "draft")
 
 # --- MOBILE PROTECTED ENDPOINTS (App) ---
 
@@ -89,18 +107,3 @@ async def get_my_joined_events(
 ):
     """Mobile User Only: Get history of joined events."""
     return await container.event_service.get_my_events(current_user.user_id)
-
-
-# --- SHARED OR PUBLIC ---
-
-@router.get("/", response_model=List[EventResponse])
-async def list_events(
-    limit: int = 10,
-    offset: int = 0,
-    name: Optional[str] = None,
-    container: Container = Depends(get_container),
-):
-    """Public/Shared: List all events."""
-    if name:
-        return await container.event_service.find_events_by_name(name)
-    return await container.event_service.list_events(limit=limit, offset=offset)

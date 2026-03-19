@@ -2,6 +2,7 @@ import base64
 from datetime import datetime, timedelta, timezone
 import os
 from typing import Any
+from typing import Any, cast, Dict
 import jwt
 import numpy as np
 from passlib.context import CryptContext
@@ -10,6 +11,7 @@ from app.core.config import settings
 from app.core.exceptions import AppException
 from app.core.logger import logger
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+from app.schema.auth.web.staff_auth import StaffJWTPayload
 
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -106,6 +108,7 @@ def generate_Acces_token_stuff(user_id: str, role: str) -> str:
     return jwt.encode(payload, key=settings.jwt_secret, algorithm=settings.jwt_algorithm)
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 
 
 
@@ -132,44 +135,61 @@ class EmbeddingCrypto:
         return np.frombuffer(data, dtype=np.float32)
 =======
 def create_access_staff_token(session_id: str, staff_id: str, role: str) -> str:
+=======
+def create_access_staff_token(staff_id: str, role: str) -> str:
+>>>>>>> 469aad3 (finale changes (before rebase))
     """
-    Generates a staff access token containing the session_id, 
-    allowing for server-side session invalidation.
+    Pure stateless token generation. 
+    No session_id required.
     """
-    payload: dict[str, Any] = {
-        "sid": session_id,
-        "sub": staff_id,
+    payload: StaffJWTPayload = {
+        "sub": staff_id, # Standard JWT claim for 'Subject'
         "role": role,
         "type": "access",
         "exp": int(
             (datetime.now(timezone.utc) + timedelta(seconds=Get_expiry_time())).timestamp()
         ),
+        
     }
-    return jwt.encode(payload, key=settings.jwt_secret, algorithm=settings.jwt_algorithm)
+    return jwt.encode(
+        cast(Dict[str, Any], payload), 
+        key=settings.jwt_secret, 
+        algorithm=settings.jwt_algorithm
+    )
 
 
-def create_refresh_staff_token(session_id: str, staff_id: str) -> str:
+def create_refresh_staff_token(staff_id: str, role: str) -> str:
     """
     Generates a longer-lived refresh token for staff web sessions.
+    Now purely stateless—no session_id required.
     """
-    payload: dict[str, Any] = {
-        "sid": session_id,
+    payload: StaffJWTPayload = {
         "sub": staff_id,
+        "role": role,
         "type": "refresh",
         "exp": int(
             (datetime.now(timezone.utc) + timedelta(seconds=Get_expiry_time() * 4)).timestamp()
         ),
     }
-    return jwt.encode(payload, key=settings.jwt_secret, algorithm=settings.jwt_algorithm)
+    # Using cast to handle the Pylance dict[str, Any] quirk
+    return jwt.encode(
+        cast(Dict[str, Any], payload), 
+        key=settings.jwt_secret, 
+        algorithm=settings.jwt_algorithm
+    )
 
-
-def decode_staff_token(token: str) -> dict[str, Any]:
+def decode_staff_token(token: str) -> StaffJWTPayload:
     """
-    Universal decoder for staff tokens.
+    Decodes the token and returns the typed payload.
     """
     try:
-        payload = jwt.decode(token, key=settings.jwt_secret, algorithms=[settings.jwt_algorithm])
-        return payload
+        payload = jwt.decode(
+            token, 
+            key=settings.jwt_secret, 
+            algorithms=[settings.jwt_algorithm]
+        )
+        # Cast the result to our TypedDict for better downstream typing
+        return cast(StaffJWTPayload, payload)
     except jwt.ExpiredSignatureError:
         raise AppException.unauthorized("Staff token has expired")
     except jwt.InvalidTokenError:

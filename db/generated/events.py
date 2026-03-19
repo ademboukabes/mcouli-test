@@ -47,14 +47,6 @@ WHERE id = :p1
 """
 
 
-GET_EVENTS_BY_DATE_RANGE = """-- name: get_events_by_date_range \\:many
-SELECT id, name, event_code, event_date, status, created_by, created_at, archived_at FROM events 
-WHERE event_date >= :p1 
-AND event_date <= :p2
-ORDER BY event_date ASC
-"""
-
-
 GET_EVENTS_BY_NAME = """-- name: get_events_by_name \\:many
 SELECT id, name, event_code, event_date, status, created_by, created_at, archived_at FROM events 
 WHERE name ILIKE '%' || :p1 || '%'
@@ -62,18 +54,40 @@ ORDER BY event_date DESC
 """
 
 
-GET_EVENTS_BY_STATUS = """-- name: get_events_by_status \\:many
-SELECT id, name, event_code, event_date, status, created_by, created_at, archived_at FROM events 
-WHERE status = :p1
-ORDER BY event_date DESC
-"""
-
-
 LIST_EVENTS = """-- name: list_events \\:many
 SELECT id, name, event_code, event_date, status, created_by, created_at, archived_at FROM events 
-ORDER BY event_date DESC 
+WHERE 
+    -- Filter by Status (Optional)
+    (:p3\\:\\:event_status IS NULL OR status = :p3)
+    
+    -- Filter by Date Range (Optional)
+    AND (:p4\\:\\:timestamptz IS NULL OR event_date >= :p4)
+    AND (:p5\\:\\:timestamptz IS NULL OR event_date <= :p5)
+    
+    -- Filter by Name Search (Optional - added for extra utility)
+    AND (:p6\\:\\:text IS NULL OR name ILIKE '%' || :p6 || '%')
+
+ORDER BY 
+    -- Dynamic Sorting
+    CASE WHEN :p7\\:\\:text = 'date_asc' THEN event_date END ASC,
+    CASE WHEN :p7\\:\\:text = 'date_desc' THEN event_date END DESC,
+    CASE WHEN :p7\\:\\:text = 'name_asc' THEN name END ASC,
+    -- Default fallback sorting
+    event_date DESC
+
 LIMIT :p1 OFFSET :p2
 """
+
+
+@dataclasses.dataclass()
+class ListEventsParams:
+    limit: int
+    offset: int
+    status: Optional[models.EventStatus]
+    start_date: Optional[datetime.datetime]
+    end_date: Optional[datetime.datetime]
+    search_name: Optional[str]
+    sort_order: str
 
 
 UPDATE_EVENT_STATUS = """-- name: update_event_status \\:one
@@ -143,20 +157,6 @@ class AsyncQuerier:
             archived_at=row[7],
         )
 
-    async def get_events_by_date_range(self, *, start_date: datetime.datetime, end_date: datetime.datetime) -> AsyncIterator[models.Event]:
-        result = await self._conn.stream(sqlalchemy.text(GET_EVENTS_BY_DATE_RANGE), {"p1": start_date, "p2": end_date})
-        async for row in result:
-            yield models.Event(
-                id=row[0],
-                name=row[1],
-                event_code=row[2],
-                event_date=row[3],
-                status=row[4],
-                created_by=row[5],
-                created_at=row[6],
-                archived_at=row[7],
-            )
-
     async def get_events_by_name(self, *, dollar_1: Optional[str]) -> AsyncIterator[models.Event]:
         result = await self._conn.stream(sqlalchemy.text(GET_EVENTS_BY_NAME), {"p1": dollar_1})
         async for row in result:
@@ -171,22 +171,16 @@ class AsyncQuerier:
                 archived_at=row[7],
             )
 
-    async def get_events_by_status(self, *, status: Any) -> AsyncIterator[models.Event]:
-        result = await self._conn.stream(sqlalchemy.text(GET_EVENTS_BY_STATUS), {"p1": status})
-        async for row in result:
-            yield models.Event(
-                id=row[0],
-                name=row[1],
-                event_code=row[2],
-                event_date=row[3],
-                status=row[4],
-                created_by=row[5],
-                created_at=row[6],
-                archived_at=row[7],
-            )
-
-    async def list_events(self, *, limit: int, offset: int) -> AsyncIterator[models.Event]:
-        result = await self._conn.stream(sqlalchemy.text(LIST_EVENTS), {"p1": limit, "p2": offset})
+    async def list_events(self, arg: ListEventsParams) -> AsyncIterator[models.Event]:
+        result = await self._conn.stream(sqlalchemy.text(LIST_EVENTS), {
+            "p1": arg.limit,
+            "p2": arg.offset,
+            "p3": arg.status,
+            "p4": arg.start_date,
+            "p5": arg.end_date,
+            "p6": arg.search_name,
+            "p7": arg.sort_order,
+        })
         async for row in result:
             yield models.Event(
                 id=row[0],
