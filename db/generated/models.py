@@ -8,6 +8,15 @@ from typing import Any, Optional
 import uuid
 
 
+class AuditEventType(str, enum.Enum):
+    USERSIGNUP = "user.signup"
+    USERLOGIN = "user.login"
+    USERLOGOUT = "user.logout"
+    UPLOAD_REQUESTCREATED = "upload_request.created"
+    UPLOAD_REQUESTAPPROVED = "upload_request.approved"
+    UPLOAD_REQUESTREJECTED = "upload_request.rejected"
+
+
 class EventStatus(str, enum.Enum):
     DRAFT = "draft"
     SCHEDULED = "scheduled"
@@ -42,6 +51,15 @@ class UploadRequestStatus(str, enum.Enum):
 @dataclasses.dataclass()
 class AlembicVersion:
     version_num: str
+
+
+@dataclasses.dataclass()
+class AuditEvent:
+    id: uuid.UUID
+    event_type: Any
+    user_id: Optional[uuid.UUID]
+    metadata: Optional[Any]
+    created_at: datetime.datetime
 
 
 @dataclasses.dataclass()

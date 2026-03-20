@@ -12,6 +12,7 @@ from app.service.staff_drive import StaffDriveService
 from app.service.staff_notifications import StaffNotificationsService
 from app.service.staff_user import StaffUserService
 
+from app.service.audit import AuditService
 from app.service.upload_requests import UploadRequestsService
 from app.service.users import AuthService
 from app.service.user_notification import UserNotificationService
@@ -29,6 +30,7 @@ from db.generated import events as event_queries
 from db.generated import eventParticipant as participant_queries
 from db.generated import stuff_user as staff_queries
 from db.generated import notifications as notification_queries
+from db.generated import audit as audit_queries
 from app.service.event import EventService
 
 class Container:
@@ -52,6 +54,7 @@ class Container:
         self.photo_querier = photo_queries.AsyncQuerier(conn)
         self.staff_notification_querier = staff_notification_queries.AsyncQuerier(conn)
         self.notification_querier = notification_queries.AsyncQuerier(conn)
+        self.audit_querier = audit_queries.AsyncQuerier(conn)
         self.event_querier = event_queries.AsyncQuerier(conn)
         self.participant_querier = participant_queries.AsyncQuerier(conn)
         self.staff_querier = staff_queries.AsyncQuerier(conn)
@@ -99,6 +102,10 @@ class Container:
 
         self.user_notifications_service = UserNotificationService(
             notification_querier=self.notification_querier,
+        )
+
+        self.audit_service = AuditService(
+            audit_querier=self.audit_querier,
         )
 
         self.staff_user_service = StaffUserService()

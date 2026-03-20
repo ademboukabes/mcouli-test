@@ -7,7 +7,7 @@ from nats.aio.msg import Msg
 from pydantic import BaseModel
 
 from app.core.config import settings
-from app.core.constant import NOTIFICATION_EVENT_SUBJECT
+from app.core.constant import NOTIFICATION_EVENT_SUBJECT, AUDIT_EVENT_SUBJECT
 
 
 class Message(BaseModel):
@@ -19,6 +19,7 @@ class NatsSubjects(Enum):
     USER_LOGIN = "user.login"
     USER_LOGOUT = "user.logout"
     NOTIFICATION_EVENT = NOTIFICATION_EVENT_SUBJECT
+    AUDIT_EVENT = AUDIT_EVENT_SUBJECT
     STAFF_UPLOAD_REQUEST_CREATED = "staff.upload_request.created"
     STAFF_UPLOAD_REQUEST_APPROVED = "staff.upload_request.approved"
     STAFF_UPLOAD_REQUEST_REJECTED = "staff.upload_request.rejected"

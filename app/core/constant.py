@@ -13,6 +13,18 @@ class NotificationChannel(str, Enum):
 
 NOTIFICATION_EVENT_SUBJECT = "notification.event"
 
+
+class AuditEventType(str, Enum):
+    USER_SIGNUP = "user.signup"
+    USER_LOGIN = "user.login"
+    USER_LOGOUT = "user.logout"
+    UPLOAD_REQUEST_CREATED = "upload_request.created"
+    UPLOAD_REQUEST_APPROVED = "upload_request.approved"
+    UPLOAD_REQUEST_REJECTED = "upload_request.rejected"
+
+
+AUDIT_EVENT_SUBJECT = "audit.event"
+
 IMAGE_ALLOWED_TYPES = {
     "image/jpeg",
     "image/png",

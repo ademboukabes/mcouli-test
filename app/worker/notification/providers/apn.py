@@ -10,10 +10,7 @@ from apns2.payload import Payload as APNPayload
 
 
 async def send_apn_notification(payload: NotificationEventPayload) -> None:
-    if APNsClient is None or APNPayload is None:
-        logger.debug("APNs client unavailable; skipping APN delivery")
-        return
-
+   
     device_info: Mapping[str, Any] | None = payload.device_info
     if device_info is None:
         logger.warning("Payload missing device_info, cannot send APN message: %s", payload)
