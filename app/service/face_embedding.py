@@ -68,6 +68,7 @@ class FaceEmbedding:
         self.init_model()
 
     def embed(self, image: np.ndarray, bboxes: Sequence[BBox]) -> list[float]:
+        
         if not bboxes:
             raise ValueError("No faces to embed")
 
