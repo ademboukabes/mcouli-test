@@ -13,6 +13,7 @@ from app.core.securite import (
     Get_expiry_time,
 )
 from app.core.config import settings
+from app.core.token_blacklist import blacklist_session, is_session_blacklisted
 from app.infra.redis import RedisClient
 
 from app.schema.request.mobile.auth import MobileAuthRequest
@@ -85,6 +86,8 @@ class AuthService:
         user: User | None = None
 
         if existing_user is not None:
+            if existing_user.blocked:
+                raise AppException.forbidden("User is blocked")
             if not verify_password(req.password, existing_user.hashed_password or ""):
                 raise AppException.unauthorized("Invalid credentials")
             user = existing_user
@@ -158,6 +161,9 @@ class AuthService:
         if not session_id:
             raise AppException.unauthorized("Invalid refresh token")
 
+        if await is_session_blacklisted(redis, session_id):
+            raise AppException.unauthorized("Token is blacklisted")
+
         session = await self.session_querier.get_session_by_id(id=uuid.UUID(session_id))
 
         if not session:
@@ -173,6 +179,12 @@ class AuthService:
 
         if not redis_session or redis_session != session_id:
             raise AppException.unauthorized("Session invalidated")
+
+        user = await self.user_querier.get_user_by_id(id=session.user_id)
+        if not user:
+            raise AppException.unauthorized("User not found")
+        if user.blocked:
+            raise AppException.forbidden("User is blocked")
 
         await redis.expire(session_key, AuthService.REDIS_SESSION_TTL)
 
@@ -225,6 +237,9 @@ class AuthService:
         redis: RedisClient,
         session_id: str,
     ) -> bool:
+        if await is_session_blacklisted(redis, session_id):
+            return False
+
         session = await self.session_querier.get_session_by_id(id=uuid.UUID(session_id))
 
         if not session:
@@ -242,3 +257,102 @@ class AuthService:
 
     async def get_user_by_id(self, user_id: uuid.UUID) -> User | None:
         return await self.user_querier.get_user_by_id(id=user_id)
+
+    async def create_user(
+        self,
+        *,
+        email: str,
+        password: str,
+        display_name: str | None = None,
+        blocked: bool = False,
+    ) -> User:
+        hashed = hash_password(password)
+        user = await self.user_querier.create_user(
+            email=email,
+            hashed_password=hashed,
+        )
+        if not user:
+            raise AppException.internal_error("Failed to create user")
+
+        if display_name is not None or blocked:
+            updated = await self.user_querier.update_user(
+                email=user.email,
+                display_name=display_name,
+                blocked=blocked,
+                id=user.id,
+            )
+            if not updated:
+                raise AppException.internal_error("Failed to update user")
+            return updated
+
+        return user
+
+    async def get_user(self, *, user_id: uuid.UUID) -> User:
+        user = await self.user_querier.get_user_by_id(id=user_id)
+        if not user:
+            raise AppException.not_found("User not found")
+        return user
+
+    async def list_users(self, *, limit: int, offset: int) -> list[User]:
+        users: list[User] = []
+        async for user in self.user_querier.list_users(limit=limit, offset=offset):
+            users.append(user)
+        return users
+
+    async def update_user(
+        self,
+        *,
+        user_id: uuid.UUID,
+        email: str | None = None,
+        display_name: str | None = None,
+        blocked: bool | None = None,
+    ) -> User:
+        existing = await self.user_querier.get_user_by_id(id=user_id)
+        if not existing:
+            raise AppException.not_found("User not found")
+
+        new_email = email if email is not None else existing.email
+        new_display_name = (
+            display_name if display_name is not None else existing.display_name
+        )
+        new_blocked = blocked if blocked is not None else existing.blocked
+
+        user = await self.user_querier.update_user(
+            email=new_email,
+            display_name=new_display_name,
+            blocked=new_blocked,
+            id=user_id,
+        )
+        if not user:
+            raise AppException.internal_error("Failed to update user")
+        return user
+
+    async def delete_user(self, *, user_id: uuid.UUID) -> User:
+        existing = await self.user_querier.get_user_by_id(id=user_id)
+        if not existing:
+            raise AppException.not_found("User not found")
+        await self.user_querier.delete_user(id=user_id)
+        return existing
+
+    async def block_user(self, *, redis: RedisClient, user_id: uuid.UUID) -> User:
+        user = await self.user_querier.set_user_blocked(blocked=True, id=user_id)
+        if not user:
+            raise AppException.not_found("User not found")
+
+        async for session in self.session_querier.list_sessions_by_user(user_id=user_id):
+            await blacklist_session(
+                redis=redis,
+                session_id=str(session.id),
+                expires_at=session.expires_at,
+            )
+
+        session_key = constant.RedisKey.UserSessionByUser.value.format(user_id=user_id)
+        await redis.delete(session_key)
+
+        return user
+
+    async def unblock_user(self, *, user_id: uuid.UUID) -> User:
+        user = await self.user_querier.set_user_blocked(blocked=False, id=user_id)
+        if not user:
+            raise AppException.not_found("User not found")
+        return user

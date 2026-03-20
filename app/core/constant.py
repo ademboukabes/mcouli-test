@@ -20,6 +20,7 @@ class AuditEventType(str, Enum):
     UPLOAD_REQUEST_REJECTED = "upload_request.rejected"
 
 
+    BlacklistedSession = "blacklist:session:{session_id}"
 
 IMAGE_ALLOWED_TYPES = {
     "image/jpeg",

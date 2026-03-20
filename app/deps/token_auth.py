@@ -5,6 +5,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel
 from app.container import get_container, Container
 from app.core.securite import decode_access_mobile_token
+from app.core.token_blacklist import is_session_blacklisted
 
 security = HTTPBearer()
 
@@ -31,6 +32,9 @@ async def get_current_mobile_user(
 
     session_id = uuid.UUID(session_id_str)
 
+    if await is_session_blacklisted(container.redis, session_id_str):
+        raise HTTPException(status_code=401, detail="Token is blacklisted")
+
     # Validate session via SessionService
     session = await container.session_service.session_querier.get_session_by_id(id=session_id)
     if not session:
@@ -43,6 +47,8 @@ async def get_current_mobile_user(
     user = await container.auth_service.user_querier.get_user_by_id(id=session.user_id)
     if not user:
         raise HTTPException(status_code=401, detail="User not found")
+    if user.blocked:
+        raise HTTPException(status_code=403, detail="User is blocked")
 
     return MobileUserSchema(
         user_id=user.id,
