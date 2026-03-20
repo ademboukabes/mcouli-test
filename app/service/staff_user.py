@@ -110,8 +110,8 @@ class StaffUserService:
     ) -> WebAuthResponse:
         print("hello")
         staff: StaffUser | None = await self.staff_user_querier.get_staff_user_by_email(email=email)
-        if  staff is None or not verify_password(password, staff.password):
-            logger.info(f'user:{staff.email}') # type: ignore
+        if staff is None or not verify_password(password, staff.password):
+            logger.info("admin login failed for email %s", email)
             raise AppException.unauthorized("Invalid email or password")
 
 
