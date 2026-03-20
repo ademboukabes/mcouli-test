@@ -2,6 +2,7 @@ from datetime import datetime, timedelta, timezone
 import uuid
 
 from app.core import constant
+from fastapi import HTTPException
 from app.core.exceptions import AppException, DBException
 from app.core.securite import (
     # EmbeddingCrypto,
@@ -287,7 +288,7 @@ class AuthService:
                 return updated
 
             return user
-        except AppException:
+        except HTTPException:
             raise
         except Exception as exc:
             logger.error("Failed to create user: %s", exc)
@@ -337,7 +338,7 @@ class AuthService:
             if not user:
                 raise AppException.internal_error("Failed to update user")
             return user
-        except AppException:
+        except HTTPException:
             raise
         except Exception as exc:
             logger.error("Failed to update user: %s", exc)
@@ -350,7 +351,7 @@ class AuthService:
                 raise AppException.not_found("User not found")
             await self.user_querier.delete_user(id=user_id)
             return existing
-        except AppException:
+        except HTTPException:
             raise
         except Exception as exc:
             logger.error("Failed to delete user: %s", exc)
@@ -377,7 +378,7 @@ class AuthService:
             await redis.delete(session_key)
 
             return user
-        except AppException:
+        except HTTPException:
             raise
         except Exception as exc:
             logger.error("Failed to block user: %s", exc)
@@ -389,7 +390,7 @@ class AuthService:
             if not user:
                 raise AppException.not_found("User not found")
             return user
-        except AppException:
+        except HTTPException:
             raise
         except Exception as exc:
             logger.error("Failed to unblock user: %s", exc)
