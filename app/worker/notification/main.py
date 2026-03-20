@@ -1,21 +1,16 @@
 import asyncio
 import json
 from typing import Any
-
 import sqlalchemy.ext.asyncio
-
 from app.core.constant import NOTIFICATION_EVENT_SUBJECT, NotificationChannel
 from app.core.logger import logger
 from app.infra.database import engine
 from app.infra.nats import NatsClient, NatsSubjects
 from app.service.device import DeviceService
 from db.generated import devices as device_queries
-
-from app.worker.notification.providers import (
-    send_apn_notification,
-    send_fcm_notification,
-    send_web_push_notification,
-)
+from app.worker.notification.providers.apn import send_apn_notification
+from app.worker.notification.providers.fcm import     send_fcm_notification
+from app.worker.notification.providers.webpush import     send_web_push_notification
 from app.worker.notification.schema.notification import NotificationEventPayload
 
 

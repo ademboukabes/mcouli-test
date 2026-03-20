@@ -15,7 +15,7 @@ class NotificationEventPayload:
     channel: NotificationChannel
     title: str | None = None
     body: str | None = None
-    data: dict[str, str] = dataclasses.field(default_factory=dict)
+    data: dict[str, str] = dataclasses.field(default_factory=dict[str,str])
     device_info: Mapping[str, Any] | None = None
     metadata: Mapping[str, Any] | None = None
 

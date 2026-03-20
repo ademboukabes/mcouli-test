@@ -1,9 +1,6 @@
-"""Web Push integration helpers."""
-from __future__ import annotations
 
 import asyncio
 import json
-from typing import Any, Mapping
 
 from app.core.logger import logger
 from app.worker.notification.schema.notification import NotificationEventPayload
@@ -12,9 +9,7 @@ from pywebpush import WebPushException, webpush
 
 
 async def send_web_push_notification(payload: NotificationEventPayload) -> None:
-    if webpush is None or WebPushException is None:
-        logger.debug("pywebpush unavailable; skipping web push delivery")
-        return
+  
 
     if not payload.device_info:
         logger.warning("Web notification missing subscription info: %s", payload)

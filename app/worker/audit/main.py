@@ -1,21 +1,15 @@
-"""Audit worker that stores security-relevant events emitted over NATS."""
-from __future__ import annotations
-
 import asyncio
 import json
 from typing import Any
-
 import sqlalchemy.ext.asyncio
 from pydantic import ValidationError
-
 from app.core.constant import AUDIT_EVENT_SUBJECT
 from app.core.logger import logger
 from app.infra.database import engine
 from app.infra.nats import NatsClient, NatsSubjects
 from app.service.audit import AuditService
 from db.generated import audit as audit_queries
-
-from app.worker.audit.schema import AuditEventMessage
+from app.worker.audit.schema.audit import AuditEventMessage
 from app.worker.audit.settings import settings
 
 
@@ -84,7 +78,7 @@ async def _handle_event(worker: AuditDeliveryWorker, raw_data: bytes) -> None:
     if parsed is None:
         return
     try:
-        payload = AuditEventMessage.parse_obj(parsed)
+        payload = AuditEventMessage.model_validate(parsed)
     except ValidationError as exc:
         logger.warning("Audit payload validation failed: %s", exc)
         return
