@@ -12,6 +12,7 @@ from app.core.securite import (
     decode_refresh_mobile_token,
     Get_expiry_time,
 )
+from app.core.config import settings
 from app.infra.redis import RedisClient
 
 from app.schema.request.mobile.auth import MobileAuthRequest
@@ -28,8 +29,8 @@ class AuthService:
     user_querier: user_queries.AsyncQuerier
     device_querier: device_queries.AsyncQuerier
     session_querier: session_queries.AsyncQuerier
-    SESSION_LIMIT = 3
-    REDIS_SESSION_TTL = 180
+    SESSION_LIMIT = settings.MOBILE_SESSION_LIMIT
+    REDIS_SESSION_TTL = settings.MOBILE_SESSION_TTL_SECONDS
 
     def __init__(
         self,
@@ -84,7 +85,9 @@ class AuthService:
             raise AppException.forbidden("Maximum session limit reached")
 
         device_id = req.device_id
-        expires_at = datetime.now(timezone.utc) + timedelta(days=7)
+        expires_at = datetime.now(timezone.utc) + timedelta(
+            days=settings.MOBILE_SESSION_DAYS
+        )
 
         device = await self.device_querier.create_device(
             arg=device_queries.CreateDeviceParams(
