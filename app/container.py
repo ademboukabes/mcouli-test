@@ -14,6 +14,7 @@ from app.service.staff_user import StaffUserService
 
 from app.service.upload_requests import UploadRequestsService
 from app.service.users import AuthService
+from app.service.user_notification import UserNotificationService
 from db.generated import devices as device_queries
 from db.generated import photos as photo_queries
 from db.generated import session as session_queries
@@ -27,6 +28,7 @@ from db.generated import user as user_queries
 from db.generated import events as event_queries
 from db.generated import eventParticipant as participant_queries
 from db.generated import stuff_user as staff_queries
+from db.generated import notifications as notification_queries
 from app.service.event import EventService
 
 class Container:
@@ -49,6 +51,7 @@ class Container:
         self.upload_request_photo_querier = upload_request_photo_queries.AsyncQuerier(conn)
         self.photo_querier = photo_queries.AsyncQuerier(conn)
         self.staff_notification_querier = staff_notification_queries.AsyncQuerier(conn)
+        self.notification_querier = notification_queries.AsyncQuerier(conn)
         self.event_querier = event_queries.AsyncQuerier(conn)
         self.participant_querier = participant_queries.AsyncQuerier(conn)
         self.staff_querier = staff_queries.AsyncQuerier(conn)
@@ -92,6 +95,10 @@ class Container:
             staged_upload_storage=self.staged_upload_storage_service,
             staff_drive_service=self.staff_drive_service,
             staff_notifications_service=self.staff_notifications_service,
+        )
+
+        self.user_notifications_service = UserNotificationService(
+            notification_querier=self.notification_querier,
         )
 
         self.staff_user_service = StaffUserService()
