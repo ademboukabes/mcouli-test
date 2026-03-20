@@ -4,7 +4,6 @@ from fastapi import APIRouter, Depends
 from uuid import UUID
 
 from app.container import get_container, Container
-from app.core.exceptions import AppException
 from app.deps.token_auth import MobileUserSchema, get_current_mobile_user
 
 from app.schema.request.mobile.auth import (
@@ -23,7 +22,6 @@ async def mobile_register_login(
     req: MobileAuthRequest,
     container: Container = Depends(get_container),
 ) -> MobileAuthResponse:
-
     return await container.auth_service.mobile_register_login(container.redis, req)
 
 
@@ -32,20 +30,18 @@ async def refresh_token(
     req: RefreshTokenRequest,
     container: Container = Depends(get_container),
 ) -> MobileAuthResponse:
-
     return await container.auth_service.refresh_token(container.redis, req.refresh_token)
 
 
 @router.post("/logout")
 async def logout(
     container: Container = Depends(get_container),
-    User: MobileUserSchema = Depends(get_current_mobile_user),
+    current_user: MobileUserSchema = Depends(get_current_mobile_user),
 ) -> dict[str, str]:
-
     return await container.auth_service.logout(
         container.redis,
-        str(User.user_id),
-        str(User.session_id),
+        str(current_user.user_id),
+        str(current_user.session_id),
     )
 
 
@@ -55,7 +51,6 @@ async def revoke_device(
     container: Container = Depends(get_container),
     current_user: MobileUserSchema = Depends(get_current_mobile_user),
 ) -> dict[str, str]:
-
     await container.device_service.revoke_device(
         device_id=device_id,
         user_id=current_user.user_id,
@@ -99,17 +94,14 @@ async def get_me(
     current_user: MobileUserSchema = Depends(get_current_mobile_user),
     container: Container = Depends(get_container),
 ) -> MeResponse:
-
-    user = await container.auth_service.user_querier.get_user_by_id(id=current_user.user_id)
-    if user is None :
-        raise AppException.not_found("user not found")
+    user = await container.auth_service.get_user(user_id=current_user.user_id)
 
     devices, _ = await container.device_service.get_all_devices(current_user.user_id)
     device_list = [
         DeviceSchema(
             id=d.id,
-            device_name=d.device_name or "uknown ",
-            device_type=d.device_type or "uknown ",
+            device_name=d.device_name or "unknown",
+            device_type=d.device_type or "unknown",
             totp_secret=d.totp_secret,
         )
         for d in devices
@@ -127,8 +119,6 @@ async def get_me(
             last_active=sessions_objs.last_active,
             expires_at=sessions_objs.expires_at,
         )
-
-
 
     return MeResponse(
         user=UserSchema(id=user.id, email=user.email),
