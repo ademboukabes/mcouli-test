@@ -10,11 +10,10 @@ from app.infra.nats import NatsClient, NatsSubjects
 from app.service.audit import AuditService
 from db.generated import audit as audit_queries
 from app.worker.audit.schema.audit import AuditEventMessage
-from app.worker.audit.settings import settings
 
 
 async def init_worker() -> None:
-    logger.info("Audit worker starting with metadata limit %s", settings.max_metadata_entries)
+    logger.info("Audit worker starting with metadata limit ")
 
 
 class AuditDeliveryWorker:
@@ -38,36 +37,22 @@ class AuditDeliveryWorker:
         if self._audit_service is None:
             logger.warning("Audit service is unavailable for %s", payload.event_type)
             return
-        metadata = self._prune_metadata(payload.metadata)
         await self._audit_service.record_event(
             event_type=payload.event_type,
             user_id=payload.user_id,
-            metadata=metadata,
+            metadata=payload.metadata,
         )
         logger.info("Persisted audit %s for %s", payload.event_type, payload.user_id)
 
-    @staticmethod
-    def _prune_metadata(metadata: dict[str, Any] | None) -> dict[str, Any] | None:
-        if not metadata:
-            return metadata
-        if len(metadata) <= settings.max_metadata_entries:
-            return metadata
-        trimmed = {}
-        for idx, key in enumerate(list(metadata)):
-            if idx >= settings.max_metadata_entries:
-                break
-            trimmed[key] = metadata[key]
-        logger.warning("Trimmed audit metadata to %s entries", settings.max_metadata_entries)
-        return trimmed
-
+    
 
 def _parse_payload(raw_data: bytes) -> dict[str, Any] | None:
     try:
         parsed = json.loads(raw_data.decode("utf-8"))
         if not isinstance(parsed, dict):
-            logger.warning("Audit payload must be an object, got %s", type(parsed))
+            logger.warning("Audit payload must be an object, got %s", type(parsed)) # type: ignore
             return None
-        return parsed
+        return parsed # type: ignore
     except (UnicodeDecodeError, json.JSONDecodeError) as exc:
         logger.error("Cannot parse audit payload: %s", exc)
         return None

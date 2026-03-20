@@ -1,4 +1,3 @@
-
 import asyncio
 import json
 
@@ -9,20 +8,26 @@ from pywebpush import WebPushException, webpush
 
 
 async def send_web_push_notification(payload: NotificationEventPayload) -> None:
-  
-
-    if not payload.device_info:
+    subscription = payload.web_subscription
+    if subscription is None:
         logger.warning("Web notification missing subscription info: %s", payload)
         return
-
     if not settings.webpush_vapid_private_key:
         logger.warning("VAPID private key missing, cannot send web push")
         return
-
-    subscription_info = payload.device_info
+    subscription_info: dict[str, object] = {
+        "endpoint": subscription.endpoint,
+        "keys": subscription.keys,
+    }
+    if subscription.expiration_time is not None:
+        subscription_info["expirationTime"] = subscription.expiration_time
+    payload_data = {
+        "title": payload.title,
+        "body": payload.body,
+        "data": payload.data,
+    }
+    data = json.dumps(payload_data)
     vapid_claims = {"sub": settings.webpush_vapid_claims_subject}
-    data = json.dumps({"title": payload.title, "body": payload.body, "data": payload.data})
-
     try:
         await asyncio.to_thread(
             webpush,

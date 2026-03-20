@@ -11,7 +11,7 @@ class NotificationChannel(str, Enum):
     MOBILE = "mobile"
 
 
-NOTIFICATION_EVENT_SUBJECT = "notification.event"
+NOTIFICATION_EVENT_SUBJECT = "notification_event"
 
 
 class AuditEventType(str, Enum):
