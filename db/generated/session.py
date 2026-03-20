@@ -4,7 +4,7 @@
 # source: session.sql
 import dataclasses
 import datetime
-from typing import Optional
+from typing import AsyncIterator, Optional
 import uuid
 
 import sqlalchemy
@@ -48,6 +48,13 @@ GET_SESSION_BY_ID = """-- name: get_session_by_id \\:one
 SELECT id, user_id, device_id, created_at, last_active, expires_at
 FROM user_sessions
 WHERE id = :p1
+"""
+
+
+LIST_SESSIONS_BY_USER = """-- name: list_sessions_by_user \\:many
+SELECT id, user_id, device_id, created_at, last_active, expires_at
+FROM user_sessions
+WHERE user_id = :p1
 """
 
 
@@ -134,6 +141,18 @@ class AsyncQuerier:
             last_active=row[4],
             expires_at=row[5],
         )
+
+    async def list_sessions_by_user(self, *, user_id: uuid.UUID) -> AsyncIterator[models.UserSession]:
+        result = await self._conn.stream(sqlalchemy.text(LIST_SESSIONS_BY_USER), {"p1": user_id})
+        async for row in result:
+            yield models.UserSession(
+                id=row[0],
+                user_id=row[1],
+                device_id=row[2],
+                created_at=row[3],
+                last_active=row[4],
+                expires_at=row[5],
+            )
 
     async def update_session_activity(self, *, id: uuid.UUID) -> None:
         await self._conn.execute(sqlalchemy.text(UPDATE_SESSION_ACTIVITY), {"p1": id})

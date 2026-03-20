@@ -14,7 +14,7 @@ from db.generated import models
 CREATE_USER = """-- name: create_user \\:one
 INSERT INTO users (email, hashed_password)
 VALUES (:p1, :p2)
-RETURNING id, email, hashed_password, created_at, updated_at, display_name, face_embedding, deleted_at
+RETURNING id, email, hashed_password, created_at, updated_at, display_name, face_embedding, blocked, deleted_at
 """
 
 
@@ -25,24 +25,33 @@ WHERE id = :p1
 
 
 GET_USER_BY_EMAIL = """-- name: get_user_by_email \\:one
-SELECT id, email, hashed_password, created_at, updated_at, display_name, face_embedding, deleted_at
+SELECT id, email, hashed_password, created_at, updated_at, display_name, face_embedding, blocked, deleted_at
 FROM users
 WHERE email = :p1
 """
 
 
 GET_USER_BY_ID = """-- name: get_user_by_id \\:one
-SELECT id, email, hashed_password, created_at, updated_at, display_name, face_embedding, deleted_at
+SELECT id, email, hashed_password, created_at, updated_at, display_name, face_embedding, blocked, deleted_at
 FROM users
 WHERE id = :p1
 """
 
 
 LIST_USERS = """-- name: list_users \\:many
-SELECT id, email, hashed_password, created_at, updated_at, display_name, face_embedding, deleted_at
+SELECT id, email, hashed_password, created_at, updated_at, display_name, face_embedding, blocked, deleted_at
 FROM users
 ORDER BY created_at DESC
 LIMIT :p1 OFFSET :p2
+"""
+
+
+SET_USER_BLOCKED = """-- name: set_user_blocked \\:one
+UPDATE users
+SET blocked = :p1,
+    updated_at = NOW()
+WHERE id = :p2
+RETURNING id, email, hashed_password, created_at, updated_at, display_name, face_embedding, blocked, deleted_at
 """
 
 
@@ -51,7 +60,18 @@ UPDATE users
 SET face_embedding = :p1\\:\\:vector,
     updated_at = NOW()
 WHERE id = :p2
-RETURNING id, email, hashed_password, created_at, updated_at, display_name, face_embedding, deleted_at
+RETURNING id, email, hashed_password, created_at, updated_at, display_name, face_embedding, blocked, deleted_at
+"""
+
+
+UPDATE_USER = """-- name: update_user \\:one
+UPDATE users
+SET email = COALESCE(:p1, email),
+    display_name = COALESCE(:p2, display_name),
+    blocked = COALESCE(:p3, blocked),
+    updated_at = NOW()
+WHERE id = :p4
+RETURNING id, email, hashed_password, created_at, updated_at, display_name, face_embedding, blocked, deleted_at
 """
 
 
@@ -60,7 +80,7 @@ UPDATE users
 SET hashed_password = :p1,
     updated_at = NOW()
 WHERE id = :p2
-RETURNING id, email, hashed_password, created_at, updated_at, display_name, face_embedding, deleted_at
+RETURNING id, email, hashed_password, created_at, updated_at, display_name, face_embedding, blocked, deleted_at
 """
 
 
@@ -80,7 +100,8 @@ class AsyncQuerier:
             updated_at=row[4],
             display_name=row[5],
             face_embedding=row[6],
-            deleted_at=row[7],
+            blocked=row[7],
+            deleted_at=row[8],
         )
 
     async def delete_user(self, *, id: uuid.UUID) -> None:
@@ -98,7 +119,8 @@ class AsyncQuerier:
             updated_at=row[4],
             display_name=row[5],
             face_embedding=row[6],
-            deleted_at=row[7],
+            blocked=row[7],
+            deleted_at=row[8],
         )
 
     async def get_user_by_id(self, *, id: uuid.UUID) -> Optional[models.User]:
@@ -113,7 +135,8 @@ class AsyncQuerier:
             updated_at=row[4],
             display_name=row[5],
             face_embedding=row[6],
-            deleted_at=row[7],
+            blocked=row[7],
+            deleted_at=row[8],
         )
 
     async def list_users(self, *, limit: int, offset: int) -> AsyncIterator[models.User]:
@@ -127,8 +150,25 @@ class AsyncQuerier:
                 updated_at=row[4],
                 display_name=row[5],
                 face_embedding=row[6],
-                deleted_at=row[7],
+                blocked=row[7],
+                deleted_at=row[8],
             )
+
+    async def set_user_blocked(self, *, blocked: bool, id: uuid.UUID) -> Optional[models.User]:
+        row = (await self._conn.execute(sqlalchemy.text(SET_USER_BLOCKED), {"p1": blocked, "p2": id})).first()
+        if row is None:
+            return None
+        return models.User(
+            id=row[0],
+            email=row[1],
+            hashed_password=row[2],
+            created_at=row[3],
+            updated_at=row[4],
+            display_name=row[5],
+            face_embedding=row[6],
+            blocked=row[7],
+            deleted_at=row[8],
+        )
 
     async def set_user_embedding(self, *, dollar_1: Any, id: uuid.UUID) -> Optional[models.User]:
         row = (await self._conn.execute(sqlalchemy.text(SET_USER_EMBEDDING), {"p1": dollar_1, "p2": id})).first()
@@ -142,7 +182,29 @@ class AsyncQuerier:
             updated_at=row[4],
             display_name=row[5],
             face_embedding=row[6],
-            deleted_at=row[7],
+            blocked=row[7],
+            deleted_at=row[8],
+        )
+
+    async def update_user(self, *, email: str, display_name: Optional[str], blocked: bool, id: uuid.UUID) -> Optional[models.User]:
+        row = (await self._conn.execute(sqlalchemy.text(UPDATE_USER), {
+            "p1": email,
+            "p2": display_name,
+            "p3": blocked,
+            "p4": id,
+        })).first()
+        if row is None:
+            return None
+        return models.User(
+            id=row[0],
+            email=row[1],
+            hashed_password=row[2],
+            created_at=row[3],
+            updated_at=row[4],
+            display_name=row[5],
+            face_embedding=row[6],
+            blocked=row[7],
+            deleted_at=row[8],
         )
 
     async def update_user_password(self, *, hashed_password: Optional[str], id: uuid.UUID) -> Optional[models.User]:
@@ -157,5 +219,6 @@ class AsyncQuerier:
             updated_at=row[4],
             display_name=row[5],
             face_embedding=row[6],
-            deleted_at=row[7],
+            blocked=row[7],
+            deleted_at=row[8],
         )

@@ -28,6 +28,11 @@ SELECT *
 FROM user_sessions
 WHERE id = $1;
 
+-- name: ListSessionsByUser :many
+SELECT *
+FROM user_sessions
+WHERE user_id = $1;
+
 -- name: UpdateSessionActivity :exec
 UPDATE user_sessions
 SET last_active = NOW()
