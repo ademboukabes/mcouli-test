@@ -171,9 +171,9 @@ class UploadRequest:
     requested_by: uuid.UUID
     approved_by: Optional[uuid.UUID]
     status: Any
-    photo_count: int
     created_at: datetime.datetime
     approved_at: Optional[datetime.datetime]
+    photo_count: int
     rejection_reason: Optional[str]
 
 

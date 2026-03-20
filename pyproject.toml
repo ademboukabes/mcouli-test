@@ -25,6 +25,7 @@ dependencies = [
     "numpy>=2.4.3",
     "insightface>=0.7.3",
     "onnxruntime>=1.24.4",
+    "python-multipart>=0.0.22",
 ]
 
 [tool.ruff]

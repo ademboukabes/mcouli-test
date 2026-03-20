@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator
 from uuid import UUID
@@ -13,7 +14,7 @@ class CreateUploadRequestPhotoRequest(BaseModel):
     drive_file_id: str = Field(min_length=1, max_length=255)
     taken_at: datetime | None = None
     day_number: int | None = None
-    visibility: str = "private"
+    visibility: Literal["private","public"]
 
     @field_validator("drive_file_id", mode="before")
     @classmethod

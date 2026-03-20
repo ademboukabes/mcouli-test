@@ -1,12 +1,12 @@
 from datetime import datetime, timedelta, timezone
-from typing import Any, cast, Dict
+from typing import Any, Literal
 import jwt
 from passlib.context import CryptContext
+from pydantic import BaseModel
 import pyotp
 from app.core.config import settings
 from app.core.exceptions import AppException
 from app.core.logger import logger
-from app.schema.auth.web.staff_auth import StaffJWTPayload
 
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -126,21 +126,32 @@ def generate_Acces_token_stuff(user_id: str, role: str) -> str:
 
 #         return np.frombuffer(data, dtype=np.float32)
 
+
+class StaffJWTPayload(BaseModel):
+    sub: str
+    role: str
+    type: Literal["access", "refresh"]
+    exp: int
+
+    class Config:
+        frozen = True
+        # immutable class
+
+
 def create_access_staff_token(staff_id: str, role: str) -> str:
     """
-    Pure stateless token generation.
-    No session_id required.
+    Pure stateless access token generation.
     """
-    payload: StaffJWTPayload = {
-        "sub": staff_id, # Standard JWT claim for 'Subject'
-        "role": role,
-        "type": "access",
-        "exp": int(
+    payload = StaffJWTPayload(
+        sub=staff_id,
+        role=role,
+        type="access",
+        exp=int(
             (datetime.now(timezone.utc) + timedelta(seconds=Get_expiry_time())).timestamp()
         ),
-    }
+    )
     return jwt.encode(
-        cast(Dict[str, Any], payload),
+        payload.model_dump(),
         key=settings.jwt_secret,
         algorithm=settings.jwt_algorithm
     )
@@ -148,36 +159,34 @@ def create_access_staff_token(staff_id: str, role: str) -> str:
 
 def create_refresh_staff_token(staff_id: str, role: str) -> str:
     """
-    Generates a longer-lived refresh token for staff web sessions.
-    Now purely stateless—no session_id required.
+    Stateless refresh token generation (longer expiry).
     """
-    payload: StaffJWTPayload = {
-        "sub": staff_id,
-        "role": role,
-        "type": "refresh",
-        "exp": int(
+    payload = StaffJWTPayload(
+        sub=staff_id,
+        role=role,
+        type="refresh",
+        exp=int(
             (datetime.now(timezone.utc) + timedelta(seconds=Get_expiry_time() * 4)).timestamp()
         ),
-    }
-    # Using cast to handle the Pylance dict[str, Any] quirk
+    )
     return jwt.encode(
-        cast(Dict[str, Any], payload),
+        payload.model_dump(),
         key=settings.jwt_secret,
         algorithm=settings.jwt_algorithm
     )
 
+
 def decode_staff_token(token: str) -> StaffJWTPayload:
     """
-    Decodes the token and returns the typed payload.
+    Decodes the JWT token and returns a typed Pydantic payload.
     """
     try:
-        payload = jwt.decode(
+        decoded = jwt.decode(
             token,
             key=settings.jwt_secret,
             algorithms=[settings.jwt_algorithm]
         )
-        # Cast the result to our TypedDict for better downstream typing
-        return cast(StaffJWTPayload, payload)
+        return StaffJWTPayload(**decoded)
     except jwt.ExpiredSignatureError:
         raise AppException.unauthorized("Staff token has expired")
     except jwt.InvalidTokenError:

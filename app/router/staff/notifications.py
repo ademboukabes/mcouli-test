@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends
 
 from app.container import Container, get_container
-from app.deps.staff_auth import get_current_staff_user
+from app.deps.cookie_auth import get_current_staff_user
 from app.schema.request.staff.notifications import MarkStaffNotificationsReadRequest
 from app.schema.response.staff.notifications import (
     StaffNotificationListResponse,
@@ -9,7 +9,7 @@ from app.schema.response.staff.notifications import (
 from db.generated.models import StaffUser
 
 
-router = APIRouter(prefix="/notifications", tags=["staff-notifications"])
+router = APIRouter(prefix="/notifications")
 
 
 @router.get("", response_model=StaffNotificationListResponse)

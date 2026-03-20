@@ -5,7 +5,7 @@ from uuid import UUID
 
 from app.container import get_container, Container
 from app.core.exceptions import AppException
-from app.deps.auth import MobileUserSchema, get_current_mobile_user
+from app.deps.token_auth import MobileUserSchema, get_current_mobile_user
 
 from app.schema.request.mobile.auth import MobileAuthRequest, RefreshTokenRequest
 from app.schema.response.mobile.auth import MeResponse, DeviceSchema, MobileAuthResponse, SessionSchema, UserSchema

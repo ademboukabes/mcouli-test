@@ -23,6 +23,7 @@ from db.generated.models import (
     StaffUser,
     UploadRequest,
     UploadRequestPhoto,
+    UploadRequestStatus,
 )
 
 
@@ -132,8 +133,8 @@ class UploadRequestsService:
         if not request_ids:
             return photos_by_request_id
 
-        async for photo in self.upload_request_photo_querier.list_upload_request_photos_by_upload_request_ids(
-            upload_request_ids=list(request_ids)
+        async for photo in self.upload_request_photo_querier.list_upload_request_photos_by_upload_request_i_ds(
+            dollar_1=list(request_ids)
         ):
             photos_by_request_id[photo.upload_request_id].append(photo)
 
@@ -162,6 +163,7 @@ class UploadRequestsService:
 
         try:
             created_photo = await self.upload_request_photo_querier.create_upload_request_photo(
+                arg=upload_request_photo_queries.CreateUploadRequestPhotoParams(
                 upload_request_id=upload_request_id,
                 drive_file_id=photo.drive_file_id,
                 file_name=downloaded_photo.metadata.name,
@@ -172,6 +174,7 @@ class UploadRequestsService:
                 day_number=photo.day_number,
                 visibility=photo.visibility,
                 status="staged",
+                )
             )
         except IntegrityError:
             try:
@@ -268,6 +271,8 @@ class UploadRequestsService:
         access_token = await self.staff_drive_service.get_access_token_for_staff_user(
             requested_by.id
         )
+        upload_request: UploadRequest | None = None
+
 
         try:
             upload_request = await self.upload_request_querier.create_upload_request(
@@ -315,33 +320,36 @@ class UploadRequestsService:
         *,
         current_staff_user: StaffUser,
         scope: Literal["my", "all"],
-        status: str | None,
+        status: UploadRequestStatus | None,
     ) -> list[UploadRequestDetails]:
         if scope == "all" and self._role_value(current_staff_user.role) != StaffRole.MULTI_TEAM_LEAD.value:
             raise AppException.forbidden("Multi team lead access required")
 
         requested_by = current_staff_user.id if scope == "my" else None
+        if requested_by is None:
+            logger.info("hello")
+            raise AppException.not_found("not requests")
+        else :
+            request_rows: list[UploadRequest] = []
+            async for upload_request in self.upload_request_querier.list_upload_requests(
+                dollar_1=requested_by,
+                p2=status,
+            ):
+                request_rows.append(upload_request)
 
-        request_rows: list[UploadRequest] = []
-        async for upload_request in self.upload_request_querier.list_upload_requests(
-            requested_by=requested_by,
-            status=status,
-        ):
-            request_rows.append(upload_request)
-
-        photos_by_request_id = await self._list_request_photos_by_request_ids(
-            [upload_request.id for upload_request in request_rows]
-        )
-
-        requests: list[UploadRequestDetails] = []
-        for upload_request in request_rows:
-            requests.append(
-                UploadRequestDetails(
-                    request=upload_request,
-                    photos=photos_by_request_id.get(upload_request.id, []),
-                )
+            photos_by_request_id = await self._list_request_photos_by_request_ids(
+                [upload_request.id for upload_request in request_rows]
             )
-        return requests
+
+            requests: list[UploadRequestDetails] = []
+            for upload_request in request_rows:
+                requests.append(
+                    UploadRequestDetails(
+                        request=upload_request,
+                        photos=photos_by_request_id.get(upload_request.id, []),
+                    )
+                )
+            return requests
 
     async def list_request_photos(
         self,
@@ -381,11 +389,14 @@ class UploadRequestsService:
                 )
                 finalized_storage_keys.append(final_storage_key)
                 created_photo = await self.photo_querier.create_photo(
+                    arg=photo_queries.CreatePhotoParams(
                     event_id=existing.event_id,
                     storage_key=final_storage_key,
                     taken_at=staged_photo.taken_at,
                     day_number=staged_photo.day_number,
                     visibility=staged_photo.visibility,
+                    )
+
                 )
                 if created_photo is None:
                     raise AppException.internal_error("Failed to finalize staged photo")

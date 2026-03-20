@@ -6,7 +6,8 @@ from typing import Literal, Optional
 import uuid
 
 from app.core.exceptions import AppException, DBException, DBExceptionImpl
-from app.core.securite import hash_password
+from app.core.securite import  create_access_staff_token, hash_password, verify_password
+from app.schema.response.web.auth import WebAuthResponse
 from db.generated import stuff_user as staff_queries
 from db.generated.stuff_user import ListStaffUsersParams
 from db.generated.models import StaffUser, StaffRole
@@ -100,3 +101,36 @@ class StaffUserService:
         except Exception as exc:
             logger.error("Failed to list staff users: %s", exc)
             raise DBException.handle(exc)
+
+
+    async def admin_login(
+        self,
+        email: str,
+        password: str,
+    ) -> WebAuthResponse:
+        print("hello")
+        staff: StaffUser | None = await self.staff_user_querier.get_staff_user_by_email(email=email)
+        if  staff is None or not verify_password(password, staff.password):
+            logger.info(f'user:{staff.email}') # type: ignore
+            raise AppException.unauthorized("Invalid email or password")
+
+
+        access_token = create_access_staff_token(
+            staff_id=str(staff.id),
+            role=staff.role
+        )
+
+        return WebAuthResponse(
+            access_token=access_token,
+            user_id=staff.id,
+            role=staff.role,
+        )
+
+    async def Get_stuff_user(
+            self,
+            stuff_id:uuid.UUID
+    )->StaffUser:
+        stuff:StaffUser|None = await self.staff_user_querier.get_staff_user_by_id(id=stuff_id)
+        if stuff is None:
+            raise AppException.not_found("user not found ")
+        return stuff

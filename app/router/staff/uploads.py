@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, Query
 from fastapi.responses import Response
 
 from app.container import Container, get_container
-from app.deps.staff_auth import (
+from app.deps.cookie_auth import (
     get_current_staff_user,
     require_multi_team_lead_staff,
 )
@@ -21,7 +21,7 @@ from app.schema.response.staff.uploads import (
 from db.generated.models import StaffUser, UploadRequestStatus
 
 
-router = APIRouter(prefix="/uploads", tags=["staff-uploads"])
+router = APIRouter(prefix="/uploads")
 
 
 @router.post("/request", response_model=UploadRequestSchema)
@@ -48,7 +48,7 @@ async def list_upload_requests(
     requests = await container.upload_requests_service.list_requests(
         current_staff_user=current_staff_user,
         scope=scope,
-        status=status.value if status is not None else None,
+        status=status
     )
     return UploadRequestListResponse.from_models(
         [(item.request, item.photos) for item in requests]

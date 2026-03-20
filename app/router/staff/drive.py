@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, Query
 
 from app.container import Container, get_container
 from app.core.exceptions import AppException
-from app.deps.staff_auth import get_current_staff_user
+from app.deps.cookie_auth import get_current_staff_user
 from app.schema.response.staff.drive import (
     GoogleDriveCallbackResponse,
     GoogleDriveConnectResponse,

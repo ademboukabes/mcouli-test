@@ -48,7 +48,7 @@ LIMIT :p1 OFFSET :p2
 
 SET_USER_EMBEDDING = """-- name: set_user_embedding \\:one
 UPDATE users
-SET face_embedding = :p1,
+SET face_embedding = :p1\\:\\:vector,
     updated_at = NOW()
 WHERE id = :p2
 RETURNING id, email, hashed_password, created_at, updated_at, display_name, face_embedding, deleted_at
@@ -130,8 +130,8 @@ class AsyncQuerier:
                 deleted_at=row[7],
             )
 
-    async def set_user_embedding(self, *, face_embedding: Optional[Any], id: uuid.UUID) -> Optional[models.User]:
-        row = (await self._conn.execute(sqlalchemy.text(SET_USER_EMBEDDING), {"p1": face_embedding, "p2": id})).first()
+    async def set_user_embedding(self, *, dollar_1: Any, id: uuid.UUID) -> Optional[models.User]:
+        row = (await self._conn.execute(sqlalchemy.text(SET_USER_EMBEDDING), {"p1": dollar_1, "p2": id})).first()
         if row is None:
             return None
         return models.User(

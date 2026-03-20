@@ -4,7 +4,7 @@ from uuid import UUID
 from pydantic import BaseModel
 
 from db.generated.models import UploadRequest, UploadRequestPhoto
-
+# TODO:try to minimize this code its good but its too much u can do in simple wy
 class UploadRequestSchema(BaseModel):
     class UploadRequestPhotoSchema(BaseModel):
         id: UUID

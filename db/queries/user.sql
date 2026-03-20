@@ -32,7 +32,7 @@ LIMIT $1 OFFSET $2;
 
 -- name: SetUserEmbedding :one
 UPDATE users
-SET face_embedding = $1,
+SET face_embedding = $1::vector,
     updated_at = NOW()
 WHERE id = $2
 RETURNING *;

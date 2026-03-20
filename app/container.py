@@ -27,8 +27,7 @@ from db.generated import user as user_queries
 from db.generated import events as event_queries
 from db.generated import eventParticipant as participant_queries
 from db.generated import stuff_user as staff_queries
-from app.service.web.eventService import EventService
-from app.service.web.auth import WebAuthService
+from app.service.event import EventService
 
 class Container:
     def __init__(
@@ -105,9 +104,7 @@ class Container:
             p_querier=self.participant_querier,
         )
 
-        self.web_auth_service = WebAuthService(
-            staff_querier=self.staff_querier
-        )
+
 
 
 async def get_container(
