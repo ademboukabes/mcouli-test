@@ -5,6 +5,14 @@ class RedisKey(str, Enum):
     UserSession = "user_session"
     UserSessionByUser = "user_session:{user_id}"
 
+
+class NotificationChannel(str, Enum):
+    WEB = "web"
+    MOBILE = "mobile"
+
+
+NOTIFICATION_EVENT_SUBJECT = "notification.event"
+
 IMAGE_ALLOWED_TYPES = {
     "image/jpeg",
     "image/png",

@@ -26,6 +26,9 @@ dependencies = [
     "insightface>=0.7.3",
     "onnxruntime>=1.24.4",
     "python-multipart>=0.0.22",
+    "firebase-admin>=6.8.0",
+    "apns2>=0.7.1",
+    "pywebpush>=2.3.0",
 ]
 
 [tool.ruff]
