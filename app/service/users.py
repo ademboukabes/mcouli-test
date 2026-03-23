@@ -2,7 +2,6 @@ from datetime import datetime, timedelta, timezone
 import uuid
 
 from app.core import constant
-from fastapi import HTTPException
 from app.core.exceptions import AppException, DBException
 from app.core.securite import (
     # EmbeddingCrypto,
@@ -107,8 +106,6 @@ class AuthService:
         user_id: uuid.UUID = user.id
 
         session_key = constant.RedisKey.UserSessionByUser.value.format(user_id=user_id)
-        if await redis.exists(session_key):
-            raise AppException.forbidden("User already has an active session")
 
         session_count = await self.session_querier.count_user_sessions(user_id=user_id)
         if session_count and session_count >= AuthService.SESSION_LIMIT:
@@ -173,21 +170,11 @@ class AuthService:
         if session.expires_at < datetime.now(timezone.utc):
             raise AppException.unauthorized("Session expired")
 
-        session_key = constant.RedisKey.UserSessionByUser.value.format(
-            user_id=session.user_id
-        )
-        redis_session = await redis.get(session_key)
-
-        if not redis_session or redis_session != session_id:
-            raise AppException.unauthorized("Session invalidated")
-
         user = await self.user_querier.get_user_by_id(id=session.user_id)
         if not user:
             raise AppException.unauthorized("User not found")
         if user.blocked:
             raise AppException.forbidden("User is blocked")
-
-        await redis.expire(session_key, AuthService.REDIS_SESSION_TTL)
 
         new_access_token = create_acces_mobile_token(session_id)
         new_refresh_token = create_refresh_mobile_token(session_id)
@@ -248,13 +235,7 @@ class AuthService:
 
         if session.expires_at < datetime.now(timezone.utc):
             return False
-
-        session_key = constant.RedisKey.UserSessionByUser.value.format(
-            user_id=session.user_id
-        )
-        redis_session = await redis.get(session_key)
-
-        return redis_session == session_id
+        return True
 
     async def get_user_by_id(self, user_id: uuid.UUID) -> User | None:
         return await self.user_querier.get_user_by_id(id=user_id)
@@ -288,8 +269,6 @@ class AuthService:
                 return updated
 
             return user
-        except HTTPException:
-            raise
         except Exception as exc:
             logger.error("Failed to create user: %s", exc)
             raise DBException.handle(exc)
@@ -338,21 +317,21 @@ class AuthService:
             if not user:
                 raise AppException.internal_error("Failed to update user")
             return user
-        except HTTPException:
-            raise
         except Exception as exc:
             logger.error("Failed to update user: %s", exc)
             raise DBException.handle(exc)
 
-    async def delete_user(self, *, user_id: uuid.UUID) -> User:
+    async def delete_user(self, *, redis: RedisClient, user_id: uuid.UUID) -> User:
         try:
             existing = await self.user_querier.get_user_by_id(id=user_id)
             if not existing:
                 raise AppException.not_found("User not found")
             await self.user_querier.delete_user(id=user_id)
+            session_key = constant.RedisKey.UserSessionByUser.value.format(
+                user_id=user_id
+            )
+            await redis.delete(session_key)
             return existing
-        except HTTPException:
-            raise
         except Exception as exc:
             logger.error("Failed to delete user: %s", exc)
             raise DBException.handle(exc)
@@ -378,8 +357,6 @@ class AuthService:
             await redis.delete(session_key)
 
             return user
-        except HTTPException:
-            raise
         except Exception as exc:
             logger.error("Failed to block user: %s", exc)
             raise DBException.handle(exc)
@@ -390,8 +367,6 @@ class AuthService:
             if not user:
                 raise AppException.not_found("User not found")
             return user
-        except HTTPException:
-            raise
         except Exception as exc:
             logger.error("Failed to unblock user: %s", exc)
             raise DBException.handle(exc)
