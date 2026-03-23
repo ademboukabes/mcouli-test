@@ -13,7 +13,6 @@ from app.core.securite import (
     Get_expiry_time,
 )
 from app.core.config import settings
-from app.core.token_blacklist import blacklist_session, is_session_blacklisted
 from app.infra.redis import RedisClient
 
 from app.schema.request.mobile.auth import MobileAuthRequest
@@ -159,9 +158,6 @@ class AuthService:
         if not session_id:
             raise AppException.unauthorized("Invalid refresh token")
 
-        if await is_session_blacklisted(redis, session_id):
-            raise AppException.unauthorized("Token is blacklisted")
-
         session = await self.session_querier.get_session_by_id(id=uuid.UUID(session_id))
 
         if not session:
@@ -225,9 +221,6 @@ class AuthService:
         redis: RedisClient,
         session_id: str,
     ) -> bool:
-        if await is_session_blacklisted(redis, session_id):
-            return False
-
         session = await self.session_querier.get_session_by_id(id=uuid.UUID(session_id))
 
         if not session:
@@ -341,15 +334,6 @@ class AuthService:
             user = await self.user_querier.set_user_blocked(blocked=True, id=user_id)
             if not user:
                 raise AppException.not_found("User not found")
-
-            async for session in self.session_querier.list_sessions_by_user(
-                user_id=user_id
-            ):
-                await blacklist_session(
-                    redis=redis,
-                    session_id=str(session.id),
-                    expires_at=session.expires_at,
-                )
 
             session_key = constant.RedisKey.UserSessionByUser.value.format(
                 user_id=user_id
