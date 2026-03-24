@@ -4,14 +4,11 @@ from enum import Enum
 class RedisKey(str, Enum):
     UserSession = "user_session"
     UserSessionByUser = "user_session:{user_id}"
-
-
-class NotificationChannel(str, Enum):
-    WEB = "web"
-    MOBILE = "mobile"
+    INVALID_TOKEN_SET_KEY=  "notifications:invalid_tokens"
 
 
 NOTIFICATION_EVENT_SUBJECT = "notification_event"
+AUDIT_EVENT_SUBJECT = "audit.event"
 
 
 class AuditEventType(str, Enum):
@@ -23,7 +20,6 @@ class AuditEventType(str, Enum):
     UPLOAD_REQUEST_REJECTED = "upload_request.rejected"
 
 
-AUDIT_EVENT_SUBJECT = "audit.event"
 
 IMAGE_ALLOWED_TYPES = {
     "image/jpeg",

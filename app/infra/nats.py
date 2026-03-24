@@ -50,15 +50,16 @@ class NatsClient:
 
 
     @staticmethod
-    async def publish(subject: NatsSubjects, message: bytes) -> None:
+    async def publish(subject: NatsSubjects | str, message: bytes) -> None:
         if NatsClient._nc is None:
             await NatsClient.connect()
         nc = NatsClient._nc
         assert nc is not None
-        await nc.publish(subject.value, message)
+        subject_name = subject.value if isinstance(subject, NatsSubjects) else subject
+        await nc.publish(subject_name, message)
 
     @staticmethod
-    async def subscribe(subject: NatsSubjects, callback: Callable[[Any], Any]) -> None:
+    async def subscribe(subject: NatsSubjects | str, callback: Callable[[Any], Any]) -> None:
         if NatsClient._nc is None:
             await NatsClient.connect()
         nc = NatsClient._nc
@@ -66,7 +67,8 @@ class NatsClient:
         async def _wrapper(msg: Msg) -> None:
             await callback(msg.data)
 
-        await nc.subscribe(subject.value, cb=_wrapper) # type: ignore
+        subject_name = subject.value if isinstance(subject, NatsSubjects) else subject
+        await nc.subscribe(subject_name, cb=_wrapper) # type: ignore
 
 
     @staticmethod
@@ -75,7 +77,8 @@ class NatsClient:
             await NatsClient.connect()
         js = NatsClient._js
         assert js is not None
-        await js.publish(subject.value, message, stream=stream_name)
+        subject_name = subject.value if isinstance(subject, NatsSubjects) else subject # type: ignore
+        await js.publish(subject_name, message, stream=stream_name)
 
     @staticmethod
     async def js_subscribe(
@@ -93,8 +96,9 @@ class NatsClient:
             await msg.ack()
         js = NatsClient._js
         assert js is not None
+        subject_name = subject.value if isinstance(subject, NatsSubjects) else subject
         await js.subscribe(
-            subject=subject.value,
+            subject=subject_name,
             stream=stream_name,
             durable=durable_name,
             cb=_wrapper,

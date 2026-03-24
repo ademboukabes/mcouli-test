@@ -1,30 +1,26 @@
 from __future__ import annotations
 
-from typing import Optional
+from typing import Sequence
 
-from pydantic import  Field
+from pydantic import Field
 from pydantic_settings import BaseSettings
+from app.schema.notification import NotificationPriority, PRIORITY_ORDER
 
 
 class NotificationWorkerSettings(BaseSettings):
-
-    apn_certificate_path: str = Field(
-        "/path/to/certificate.pem"
-    )
-    apn_use_sandbox: bool = Field(True)
-    apn_use_alternative_port: bool = Field(
-        False
-    )
-    apn_topic: Optional[str] = Field(
-        None
-    )
-    webpush_vapid_private_key: Optional[str] = Field(None)
-    webpush_vapid_claims_subject: str = Field(
-        "mailto:alerts@example.com"
-    )
+    subject_prefix: str = Field("notifications.delivery")
+    queue_group: str | None = Field(None)
+    REDIS_HOST:str
+    REDIS_PORT:int
+    REDIS_PASSWORD:str
 
     class Config:
-        env_prefix = "NOTIFICATION_"
+        env_prefix = "NOTIFICATIONS_"
 
+    def subject_for(self, priority: NotificationPriority) -> str:
+        return f"{self.subject_prefix}.{priority.value}"
 
-settings = NotificationWorkerSettings() # type: ignore
+    def priority_subjects(self) -> Sequence[str]:
+        return [self.subject_for(priority) for priority in PRIORITY_ORDER]
+
+NotifSettings = NotificationWorkerSettings() # type: ignore

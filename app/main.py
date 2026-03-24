@@ -7,10 +7,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 
 from app.core.config import settings
+from app.infra.firebase import init_firebase_app
 from app.infra.minio import init_minio_client
 from app.infra.nats import NatsClient
 from app.infra.redis import RedisClient
 from app.router.mobile import router as mobile_router
+from app.router.notifications import router as notifications_router
 from app.router.staff import router as staff_router
 from app.router.web import router as web_router
 from app.deps.ai_deps import get_face_embedding_service
@@ -73,6 +75,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         password=settings.REDIS_PASSWORD,
     )
 
+    init_firebase_app()
+
     await NatsClient.connect()
     get_face_embedding_service()
 
@@ -114,3 +118,4 @@ def health_check() -> dict[str, str]:
 app.include_router(mobile_router)
 app.include_router(staff_router)
 app.include_router(web_router)
+app.include_router(notifications_router)

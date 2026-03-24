@@ -1,110 +1,171 @@
+from __future__ import annotations
+
 import asyncio
-import json
-from typing import Any
-import sqlalchemy.ext.asyncio
-from app.core.constant import NOTIFICATION_EVENT_SUBJECT, NotificationChannel
+from functools import partial
+from typing import Sequence
+
+from app.core.config import settings
 from app.core.logger import logger
-from app.infra.database import engine
-from app.infra.nats import NatsClient, NatsSubjects
-from app.service.device import DeviceService
-from db.generated import devices as device_queries
-from app.worker.notification.providers.apn import send_apn_notification
-from app.worker.notification.providers.fcm import     send_fcm_notification
-from app.worker.notification.providers.webpush import     send_web_push_notification
-from app.worker.notification.schema.notification import NotificationEventPayload
+from app.infra.firebase import (
+    NotificationDeliveryError,
+    init_firebase_app,
+    send_notification,
+)
+from app.infra.invalid_tokens import InvalidTokenStore
+from app.infra.notification_queue import NotificationQueue, NotificationQueueEntry
+from app.infra.redis import RedisClient
+from app.infra.nats import NatsClient
+from app.worker.notification.settings import NotifSettings, NotificationWorkerSettings
 
 
-async def init_push_integrations() -> None:
-    logger.info("Notification worker ready to deliver pushes")
+MAX_SEND_ATTEMPTS = 5
+RETRY_DELAY_SECONDS = 2
 
 
-class NotificationDeliveryWorker:
-    def __init__(self) -> None:
-        self._conn: sqlalchemy.ext.asyncio.AsyncConnection | None = None
-        self._device_service: DeviceService | None = None
-
-    async def start(self) -> None:
-        if self._conn is not None:
-            return
-        self._conn = await engine.connect()
-        self._device_service = DeviceService()
-        self._device_service.init(device_querier=device_queries.AsyncQuerier(self._conn))
-
-    async def stop(self) -> None:
-        if self._conn is not None:
-            await self._conn.close()
-            self._conn = None
-            self._device_service = None
-
-    async def deliver(self, payload: NotificationEventPayload) -> None:
-        if payload.channel == NotificationChannel.MOBILE:
-            await self._deliver_to_mobile(payload)
-            return
-        if payload.channel == NotificationChannel.WEB:
-            await send_web_push_notification(payload)
-            return
-        logger.warning("Unhandled notification channel %s", payload.channel)
-
-    async def _deliver_to_mobile(self, payload: NotificationEventPayload) -> None:
-        if self._device_service is None:
-            logger.warning("Device service unavailable for mobile delivery")
-            return
-        devices, _ = await self._device_service.get_all_devices(user_id=payload.user_id)
-        if not devices:
-            logger.debug("No devices registered for user %s", payload.user_id)
-            return
-        for device in devices:
-            device_type = (device.device_type or "").lower()
-            if device_type == "ios":
-                await send_apn_notification(payload)
-            else:
-                await send_fcm_notification(payload)
+async def _process_loop(
+    queue: NotificationQueue,
+    invalid_tokens: InvalidTokenStore,
+    pending: asyncio.PriorityQueue[tuple[int, NotificationQueueEntry]],
+) -> None:
+    while True:
+        try:
+            _, entry = await pending.get()
+            await _process_entry(entry, queue, invalid_tokens)
+        except asyncio.CancelledError:
+            break
+        except Exception:
+            logger.exception("Notification worker encountered unexpected error")
+            await asyncio.sleep(RETRY_DELAY_SECONDS)
 
 
-def _parse_payload(raw_data: bytes) -> dict[str, Any] | None:
+def _parse_entry(raw_payload: bytes | str) -> NotificationQueueEntry | None:
+    if isinstance(raw_payload, bytes):
+        raw_payload = raw_payload.decode("utf-8")
     try:
-        parsed = json.loads(raw_data.decode("utf-8"))
-        if not isinstance(parsed, dict):
-            logger.warning("Notification payload must be an object, got %s", type(parsed))
-            return None
-        return parsed
-    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
-        logger.error("Cannot parse notification payload: %s", exc)
+        return NotificationQueueEntry.model_validate_json(raw_payload)
+    except Exception:
+        logger.exception("Failed to deserialize notification entry")
         return None
 
 
-async def _handle_event(worker: NotificationDeliveryWorker, raw_data: Any) -> None:
-    parsed = _parse_payload(raw_data)
-    if parsed is None:
+async def _enqueue_from_nats(
+    raw_payload: bytes | str,
+    queue: NotificationQueue,
+    pending: asyncio.PriorityQueue[tuple[int, NotificationQueueEntry]],
+) -> None:
+    entry = _parse_entry(raw_payload)
+    if entry is None:
         return
-    payload = NotificationEventPayload.from_mapping(parsed)
-    if payload is None:
-        return
+    priority = entry.notification.priority
+    index = queue.priority_index(priority)
+    await pending.put((index, entry))
+
+
+async def _subscribe(
+    queue: NotificationQueue,
+    pending: asyncio.PriorityQueue[tuple[int, NotificationQueueEntry]],
+) -> None:
+    subjects = queue.priority_subjects()
+    for subject in subjects:
+        handler = partial(_enqueue_from_nats, queue=queue, pending=pending)
+        await NatsClient.subscribe(subject, handler)
+
+
+async def _process_entry(
+    entry: NotificationQueueEntry,
+    queue: NotificationQueue,
+    invalid_tokens: InvalidTokenStore,
+) -> None:
     try:
-        await worker.deliver(payload)
+        await asyncio.to_thread(send_notification, entry.notification)
+    except NotificationDeliveryError as exc:
+        await _handle_partial_failure(entry, invalid_tokens, queue, exc)
     except Exception:
-        logger.exception("Failed to deliver payload for %s", parsed.get("user_id"))
+        logger.exception("Failed to deliver notification, will retry")
+        await _retry(entry, queue)
 
 
-async def listen_nats_event(worker: NotificationDeliveryWorker) -> None:
-    await NatsClient.subscribe(
-        NatsSubjects.NOTIFICATION_EVENT,
-        lambda data: _handle_event(worker, data),
+async def _handle_partial_failure(
+    entry: NotificationQueueEntry,
+    invalid_tokens: InvalidTokenStore,
+    queue: NotificationQueue,
+    error: NotificationDeliveryError,
+) -> None:
+    if error.invalid_tokens:
+        await invalid_tokens.mark_invalid(error.invalid_tokens)
+        logger.warning("Detected %d invalid tokens", len(error.invalid_tokens))
+    if error.failed_tokens:
+        await _retry(entry, queue, tokens=error.failed_tokens)
+
+
+async def _retry(
+    entry: NotificationQueueEntry,
+    queue: NotificationQueue,
+    tokens: Sequence[str] | None = None,
+) -> None:
+    attempts = entry.attempts + 1
+    if attempts >= MAX_SEND_ATTEMPTS:
+        logger.warning(
+            "Dropping notification after %d attempts (tokens=%d)",
+            attempts,
+            len(tokens or entry.notification.tokens),
+        )
+        return
+    notification = entry.notification
+    if tokens is not None:
+        notification = entry.notification.model_copy(update={"tokens": list(tokens)})
+        if not notification.tokens:
+            return
+    await asyncio.sleep(RETRY_DELAY_SECONDS)
+    await queue.enqueue(notification, attempts=attempts)
+    logger.info("Requeued notification attempt=%d", attempts)
+
+
+async def run_worker(queue: NotificationQueue, invalid_tokens: InvalidTokenStore) -> None:
+    logger.info("Notification worker started")
+    pending: asyncio.PriorityQueue[tuple[int, NotificationQueueEntry]] = (
+        asyncio.PriorityQueue()
     )
-    logger.info("Listening for notification events on %s", NOTIFICATION_EVENT_SUBJECT)
+    await _subscribe(queue, pending)
+    try:
+        await _process_loop(queue, invalid_tokens, pending)
+    finally:
+        logger.info("Notification worker shutting down")
+
+
+def _setup_notification_queue() -> NotificationQueue:
+    return NotificationQueue(settings=NotifSettings)
+
+
+def _setup_redis() -> RedisClient:
+    return RedisClient(
+        host=NotifSettings.REDIS_HOST,
+        port=NotifSettings.REDIS_PORT,
+        password=NotifSettings.REDIS_PASSWORD,
+    )
+
+
+def _setup_invalid_token_store(redis_client: RedisClient) -> InvalidTokenStore:
+    return InvalidTokenStore(redis_client.client)
+
+
+async def _initialize_infrastructure() -> tuple[NotificationQueue, InvalidTokenStore]:
+    init_firebase_app()
+    await NatsClient.connect()
+    redis_client = _setup_redis()
+    queue = _setup_notification_queue()
+    invalid_tokens = _setup_invalid_token_store(redis_client)
+    return queue, invalid_tokens
 
 
 async def main() -> None:
-    await init_push_integrations()
-    worker = NotificationDeliveryWorker()
-    await worker.start()
-    await NatsClient.connect()
+    queue, invalid_tokens = await _initialize_infrastructure()
     try:
-        await listen_nats_event(worker)
-        await asyncio.Event().wait()
+        await run_worker(queue, invalid_tokens)
+    except asyncio.CancelledError:
+        logger.info("Notification worker cancelled")
     finally:
-        await worker.stop()
-        await NatsClient.close()
+        logger.info("Notification worker stopped")
 
 
 if __name__ == "__main__":
