@@ -16,3 +16,11 @@ class MobileAuthRequest(BaseModel):
 class RefreshTokenRequest(BaseModel):
     refresh_token: str
 
+
+class UpdateDeviceTokenRequest(BaseModel):
+    device_id: UUID
+    push_token: str
+
+
+class InactivateDeviceRequest(BaseModel):
+    device_id: UUID

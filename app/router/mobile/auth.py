@@ -7,7 +7,12 @@ from app.container import get_container, Container
 from app.core.exceptions import AppException
 from app.deps.token_auth import MobileUserSchema, get_current_mobile_user
 
-from app.schema.request.mobile.auth import MobileAuthRequest, RefreshTokenRequest
+from app.schema.request.mobile.auth import (
+    MobileAuthRequest,
+    RefreshTokenRequest,
+    UpdateDeviceTokenRequest,
+    InactivateDeviceRequest,
+)
 from app.schema.response.mobile.auth import MeResponse, DeviceSchema, MobileAuthResponse, SessionSchema, UserSchema
 
 router = APIRouter(prefix="/auth")
@@ -56,6 +61,37 @@ async def revoke_device(
         user_id=current_user.user_id,
     )
     return {"message": "Device revoked successfully"}
+
+
+@router.post("/devices/token")
+async def update_device_token(
+    req: UpdateDeviceTokenRequest,
+    container: Container = Depends(get_container),
+    current_user: MobileUserSchema = Depends(get_current_mobile_user),
+) -> dict[str, str]:
+
+    await container.device_service.update_device_push_token(
+        device_id=req.device_id,
+        user_id=current_user.user_id,
+        push_token=req.push_token,
+    )
+
+    return {"message": "Device token updated"}
+
+
+@router.post("/devices/inactivate")
+async def inactivate_device(
+    req: InactivateDeviceRequest,
+    container: Container = Depends(get_container),
+    current_user: MobileUserSchema = Depends(get_current_mobile_user),
+) -> dict[str, str]:
+
+    await container.device_service.inactivate_device(
+        device_id=req.device_id,
+        user_id=current_user.user_id,
+    )
+
+    return {"message": "Device marked as inactive"}
 
 
 @router.get("/me", response_model=MeResponse)

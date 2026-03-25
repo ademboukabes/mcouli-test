@@ -12,6 +12,14 @@ import sqlalchemy.ext.asyncio
 from db.generated import models
 
 
+ACTIVATE_DEVICE = """-- name: activate_device \\:exec
+UPDATE user_devices
+SET is_active = TRUE
+WHERE id = :p1
+AND user_id = :p2
+"""
+
+
 COUNT__USER__DEVICES = """-- name: count__user__devices \\:one
 SELECT COUNT(*) 
 FROM user_devices
@@ -29,7 +37,7 @@ INSERT INTO user_devices (
 ) VALUES (
     COALESCE(:p1, uuid_generate_v4()), :p2, :p3, :p4, :p5
 )
-RETURNING id, user_id, device_name, device_type, totp_secret, is_2fa_enabled, last_active, created_at
+RETURNING id, user_id, device_name, device_type, push_token, totp_secret, is_active, is_invalid_token, is_2fa_enabled, last_active, created_at
 """
 
 
@@ -42,6 +50,14 @@ class CreateDeviceParams:
     totp_secret: Optional[str]
 
 
+DEACTIVATE_DEVICE = """-- name: deactivate_device \\:exec
+UPDATE user_devices
+SET is_active = FALSE
+WHERE id = :p1
+AND user_id = :p2
+"""
+
+
 ENABLE_DEVICE2_FA = """-- name: enable_device2_fa \\:exec
 UPDATE user_devices
 SET is_2fa_enabled = TRUE
@@ -52,16 +68,25 @@ AND is_2fa_enabled = FALSE
 
 
 GET_DEVICE__BY_ID = """-- name: get_device__by_id \\:one
-SELECT id, user_id, device_name, device_type, totp_secret, is_2fa_enabled, last_active, created_at from user_devices
+SELECT id, user_id, device_name, device_type, push_token, totp_secret, is_active, is_invalid_token, is_2fa_enabled, last_active, created_at from user_devices
 WHERE id =:p1
 """
 
 
 LIST_USER_DEVICES = """-- name: list_user_devices \\:many
-SELECT id, user_id, device_name, device_type, totp_secret, is_2fa_enabled, last_active, created_at
+SELECT id, user_id, device_name, device_type, push_token, totp_secret, is_active, is_invalid_token, is_2fa_enabled, last_active, created_at
 FROM user_devices
 WHERE user_id = :p1
 ORDER BY last_active DESC
+"""
+
+
+MARK_DEVICE_TOKEN_INVALID = """-- name: mark_device_token_invalid \\:exec
+UPDATE user_devices
+SET
+    is_invalid_token = TRUE,
+    is_active = FALSE
+WHERE push_token = :p1
 """
 
 
@@ -79,9 +104,24 @@ WHERE id = :p1
 """
 
 
+UPDATE_DEVICE_PUSH_TOKEN = """-- name: update_device_push_token \\:one
+UPDATE user_devices
+SET
+    push_token = :p2,
+    is_active = TRUE,
+    is_invalid_token = FALSE
+WHERE id = :p1
+AND user_id = :p3
+RETURNING id, user_id, device_name, device_type, push_token, totp_secret, is_active, is_invalid_token, is_2fa_enabled, last_active, created_at
+"""
+
+
 class AsyncQuerier:
     def __init__(self, conn: sqlalchemy.ext.asyncio.AsyncConnection):
         self._conn = conn
+
+    async def activate_device(self, *, id: uuid.UUID, user_id: uuid.UUID) -> None:
+        await self._conn.execute(sqlalchemy.text(ACTIVATE_DEVICE), {"p1": id, "p2": user_id})
 
     async def count__user__devices(self, *, user_id: uuid.UUID) -> Optional[int]:
         row = (await self._conn.execute(sqlalchemy.text(COUNT__USER__DEVICES), {"p1": user_id})).first()
@@ -104,11 +144,17 @@ class AsyncQuerier:
             user_id=row[1],
             device_name=row[2],
             device_type=row[3],
-            totp_secret=row[4],
-            is_2fa_enabled=row[5],
-            last_active=row[6],
-            created_at=row[7],
+            push_token=row[4],
+            totp_secret=row[5],
+            is_active=row[6],
+            is_invalid_token=row[7],
+            is_2fa_enabled=row[8],
+            last_active=row[9],
+            created_at=row[10],
         )
+
+    async def deactivate_device(self, *, id: uuid.UUID, user_id: uuid.UUID) -> None:
+        await self._conn.execute(sqlalchemy.text(DEACTIVATE_DEVICE), {"p1": id, "p2": user_id})
 
     async def enable_device2_fa(self, *, id: uuid.UUID, user_id: uuid.UUID) -> None:
         await self._conn.execute(sqlalchemy.text(ENABLE_DEVICE2_FA), {"p1": id, "p2": user_id})
@@ -122,10 +168,13 @@ class AsyncQuerier:
             user_id=row[1],
             device_name=row[2],
             device_type=row[3],
-            totp_secret=row[4],
-            is_2fa_enabled=row[5],
-            last_active=row[6],
-            created_at=row[7],
+            push_token=row[4],
+            totp_secret=row[5],
+            is_active=row[6],
+            is_invalid_token=row[7],
+            is_2fa_enabled=row[8],
+            last_active=row[9],
+            created_at=row[10],
         )
 
     async def list_user_devices(self, *, user_id: uuid.UUID) -> AsyncIterator[models.UserDevice]:
@@ -136,14 +185,38 @@ class AsyncQuerier:
                 user_id=row[1],
                 device_name=row[2],
                 device_type=row[3],
-                totp_secret=row[4],
-                is_2fa_enabled=row[5],
-                last_active=row[6],
-                created_at=row[7],
+                push_token=row[4],
+                totp_secret=row[5],
+                is_active=row[6],
+                is_invalid_token=row[7],
+                is_2fa_enabled=row[8],
+                last_active=row[9],
+                created_at=row[10],
             )
+
+    async def mark_device_token_invalid(self, *, push_token: Optional[str]) -> None:
+        await self._conn.execute(sqlalchemy.text(MARK_DEVICE_TOKEN_INVALID), {"p1": push_token})
 
     async def revoke_device(self, *, id: uuid.UUID, user_id: uuid.UUID) -> None:
         await self._conn.execute(sqlalchemy.text(REVOKE_DEVICE), {"p1": id, "p2": user_id})
 
     async def update_device_last_active(self, *, id: uuid.UUID) -> None:
         await self._conn.execute(sqlalchemy.text(UPDATE_DEVICE_LAST_ACTIVE), {"p1": id})
+
+    async def update_device_push_token(self, *, id: uuid.UUID, push_token: Optional[str], user_id: uuid.UUID) -> Optional[models.UserDevice]:
+        row = (await self._conn.execute(sqlalchemy.text(UPDATE_DEVICE_PUSH_TOKEN), {"p1": id, "p2": push_token, "p3": user_id})).first()
+        if row is None:
+            return None
+        return models.UserDevice(
+            id=row[0],
+            user_id=row[1],
+            device_name=row[2],
+            device_type=row[3],
+            push_token=row[4],
+            totp_secret=row[5],
+            is_active=row[6],
+            is_invalid_token=row[7],
+            is_2fa_enabled=row[8],
+            last_active=row[9],
+            created_at=row[10],
+        )

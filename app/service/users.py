@@ -89,20 +89,33 @@ class AuthService:
             days=settings.MOBILE_SESSION_DAYS
         )
 
-        device = await self.device_querier.create_device(
-            arg=device_queries.CreateDeviceParams(
-            column_1=device_id,
-            user_id=user_id,
-            device_name=req.device_name,
-            device_type=req.device_type,
-            totp_secret=None,
+        existing_device = await self.device_querier.get_device__by_id(id=device_id)
 
+        if existing_device:
+            if existing_device.user_id != user_id:
+                raise AppException.forbidden("Device already registered to another user")
+            if existing_device.is_invalid_token:
+                raise AppException.forbidden(
+                    "Device push token is invalid. Update the token before logging in."
+                )
+            if not existing_device.is_active:
+                await self.device_querier.activate_device(
+                    id=device_id,
+                    user_id=user_id,
+                )
+        else:
+            device = await self.device_querier.create_device(
+                arg=device_queries.CreateDeviceParams(
+                    column_1=device_id,
+                    user_id=user_id,
+                    device_name=req.device_name,
+                    device_type=req.device_type,
+                    totp_secret=None,
+                )
             )
 
-        )
-
-        if not device:
-            raise AppException.internal_error("Failed to create device")
+            if not device:
+                raise AppException.internal_error("Failed to create device")
 
         session = await self.session_querier.upsert_session(
             user_id=user_id,

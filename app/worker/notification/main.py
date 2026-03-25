@@ -3,32 +3,51 @@ from __future__ import annotations
 import asyncio
 from typing import Sequence
 
+from db.generated import devices as device_queries
+
 from app.core.logger import logger
 from app.worker.notification.firebase import (
     NotificationDeliveryError,
     init_firebase_app,
     send_notification,
 )
-from app.worker.notification.invalid_tokens import InvalidTokenStore
-from app.infra.notification_queue import NotificationQueue, NotificationQueueEntry
-from app.infra.redis import RedisClient
-from app.infra.nats import NatsClient
+from app.worker.notification.invalid_tokens import (
+    DeviceInvalidationStore,
+    InvalidTokenStore,
+)
+from app.worker.notification.notification_queue import NotificationQueue, NotificationQueueEntry
 from app.worker.notification.rate_limiter import RateLimiter
 from app.worker.notification.settings import NotifSetting
+from app.infra.database import engine
+from app.infra.redis import RedisClient
+from app.infra.nats import NatsClient
 
 
 async def process_entry(
     entry: NotificationQueueEntry,
     queue: NotificationQueue,
     invalid_tokens: InvalidTokenStore,
+    invalid_devices: DeviceInvalidationStore,
 ) -> None:
     try:
-        await asyncio.to_thread(send_notification, entry.notification)
+        valid_tokens = [
+        t for t in entry.notification.tokens
+        if not await invalid_tokens.is_invalid(t)]
+        
+        
+        if not valid_tokens:
+            logger.info("All tokens are invalid, skipping notification")
+            return
+        
+        notification = entry.notification.model_copy(update={"tokens": valid_tokens})
+        
+        
+        await asyncio.to_thread(send_notification, notification)
 
     except NotificationDeliveryError as e:
         if e.invalid_tokens:
             await invalid_tokens.mark_invalid(e.invalid_tokens)
-
+            await invalid_devices.mark_invalid(e.invalid_tokens)
         if e.failed_tokens:
             await retry(entry, queue, tokens=e.failed_tokens)
 
@@ -59,7 +78,7 @@ async def retry(
     delay = min(NotifSetting.BASE_RETRY_DELAY * (2 ** attempts), 60)
 
     await asyncio.sleep(delay)
-    await queue.enqueue(notification, attempts=attempts)
+    await queue.enqueue_notification(notification, attempts=attempts)
 
 
 
@@ -67,6 +86,7 @@ async def handle_message(
     raw_payload: bytes | str,
     queue: NotificationQueue,
     invalid_tokens: InvalidTokenStore,
+    invalid_devices: DeviceInvalidationStore,
 ) -> None:
     try:
         if isinstance(raw_payload, bytes):
@@ -78,13 +98,14 @@ async def handle_message(
         logger.exception("Invalid message payload")
         return
 
-    await process_entry(entry, queue, invalid_tokens)
+    await process_entry(entry, queue, invalid_tokens, invalid_devices)
 
 
 
 async def run_worker(
     queue: NotificationQueue,
     invalid_tokens: InvalidTokenStore,
+    invalid_devices: DeviceInvalidationStore,
 ) -> None:
     logger.info("Notification worker started")
 
@@ -94,7 +115,7 @@ async def run_worker(
     async def wrapped_handler(msg: bytes | str) -> None:
         async with semaphore:
             await rate_limiter.acquire()
-            await handle_message(msg, queue, invalid_tokens)
+            await handle_message(msg, queue, invalid_tokens, invalid_devices)
 
     for subject in queue.priority_subjects():
         await NatsClient.subscribe(subject, wrapped_handler)
@@ -121,12 +142,16 @@ async def main() -> None:
 
     queue = NotificationQueue(settings=NotifSetting)
     invalid_tokens = InvalidTokenStore(redis)
+    db_conn = await engine.connect()
+    device_querier = device_queries.AsyncQuerier(db_conn)
+    invalid_devices = DeviceInvalidationStore(device_querier)
 
     try:
-        await run_worker(queue, invalid_tokens)
+        await run_worker(queue, invalid_tokens, invalid_devices)
 
     finally:
         await redis.close()
+        await db_conn.close()
         logger.info("Worker shutdown")
 
 

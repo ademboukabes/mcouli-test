@@ -42,3 +42,32 @@ WHERE id =$1;
 SELECT COUNT(*) 
 FROM user_devices
 WHERE user_id = $1;
+
+-- name: UpdateDevicePushToken :one
+UPDATE user_devices
+SET
+    push_token = $2,
+    is_active = TRUE,
+    is_invalid_token = FALSE
+WHERE id = $1
+AND user_id = $3
+RETURNING *;
+
+-- name: ActivateDevice :exec
+UPDATE user_devices
+SET is_active = TRUE
+WHERE id = $1
+AND user_id = $2;
+
+-- name: DeactivateDevice :exec
+UPDATE user_devices
+SET is_active = FALSE
+WHERE id = $1
+AND user_id = $2;
+
+-- name: MarkDeviceTokenInvalid :exec
+UPDATE user_devices
+SET
+    is_invalid_token = TRUE,
+    is_active = FALSE
+WHERE push_token = $1;
