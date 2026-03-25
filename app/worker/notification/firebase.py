@@ -22,8 +22,6 @@ class _SendResponse:
 
 class _BatchResponse:
     responses: list[_SendResponse]
-    
-
 class NotificationDeliveryError(Exception):
     def __init__(
         self,

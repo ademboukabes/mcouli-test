@@ -44,7 +44,6 @@ class AuditDeliveryWorker:
         )
         logger.info("Persisted audit %s for %s", payload.event_type, payload.user_id)
 
-    
 
 def _parse_payload(raw_data: bytes) -> dict[str, Any] | None:
     try:

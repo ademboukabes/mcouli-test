@@ -9,5 +9,3 @@ class AuditEventMessage(BaseModel):
     user_id: UUID | None = None
     metadata: dict[str, Any] | None = None
     description: str | None = None
-
-        

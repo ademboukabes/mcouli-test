@@ -31,17 +31,16 @@ async def process_entry(
 ) -> None:
     try:
         valid_tokens = [
-        t for t in entry.notification.tokens
-        if not await invalid_tokens.is_invalid(t)]
-        
-        
+            t
+            for t in entry.notification.tokens
+            if not await invalid_tokens.is_invalid(t)
+        ]
+
         if not valid_tokens:
             logger.info("All tokens are invalid, skipping notification")
             return
-        
+
         notification = entry.notification.model_copy(update={"tokens": valid_tokens})
-        
-        
         await asyncio.to_thread(send_notification, notification)
 
     except NotificationDeliveryError as e:
