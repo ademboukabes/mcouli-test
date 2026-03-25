@@ -1,8 +1,10 @@
 from __future__ import annotations
 from typing import cast
 
-import firebase_admin # pyright: ignore[reportMissingTypeStubs]
-from firebase_admin import credentials, messaging  # pyright: ignore[reportMissingTypeStubs]
+# pyright: ignore[reportMissingTypeStubs]
+import firebase_admin  # type: ignore[import-untyped]
+# pyright: ignore[reportMissingTypeStubs]
+from firebase_admin import credentials, messaging  # type: ignore[import-untyped]
 
 from app.core.config import settings
 from app.core.logger import logger

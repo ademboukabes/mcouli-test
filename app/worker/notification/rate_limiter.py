@@ -6,7 +6,7 @@ class RateLimiter:
     def __init__(self, rate: int, per: float) -> None:
         self._rate = rate
         self._per = per
-        self._tokens = rate
+        self._tokens: float = float(rate)
         self._last = time.monotonic()
         self._lock = asyncio.Lock()
 
