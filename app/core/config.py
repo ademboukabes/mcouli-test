@@ -1,4 +1,5 @@
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic import field_validator
 
 
 class Settings(BaseSettings):
@@ -16,6 +17,8 @@ class Settings(BaseSettings):
     NATS_HOST: str
     NATS_PASSWORD: str
     NATS_USER: str
+    NATS_SINGLE_FACE_MATCH_STREAM: str = "single_face_matches"
+    NATS_SINGLE_FACE_MATCH_DURABLE: str = "single_face_match_worker"
 
 
     # MinIO
@@ -23,6 +26,8 @@ class Settings(BaseSettings):
     MINIO_ROOT_USER: str
     MINIO_ROOT_PASSWORD: str
     MINIO_HOST: str
+    MINIO_RETRY_ATTEMPTS: int = 3
+    MINIO_RETRY_BASE_SECONDS: float = 0.5
 
     # PostgreSQL
     POSTGRES_USER: str
@@ -44,6 +49,13 @@ class Settings(BaseSettings):
     encryption_key: str
     totp_issuer: str = "multAI"
 
+    # Face embedding model
+    FACE_EMBEDDING_MODEL_NAME: str = "buffalo_l"
+    FACE_EMBEDDING_PROVIDERS: str = "CPUExecutionProvider"
+    FACE_EMBEDDING_CTX_ID: int = -1
+    FACE_EMBEDDING_DET_WIDTH: int = 640
+    FACE_EMBEDDING_DET_HEIGHT: int = 640
+
     # Google Drive OAuth
     GOOGLE_CLIENT_ID: str = ""
     GOOGLE_CLIENT_SECRET: str = ""
@@ -55,9 +67,21 @@ class Settings(BaseSettings):
     FACE_ENCRYPTION_KEY: str
     FIREBASE_CREDENTIALS_PATH: str = "multiai-c9380-firebase-adminsdk-fbsvc-cb6e5ce41b.json"
 
-    class Config:
-        env_file = ".env"
-        extra = "ignore"
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        extra="ignore",
+    )
+
+    @field_validator("debug", mode="before")
+    @classmethod
+    def _parse_debug(cls, value):  # type: ignore[no-untyped-def]
+        if isinstance(value, str):
+            lowered = value.strip().lower()
+            if lowered in {"release", "prod", "production", "false", "0", "no"}:
+                return False
+            if lowered in {"true", "1", "yes"}:
+                return True
+        return value
 
 
 settings = Settings()  # type: ignore

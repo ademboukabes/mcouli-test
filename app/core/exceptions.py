@@ -75,6 +75,9 @@ class DBException(ABC):
     def handle(exc: Exception) -> HTTPException:
         logger.error("Database error: %s", exc)
 
+        if isinstance(exc, HTTPException):
+            return exc
+
         if isinstance(exc, IntegrityError):
             orig = getattr(exc, "orig", None)
             sqlstate = getattr(orig, "sqlstate", None)

@@ -2,7 +2,8 @@ from enum import Enum
 from typing import Any, Callable, Optional
 from nats.aio.client import Client as NATS
 from nats.js.client import JetStreamContext
-from nats.js.api import DeliverPolicy, AckPolicy
+from nats.js.api import DeliverPolicy, AckPolicy, StreamConfig
+from nats.js.errors import NotFoundError
 from nats.aio.msg import Msg
 from pydantic import BaseModel
 
@@ -28,6 +29,7 @@ class NatsSubjects(Enum):
     STAFF_UPLOAD_REQUEST_CREATED = "staff.upload_request.created"
     STAFF_UPLOAD_REQUEST_APPROVED = "staff.upload_request.approved"
     STAFF_UPLOAD_REQUEST_REJECTED = "staff.upload_request.rejected"
+    SINGLE_FACE_MATCH_REQUESTED = "photo_faces.single.requested"
 
 class NatsClient:
     _nc: Optional[NATS] = None
@@ -102,6 +104,8 @@ class NatsClient:
         if NatsClient._js is None:
             await NatsClient.connect()
 
+        await NatsClient.ensure_stream(stream_name=stream_name, subjects=[subject.value])
+
         async def _wrapper(msg: Msg) -> None:
             await callback(msg.data)
             await msg.ack()
@@ -116,3 +120,20 @@ class NatsClient:
             deliver_policy=DeliverPolicy.NEW,
             # ack_policy=ack_policy
         )
+
+    @staticmethod
+    async def ensure_stream(*, stream_name: str, subjects: list[str]) -> None:
+        if NatsClient._js is None:
+            await NatsClient.connect()
+        js = NatsClient._js
+        assert js is not None
+        try:
+            await js.stream_info(stream_name)
+        except NotFoundError:
+            await js.add_stream(
+                name=stream_name,
+                config=StreamConfig(
+                    name=stream_name,
+                    subjects=subjects,
+                ),
+            )

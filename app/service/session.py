@@ -22,6 +22,8 @@ class SessionService :
     def init(self, session: session_queries.AsyncQuerier, redis: RedisClient) -> None:
         self.session_querier = session
         self.redis = redis
+        SessionService.session_querier = session
+        SessionService.redis = redis
 
     @staticmethod
     async def create_session(user_id:uuid.UUID,device_id:uuid.UUID)->UpsertSessionRow:

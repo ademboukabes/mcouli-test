@@ -17,6 +17,7 @@ from app.service.upload_requests import UploadRequestsService
 from app.service.users import AuthService
 from app.service.user_notification import UserNotificationService
 from db.generated import devices as device_queries
+from db.generated import photo_faces as photo_face_queries
 from db.generated import photos as photo_queries
 from db.generated import session as session_queries
 from db.generated import staff_drive_connections as staff_drive_queries
@@ -54,6 +55,7 @@ class Container:
         self.upload_request_querier = upload_request_queries.AsyncQuerier(conn)
         self.upload_request_photo_querier = upload_request_photo_queries.AsyncQuerier(conn)
         self.photo_querier = photo_queries.AsyncQuerier(conn)
+        self.photo_face_querier = photo_face_queries.AsyncQuerier(conn)
         self.staff_notification_querier = staff_notification_queries.AsyncQuerier(conn)
         self.notification_querier = notification_queries.AsyncQuerier(conn)
         self.audit_querier = audit_queries.AsyncQuerier(conn)
@@ -115,7 +117,6 @@ class Container:
         )
 
         self.staff_user_service = StaffUserService()
-
         self.staff_user_service.init(
             staff_user_querier=self.staff_user_querier,)
 

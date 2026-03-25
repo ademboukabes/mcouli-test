@@ -23,14 +23,25 @@ class AuditEventType(str, Enum):
     UPLOAD_REQUEST_REJECTED = "upload_request.rejected"
 
 
-    BlacklistedSession = "blacklist:session:{session_id}"
-
 IMAGE_ALLOWED_TYPES = {
     "image/jpeg",
     "image/png",
     "image/heic",
     "image/heif"
 }
+
+DEFAULT_CONTENT_TYPE = "application/octet-stream"
+DRIVE_ALLOWED_HOSTS = {"drive.google.com", "docs.google.com"}
+MINIO_URL_PREFIX = "minio://"
+
+IMAGES_BUCKET_NAME = "images"
+DOCUMENTS_BUCKET_NAME = "documents"
+WA_SIM_BUCKET_NAME = "wa-sim"
+
+GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
+GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"
+GOOGLE_USERINFO_URL = "https://www.googleapis.com/oauth2/v2/userinfo"
+GOOGLE_DRIVE_FILES_URL = "https://www.googleapis.com/drive/v3/files/{file_id}"
 
 MAX_IMAGE_SIZE = 5 * 1024 * 1024
 MIN_ENROLL_IMAGES = 3

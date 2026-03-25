@@ -223,6 +223,7 @@ class User:
     face_embedding: Optional[Any]
     blocked: bool
     deleted_at: Optional[datetime.datetime]
+    blocked: bool
 
 
 @dataclasses.dataclass()

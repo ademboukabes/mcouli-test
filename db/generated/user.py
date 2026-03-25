@@ -88,8 +88,14 @@ class AsyncQuerier:
     def __init__(self, conn: sqlalchemy.ext.asyncio.AsyncConnection):
         self._conn = conn
 
-    async def create_user(self, *, email: str, hashed_password: Optional[str]) -> Optional[models.User]:
-        row = (await self._conn.execute(sqlalchemy.text(CREATE_USER), {"p1": email, "p2": hashed_password})).first()
+    async def create_user(
+        self, *, email: str, hashed_password: Optional[str]
+    ) -> Optional[models.User]:
+        row = (
+            await self._conn.execute(
+                sqlalchemy.text(CREATE_USER), {"p1": email, "p2": hashed_password}
+            )
+        ).first()
         if row is None:
             return None
         return models.User(
@@ -108,7 +114,11 @@ class AsyncQuerier:
         await self._conn.execute(sqlalchemy.text(DELETE_USER), {"p1": id})
 
     async def get_user_by_email(self, *, email: str) -> Optional[models.User]:
-        row = (await self._conn.execute(sqlalchemy.text(GET_USER_BY_EMAIL), {"p1": email})).first()
+        row = (
+            await self._conn.execute(
+                sqlalchemy.text(GET_USER_BY_EMAIL), {"p1": email}
+            )
+        ).first()
         if row is None:
             return None
         return models.User(
@@ -124,7 +134,9 @@ class AsyncQuerier:
         )
 
     async def get_user_by_id(self, *, id: uuid.UUID) -> Optional[models.User]:
-        row = (await self._conn.execute(sqlalchemy.text(GET_USER_BY_ID), {"p1": id})).first()
+        row = (
+            await self._conn.execute(sqlalchemy.text(GET_USER_BY_ID), {"p1": id})
+        ).first()
         if row is None:
             return None
         return models.User(
@@ -139,8 +151,12 @@ class AsyncQuerier:
             deleted_at=row[8],
         )
 
-    async def list_users(self, *, limit: int, offset: int) -> AsyncIterator[models.User]:
-        result = await self._conn.stream(sqlalchemy.text(LIST_USERS), {"p1": limit, "p2": offset})
+    async def list_users(
+        self, *, limit: int, offset: int
+    ) -> AsyncIterator[models.User]:
+        result = await self._conn.stream(
+            sqlalchemy.text(LIST_USERS), {"p1": limit, "p2": offset}
+        )
         async for row in result:
             yield models.User(
                 id=row[0],
@@ -155,7 +171,11 @@ class AsyncQuerier:
             )
 
     async def set_user_blocked(self, *, blocked: bool, id: uuid.UUID) -> Optional[models.User]:
-        row = (await self._conn.execute(sqlalchemy.text(SET_USER_BLOCKED), {"p1": blocked, "p2": id})).first()
+        row = (
+            await self._conn.execute(
+                sqlalchemy.text(SET_USER_BLOCKED), {"p1": blocked, "p2": id}
+            )
+        ).first()
         if row is None:
             return None
         return models.User(
@@ -171,7 +191,11 @@ class AsyncQuerier:
         )
 
     async def set_user_embedding(self, *, dollar_1: Any, id: uuid.UUID) -> Optional[models.User]:
-        row = (await self._conn.execute(sqlalchemy.text(SET_USER_EMBEDDING), {"p1": dollar_1, "p2": id})).first()
+        row = (
+            await self._conn.execute(
+                sqlalchemy.text(SET_USER_EMBEDDING), {"p1": dollar_1, "p2": id}
+            )
+        ).first()
         if row is None:
             return None
         return models.User(
@@ -186,13 +210,25 @@ class AsyncQuerier:
             deleted_at=row[8],
         )
 
-    async def update_user(self, *, email: str, display_name: Optional[str], blocked: bool, id: uuid.UUID) -> Optional[models.User]:
-        row = (await self._conn.execute(sqlalchemy.text(UPDATE_USER), {
-            "p1": email,
-            "p2": display_name,
-            "p3": blocked,
-            "p4": id,
-        })).first()
+    async def update_user(
+        self,
+        *,
+        email: str,
+        display_name: Optional[str],
+        blocked: bool,
+        id: uuid.UUID,
+    ) -> Optional[models.User]:
+        row = (
+            await self._conn.execute(
+                sqlalchemy.text(UPDATE_USER),
+                {
+                    "p1": email,
+                    "p2": display_name,
+                    "p3": blocked,
+                    "p4": id,
+                },
+            )
+        ).first()
         if row is None:
             return None
         return models.User(
@@ -207,8 +243,15 @@ class AsyncQuerier:
             deleted_at=row[8],
         )
 
-    async def update_user_password(self, *, hashed_password: Optional[str], id: uuid.UUID) -> Optional[models.User]:
-        row = (await self._conn.execute(sqlalchemy.text(UPDATE_USER_PASSWORD), {"p1": hashed_password, "p2": id})).first()
+    async def update_user_password(
+        self, *, hashed_password: Optional[str], id: uuid.UUID
+    ) -> Optional[models.User]:
+        row = (
+            await self._conn.execute(
+                sqlalchemy.text(UPDATE_USER_PASSWORD),
+                {"p1": hashed_password, "p2": id},
+            )
+        ).first()
         if row is None:
             return None
         return models.User(

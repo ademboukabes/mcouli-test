@@ -5,7 +5,13 @@ from fastapi import APIRouter, File, UploadFile,  Depends
 from app.container import Container, get_container
 from app.deps.token_auth import MobileUserSchema, get_current_mobile_user
 from app.core.exceptions import AppException
-from app.core.constant import IMAGE_ALLOWED_TYPES, MAX_ENROLL_IMAGES, MAX_IMAGE_SIZE, MIN_ENROLL_IMAGES
+from app.core.constant import (
+    DEFAULT_CONTENT_TYPE,
+    IMAGE_ALLOWED_TYPES,
+    MAX_ENROLL_IMAGES,
+    MAX_IMAGE_SIZE,
+    MIN_ENROLL_IMAGES,
+)
 from app.service.face_embedding import FaceImagePayload
 from db.generated.models import User
 
@@ -57,7 +63,7 @@ async def enroll_face(
 
         payload: FaceImagePayload = FaceImagePayload(
             filename=file.filename or "unknown",
-            content_type=file.content_type or "application/octet-stream",
+            content_type=file.content_type or DEFAULT_CONTENT_TYPE,
             bytes=contents,
         )
 

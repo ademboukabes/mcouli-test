@@ -1,10 +1,8 @@
 from datetime import datetime, timedelta, timezone
 import uuid
 
-from app.core import constant
 from app.core.exceptions import AppException, DBException
 from app.core.securite import (
-    # EmbeddingCrypto,
     hash_password,
     verify_password,
     create_acces_mobile_token,
@@ -12,6 +10,7 @@ from app.core.securite import (
     decode_refresh_mobile_token,
     Get_expiry_time,
 )
+from app.core import constant
 from app.core.config import settings
 from app.infra.redis import RedisClient
 
@@ -143,7 +142,7 @@ class AuthService:
         return MobileAuthResponse(
             access_token=access_token,
             refresh_token=refresh_token,
-        session_id=str(session.id),
+            session_id=str(session.id),
             expires_in=expiry,
         )
 
@@ -197,16 +196,13 @@ class AuthService:
         self,
         user_id: uuid.UUID,
         image_payloads: list[FaceImagePayload],
-    ) ->User:
+    ) -> User:
         logger.info("Generating face embeddings for user %s", user_id)
 
         averaging = await self.face_embedding_service.compute_average_embedding(
             image_payloads
         )
-        # pgvector accepts input like: "[0.1, 0.2, ...]". Convert list to a vector literal.
         vector_literal = "[" + ", ".join(str(x) for x in averaging) + "]"
-        #TODO:we encrypt it here we wont store it as plaintext in the db  but the porblmem is were lossing the search as trade of in the vestor so i will let it like this until i found somthing tht fit
-        # encrypted_embedding = EmbeddingCrypto.encrypt(averaging)
         user = await self.user_querier.set_user_embedding(
             dollar_1=vector_literal,
             id=user_id,
