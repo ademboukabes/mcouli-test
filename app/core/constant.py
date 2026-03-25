@@ -9,6 +9,9 @@ class RedisKey(str, Enum):
 
 NOTIFICATION_EVENT_SUBJECT = "notification_event"
 AUDIT_EVENT_SUBJECT = "audit.event"
+FINAL_BUCKET_CLEANUP_SUBJECT = "ai.final_bucket.completed"
+FINAL_BUCKET_CLEANUP_STREAM = "ai-final-bucket-cleanup"
+FINAL_BUCKET_CLEANUP_DURABLE_NAME = "ai-final-bucket-cleaner"
 
 
 class AuditEventType(str, Enum):
