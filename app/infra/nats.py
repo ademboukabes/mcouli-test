@@ -29,13 +29,19 @@ class NatsClient:
     _js: Optional[JetStreamContext] = None
 
     @staticmethod
-    async def connect() -> None:
+    async def connect(
+        *,
+        host: str | None = None,
+        port: int | None = None,
+        user: str | None = None,
+        password: str | None = None,
+    ) -> None:
         if NatsClient._nc is None:
             nc = NATS()
             await nc.connect(
-                servers=[f"nats://{settings.NATS_HOST}:{settings.NATS_PORT}"],
-                user=settings.NATS_USER,
-                password=settings.NATS_PASSWORD,
+                servers=[f"nats://{host or settings.NATS_HOST}:{port or settings.NATS_PORT}"],
+                user=user or settings.NATS_USER,
+                password=password or settings.NATS_PASSWORD,
             )
             NatsClient._nc = nc
             NatsClient._js = nc.jetstream() # type: ignore
@@ -96,7 +102,7 @@ class NatsClient:
             await msg.ack()
         js = NatsClient._js
         assert js is not None
-        subject_name = subject.value if isinstance(subject, NatsSubjects) else subject
+        subject_name = subject.value
         await js.subscribe(
             subject=subject_name,
             stream=stream_name,

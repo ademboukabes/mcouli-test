@@ -3,11 +3,10 @@ from fastapi import APIRouter, status
 from app.core.logger import logger
 from app.infra.notification_queue import NotificationQueue
 from app.schema.notification import UnifiedNotification
-from app.worker.notification.settings import NotificationWorkerSettings
+from app.worker.notification.settings import NotifSetting
 
 
-settings = NotificationWorkerSettings()
-queue = NotificationQueue(settings=settings)
+queue = NotificationQueue(settings=NotifSetting)
 
 router = APIRouter(prefix="/notifications", tags=["notifications"])
 

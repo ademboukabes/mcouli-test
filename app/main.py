@@ -7,7 +7,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 
 from app.core.config import settings
-from app.infra.firebase import init_firebase_app
 from app.infra.minio import init_minio_client
 from app.infra.nats import NatsClient
 from app.infra.redis import RedisClient
@@ -74,8 +73,6 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         port=settings.REDIS_PORT,
         password=settings.REDIS_PASSWORD,
     )
-
-    init_firebase_app()
 
     await NatsClient.connect()
     get_face_embedding_service()

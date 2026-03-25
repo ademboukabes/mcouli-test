@@ -1,4 +1,4 @@
-from typing import Any
+from typing import cast, ClassVar
 
 from redis.asyncio import Redis
 
@@ -6,19 +6,32 @@ from app.core.constant import RedisKey
 
 
 class RedisClient:
-    client: Redis
-    _instance = None
-
-    def __new__(cls, *args: Any, **kwargs: Any) -> "RedisClient":
-        if cls._instance is None:
-            cls._instance = super().__new__(cls)
-        return cls._instance
+    _client: Redis
+    _instance: ClassVar["RedisClient | None"] = None
 
     def __init__(self, host: str, port: int, password: str) -> None:
-        if not hasattr(self, "client"):
-            self.client = Redis.from_url( # type: ignore
-                f"redis://{host}:{port}", password=password, decode_responses=True
-            )
+        self._client = Redis.from_url( # type: ignore
+            f"redis://{host}:{port}",
+            password=password,
+            decode_responses=True,
+        )
+
+
+    @classmethod
+    def init(cls, host: str, port: int, password: str) -> "RedisClient":
+        if cls._instance is not None:
+            raise RuntimeError("RedisClient already initialized")
+
+        cls._instance = cls(host, port, password)
+        return cls._instance
+
+    @classmethod
+    def get_instance(cls) -> "RedisClient":
+        if cls._instance is None:
+            raise RuntimeError("RedisClient not initialized")
+
+        return cls._instance
+
 
     async def set(
         self,
@@ -27,25 +40,37 @@ class RedisClient:
         expire: int | None = None,
         nx: bool = False,
     ) -> bool:
-        return await self.client.set(key, value, ex=expire, nx=nx)
+        result = await self._client.set(key, value, ex=expire, nx=nx)
+        return bool(result)
 
     async def get(self, key: RedisKey | str) -> str | None:
-        return await self.client.get(key)
+        return await self._client.get(key)
 
     async def delete(self, key: RedisKey | str) -> int:
-        return await self.client.delete(key)
+        result = await self._client.delete(key)
+        return int(cast(int, result))
 
     async def exists(self, key: RedisKey | str) -> bool:
-        return await self.client.exists(key) > 0
+        result = await self._client.exists(key)
+        return int(cast(int, result)) > 0
 
     async def expire(self, key: RedisKey | str, seconds: int) -> bool:
-        return await self.client.expire(key, seconds)
+        result = await self._client.expire(key, seconds)
+        return int(cast(int, result)) == 1
 
-    @classmethod
-    def get_instance(cls) -> "RedisClient":
-        if cls._instance is None:
-            raise RuntimeError("RedisClient not initialized")
-        return cls._instance
+
+    async def sadd(self, key: RedisKey | str, *values: str) -> int:
+        result =  self._client.sadd(key, *values)
+        return int(cast(int, result))
+
+    async def sismember(self, key: RedisKey | str, value: str) -> bool:
+        result =  self._client.sismember(key, value)
+        return int(cast(int, result)) == 1
+
+    async def srem(self, key: RedisKey | str, *values: str) -> int:
+        result =  self._client.srem(key, *values)
+        return int(cast(int, result))
+
 
     async def close(self) -> None:
-        await self.client.close()
+        await self._client.close()

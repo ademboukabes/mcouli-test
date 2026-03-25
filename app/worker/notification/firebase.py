@@ -1,7 +1,8 @@
 from __future__ import annotations
+from typing import cast
 
-import firebase_admin
-from firebase_admin import  messaging
+import firebase_admin # pyright: ignore[reportMissingTypeStubs]
+from firebase_admin import credentials, messaging  # pyright: ignore[reportMissingTypeStubs]
 
 from app.core.config import settings
 from app.core.logger import logger
@@ -13,6 +14,15 @@ INVALID_TOKEN_CODES = {
     "messaging/invalid-registration-token",
 }
 
+
+class _SendResponse:
+    success: bool
+    exception: Exception | None
+
+
+class _BatchResponse:
+    responses: list[_SendResponse]
+    
 
 class NotificationDeliveryError(Exception):
     def __init__(
@@ -28,24 +38,28 @@ class NotificationDeliveryError(Exception):
         )
 
 
-def init_firebase_app() -> None:
-    if firebase_admin._apps:
+def init_firebase_app(credentials_path: str | None = None) -> None:
+    if firebase_admin._apps: # type: ignore
         return
-    credentials_path = settings.FIREBASE_CREDENTIALS_PATH
+    if credentials_path is None:
+        credentials_path = settings.FIREBASE_CREDENTIALS_PATH
     if credentials_path:
         cred = credentials.Certificate(credentials_path)
-        firebase_admin.initialize_app(cred)
+        firebase_admin.initialize_app(cred) # type: ignore
         logger.info("Firebase initialized with credentials from %s", credentials_path)
         return
-    firebase_admin.initialize_app()
+    firebase_admin.initialize_app() # type: ignore
     logger.info("Firebase initialized with default credentials")
 
 
 def _classify_token_failure(error: Exception) -> bool:
-    if isinstance(error, (messaging.UnregisteredError, messaging.InvalidArgumentError)):
-        return True
     code = getattr(error, "code", None)
-    return code in INVALID_TOKEN_CODES
+
+    if code in INVALID_TOKEN_CODES:
+        return True
+
+    name = error.__class__.__name__
+    return name in {"UnregisteredError", "InvalidArgumentError"}
 
 
 def send_notification(notification: UnifiedNotification) -> None:
@@ -60,7 +74,10 @@ def send_notification(notification: UnifiedNotification) -> None:
         ),
         data=notification.data or None,
     )
-    response = messaging.send_multicast(multicast)
+    response = cast(
+    _BatchResponse,
+    messaging.send_multicast(multicast) # type: ignore
+)
 
     failed_tokens: list[str] = []
     invalid_tokens: list[str] = []
