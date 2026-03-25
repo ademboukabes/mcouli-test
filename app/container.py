@@ -13,7 +13,7 @@ from app.service.staff_notifications import StaffNotificationsService
 from app.service.staff_user import StaffUserService
 
 from app.service.audit import AuditService
-from app.service.notification_gateway import NotificationGatewayService
+from app.service.notification import NotificationGatewayService
 from app.service.upload_requests import UploadRequestsService
 from app.service.users import AuthService
 from app.service.user_notification import UserNotificationService
