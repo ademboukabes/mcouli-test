@@ -11,10 +11,10 @@ RETURNING id, event_type, user_id, metadata, created_at;
 -- name: ListAuditEvents :many
 SELECT id, event_type, user_id, metadata, created_at
 FROM audit_events
-WHERE ($1 IS NULL OR event_type = $1)
-  AND ($2 IS NULL OR user_id = $2)
-  AND ($3 IS NULL OR created_at >= $3)
-  AND ($4 IS NULL OR created_at <= $4)
+WHERE event_type = COALESCE($1, event_type)
+  AND user_id = COALESCE($2, user_id)
+  AND created_at >= COALESCE($3, created_at)
+  AND created_at <= COALESCE($4, created_at)
 ORDER BY created_at DESC
 LIMIT $5
 OFFSET $6;

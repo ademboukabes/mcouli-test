@@ -3,6 +3,7 @@
 #   sqlc v1.30.0
 # source: audit.sql
 import dataclasses
+import datetime
 from typing import Any, AsyncIterator, Optional
 import uuid
 
@@ -27,10 +28,10 @@ RETURNING id, event_type, user_id, metadata, created_at
 LIST_AUDIT_EVENTS = """-- name: list_audit_events \\:many
 SELECT id, event_type, user_id, metadata, created_at
 FROM audit_events
-WHERE (:p1 IS NULL OR event_type = :p1)
-  AND (:p2 IS NULL OR user_id = :p2)
-  AND (:p3 IS NULL OR created_at >= :p3)
-  AND (:p4 IS NULL OR created_at <= :p4)
+WHERE event_type = COALESCE(:p1, event_type)
+  AND user_id = COALESCE(:p2, user_id)
+  AND created_at >= COALESCE(:p3, created_at)
+  AND created_at <= COALESCE(:p4, created_at)
 ORDER BY created_at DESC
 LIMIT :p5
 OFFSET :p6
@@ -39,10 +40,10 @@ OFFSET :p6
 
 @dataclasses.dataclass()
 class ListAuditEventsParams:
-    column_1: Optional[Any]
-    column_2: Optional[Any]
-    column_3: Optional[Any]
-    column_4: Optional[Any]
+    event_type: Any
+    user_id: Optional[uuid.UUID]
+    created_at: datetime.datetime
+    created_at_2: datetime.datetime
     limit: int
     offset: int
 
@@ -65,10 +66,10 @@ class AsyncQuerier:
 
     async def list_audit_events(self, arg: ListAuditEventsParams) -> AsyncIterator[models.AuditEvent]:
         result = await self._conn.stream(sqlalchemy.text(LIST_AUDIT_EVENTS), {
-            "p1": arg.column_1,
-            "p2": arg.column_2,
-            "p3": arg.column_3,
-            "p4": arg.column_4,
+            "p1": arg.event_type,
+            "p2": arg.user_id,
+            "p3": arg.created_at,
+            "p4": arg.created_at_2,
             "p5": arg.limit,
             "p6": arg.offset,
         })

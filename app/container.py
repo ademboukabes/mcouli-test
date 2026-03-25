@@ -109,6 +109,7 @@ class Container:
 
         self.audit_service = AuditService(
             audit_querier=self.audit_querier,
+            user_querier=self.user_querier,
         )
 
         self.staff_user_service = StaffUserService()

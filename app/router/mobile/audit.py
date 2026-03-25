@@ -33,5 +33,8 @@ async def list_audits(
         offset=offset,
     )
     return AuditEventListResponse(
-        items=[AuditEventSchema.from_model(event) for event in events]
+        items=[
+            AuditEventSchema.from_model(audit_event, actor=actor)
+            for audit_event, actor in events
+        ]
     )

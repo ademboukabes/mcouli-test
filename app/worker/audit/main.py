@@ -9,6 +9,7 @@ from app.infra.database import engine
 from app.infra.nats import NatsClient, NatsSubjects
 from app.service.audit import AuditService
 from db.generated import audit as audit_queries
+from db.generated import user as user_queries
 from app.worker.audit.schema.audit import AuditEventMessage
 
 
@@ -25,7 +26,10 @@ class AuditDeliveryWorker:
         if self._conn is not None:
             return
         self._conn = await engine.connect()
-        self._audit_service = AuditService(audit_queries.AsyncQuerier(self._conn))
+        self._audit_service = AuditService(
+            audit_queries.AsyncQuerier(self._conn),
+            user_queries.AsyncQuerier(self._conn),
+        )
 
     async def stop(self) -> None:
         if self._conn is not None:
