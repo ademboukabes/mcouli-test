@@ -45,7 +45,7 @@ class SingleFaceMatchService:
 
         try:
             async with self.conn.begin():
-                if not await self._photo_exists(job.photo_id):
+                if not await self.Check_photo_exists(job.photo_id):
                     logger.warning("Photo not found: %s", job.photo_id)
                     return
 
@@ -98,7 +98,7 @@ class SingleFaceMatchService:
                 },
             )
 
-    async def _photo_exists(self, photo_id: UUID) -> bool:
+    async def Check_photo_exists(self, photo_id: UUID) -> bool:
         row = await self.photo_face_querier.photo_faces_photo_exists(id=photo_id)
         return row is not None
 
