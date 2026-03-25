@@ -151,6 +151,39 @@ class FaceEmbeddingService:
 
         return averaged.astype(float).tolist()
 
+    async def compute_event_embedding(
+        self,
+        payloads: Sequence[FaceImagePayload],
+    ) -> dict[str, list[list[float]]]:
+
+        if not payloads:
+            raise AppException.bad_request(
+                "At least one image is required"
+            )
+
+        results: dict[str, list[list[float]]] = {}
+
+        for payload in payloads:
+            try:
+                image = self._decode_image(payload)
+                image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+
+                faces: list[FaceStub] = await asyncio.to_thread(
+                    self.face_embedding.model.get, image_rgb  # type: ignore
+                )
+
+                results[payload["filename"]] = [
+                    face.embedding.flatten().tolist()
+                    for face in faces
+                    if face.embedding is not None
+                ]
+
+            except Exception as e:
+                print(f"[FaceEmbeddingService] Skipping {payload['filename']}: {e}")
+                results[payload["filename"]] = []
+
+        return results
+
     def _decode_image(self, payload: FaceImagePayload) -> np.ndarray:
 
         buffer = np.frombuffer(payload["bytes"], dtype=np.uint8)
