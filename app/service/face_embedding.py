@@ -187,7 +187,7 @@ class FaceEmbeddingService:
                 image = self._decode_image(payload)
                 image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
 
-                faces: list[FaceStub] = await asyncio.to_thread(
+                faces: list[FaceStub] = await asyncio.to_thread( # type: ignore
                     self.face_embedding.model.get, image_rgb  # type: ignore
                 )
 

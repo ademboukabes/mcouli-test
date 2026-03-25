@@ -22,6 +22,7 @@ from db.generated import session as session_queries
 from db.generated.models import User, UserDevice
 from app.core.logger import logger
 from app.service.face_embedding import FaceImagePayload, FaceEmbeddingService
+from app.schema.internal.single_face_match import ClosestUserMatch
 
 
 class AuthService:

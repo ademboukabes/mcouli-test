@@ -130,7 +130,7 @@ class NatsClient:
         try:
             await js.stream_info(stream_name)
         except NotFoundError:
-            await js.add_stream(
+            await js.add_stream( # type: ignore
                 name=stream_name,
                 config=StreamConfig(
                     name=stream_name,

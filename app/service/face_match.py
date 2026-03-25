@@ -7,10 +7,9 @@ from sqlalchemy.exc import DBAPIError, SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncConnection
 
 from app.core.logger import logger
-from app.schema.dto.single_face_match import BBoxPayload, SingleFaceMatchJob
-from app.schema.internal.single_face_match import ClosestUserMatch
-from app.service.user_match import UserMatchService
+from app.schema.internal.single_face_match import BBoxPayload, ClosestUserMatch, SingleFaceMatchJob
 from app.service.user_notification import UserNotificationService
+from app.service.users import AuthService
 from db.generated import photo_faces as photo_face_queries
 
 
@@ -20,7 +19,7 @@ class SingleFaceMatchService:
         *,
         conn: AsyncConnection,
         photo_face_querier: photo_face_queries.AsyncQuerier,
-        user_match_service: UserMatchService,
+        user_match_service: AuthService,
         user_notification_service: UserNotificationService,
     ) -> None:
         self.conn = conn
@@ -90,13 +89,12 @@ class SingleFaceMatchService:
             logger.error("Out of memory while matching photo %s", job.photo_id)
             return
 
-        if created_face_match_id and matched_user is not None:
+        if created_face_match_id :
             await self.user_notification_service.create_notification(
                 user_id=matched_user.user_id,
                 type="face_match",
                 payload={
                     "photo_id": str(job.photo_id),
-                    "confidence": matched_user.distance,
                 },
             )
 
