@@ -13,6 +13,7 @@ from app.service.staff_notifications import StaffNotificationsService
 from app.service.staff_user import StaffUserService
 
 from app.service.audit import AuditService
+from app.service.notification_gateway import NotificationGatewayService
 from app.service.upload_requests import UploadRequestsService
 from app.service.users import AuthService
 from app.service.user_notification import UserNotificationService
@@ -32,6 +33,8 @@ from db.generated import stuff_user as staff_queries
 from db.generated import notifications as notification_queries
 from db.generated import audit as audit_queries
 from app.service.event import EventService
+from app.worker.notification.notification_queue import NotificationQueue
+from app.worker.notification.settings import NotifSetting
 
 class Container:
     def __init__(
@@ -117,6 +120,9 @@ class Container:
             e_querier=self.event_querier,
             p_querier=self.participant_querier,
         )
+
+        notification_queue = NotificationQueue(settings=NotifSetting)
+        self.notification_gateway_service = NotificationGatewayService(notification_queue)
 
 
 

@@ -2,7 +2,8 @@
 # versions:
 #   sqlc v1.30.0
 # source: audit.sql
-from typing import Any, Optional
+import dataclasses
+from typing import Any, AsyncIterator, Optional
 import uuid
 
 import sqlalchemy
@@ -23,6 +24,29 @@ RETURNING id, event_type, user_id, metadata, created_at
 """
 
 
+LIST_AUDIT_EVENTS = """-- name: list_audit_events \\:many
+SELECT id, event_type, user_id, metadata, created_at
+FROM audit_events
+WHERE (:p1 IS NULL OR event_type = :p1)
+  AND (:p2 IS NULL OR user_id = :p2)
+  AND (:p3 IS NULL OR created_at >= :p3)
+  AND (:p4 IS NULL OR created_at <= :p4)
+ORDER BY created_at DESC
+LIMIT :p5
+OFFSET :p6
+"""
+
+
+@dataclasses.dataclass()
+class ListAuditEventsParams:
+    column_1: Optional[Any]
+    column_2: Optional[Any]
+    column_3: Optional[Any]
+    column_4: Optional[Any]
+    limit: int
+    offset: int
+
+
 class AsyncQuerier:
     def __init__(self, conn: sqlalchemy.ext.asyncio.AsyncConnection):
         self._conn = conn
@@ -38,3 +62,21 @@ class AsyncQuerier:
             metadata=row[3],
             created_at=row[4],
         )
+
+    async def list_audit_events(self, arg: ListAuditEventsParams) -> AsyncIterator[models.AuditEvent]:
+        result = await self._conn.stream(sqlalchemy.text(LIST_AUDIT_EVENTS), {
+            "p1": arg.column_1,
+            "p2": arg.column_2,
+            "p3": arg.column_3,
+            "p4": arg.column_4,
+            "p5": arg.limit,
+            "p6": arg.offset,
+        })
+        async for row in result:
+            yield models.AuditEvent(
+                id=row[0],
+                event_type=row[1],
+                user_id=row[2],
+                metadata=row[3],
+                created_at=row[4],
+            )
