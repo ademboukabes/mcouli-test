@@ -2,7 +2,7 @@ from typing import Any
 import uuid
 
 from app.core.exceptions import AppException
-from app.schema.notification import UnifiedNotification
+from app.schema.internal.notification import UnifiedNotification
 from app.worker.notification.notification_queue import NotificationQueue
 from db.generated import notifications as notification_queries
 from db.generated.models import Notification

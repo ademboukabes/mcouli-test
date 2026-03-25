@@ -23,3 +23,10 @@ class SingleFaceMatchJob(BaseModel):
     submitted_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
     model_config = {"extra": "allow"}
+
+
+class ClosestUserMatch(BaseModel):
+    user_id: UUID
+    distance: float
+
+    model_config = {"extra": "forbid"}

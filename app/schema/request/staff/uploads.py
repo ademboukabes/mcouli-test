@@ -4,7 +4,7 @@ from typing import Literal
 from pydantic import BaseModel, Field, field_validator
 from uuid import UUID
 
-from app.schema.dto.staff.uploads import UploadPhotoInput
+from app.schema.internal.uploads import UploadPhotoInput
 
 
 MAX_UPLOAD_BATCH_SIZE = 20

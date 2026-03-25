@@ -1,7 +1,7 @@
 from typing import Sequence
 from pydantic import BaseModel, ConfigDict, Field
 from app.infra.nats import NatsClient
-from app.schema.notification import NotificationPriority, PRIORITY_ORDER, UnifiedNotification
+from app.schema.internal.notification import NotificationPriority, PRIORITY_ORDER, UnifiedNotification
 from app.worker.notification.settings import NotificationWorkerSettings
 
 

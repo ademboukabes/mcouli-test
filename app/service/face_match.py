@@ -8,9 +8,9 @@ from sqlalchemy.ext.asyncio import AsyncConnection
 
 from app.core.logger import logger
 from app.schema.dto.single_face_match import BBoxPayload, SingleFaceMatchJob
-from app.service.user_match import ClosestUserMatch, UserMatchService
+from app.schema.internal.single_face_match import ClosestUserMatch
+from app.service.user_match import UserMatchService
 from app.service.user_notification import UserNotificationService
-from app.service.users import AuthService
 from db.generated import photo_faces as photo_face_queries
 
 
@@ -20,12 +20,12 @@ class SingleFaceMatchService:
         *,
         conn: AsyncConnection,
         photo_face_querier: photo_face_queries.AsyncQuerier,
-        user_service: AuthService,
+        user_match_service: UserMatchService,
         user_notification_service: UserNotificationService,
     ) -> None:
         self.conn = conn
         self.photo_face_querier = photo_face_querier
-        self.user_service = user_service
+        self.user_match_service = user_match_service
         self.user_notification_service = user_notification_service
 
     async def process_detected_face(
@@ -46,15 +46,15 @@ class SingleFaceMatchService:
 
         try:
             async with self.conn.begin():
-                if not await self.photo_exists(job.photo_id):
+                if not await self._photo_exists(job.photo_id):
                     logger.warning("Photo not found: %s", job.photo_id)
                     return
 
-                if await self.match_exists_for_photo(job.photo_id):
+                if await self._match_exists_for_photo(job.photo_id):
                     logger.info("Photo %s already matched; skipping", job.photo_id)
                     return
 
-                matched_user = await self.user_service.find_closest_user(
+                matched_user = await self.user_match_service.find_closest_user(
                     embedding_literal=embedding_literal,
                 )
                 if matched_user is None:
@@ -100,11 +100,11 @@ class SingleFaceMatchService:
                 },
             )
 
-    async def photo_exists(self, photo_id: UUID) -> bool:
+    async def _photo_exists(self, photo_id: UUID) -> bool:
         row = await self.photo_face_querier.photo_faces_photo_exists(id=photo_id)
         return row is not None
 
-    async def match_exists_for_photo(self, photo_id: UUID) -> bool:
+    async def _match_exists_for_photo(self, photo_id: UUID) -> bool:
         row = await self.photo_face_querier.photo_faces_match_exists_for_photo(
             photo_id=photo_id,
         )
@@ -121,4 +121,3 @@ class SingleFaceMatchService:
         return json.dumps(
             {"x1": bbox.x1, "y1": bbox.y1, "x2": bbox.x2, "y2": bbox.y2}
         )
-*** End Patch

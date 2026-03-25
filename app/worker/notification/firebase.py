@@ -8,7 +8,7 @@ from firebase_admin import credentials, messaging  # type: ignore[import-untyped
 
 from app.core.config import settings
 from app.core.logger import logger
-from app.schema.notification import UnifiedNotification
+from app.schema.internal.notification import UnifiedNotification
 
 
 INVALID_TOKEN_CODES = {

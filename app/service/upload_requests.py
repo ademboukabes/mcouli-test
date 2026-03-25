@@ -11,7 +11,7 @@ from app.infra.google_drive import GoogleDriveClient, GoogleDriveFileDownload
 from app.infra.nats import NatsClient, NatsSubjects
 from sqlalchemy.exc import IntegrityError
 
-from app.schema.dto.staff.uploads import UploadPhotoInput
+from app.schema.internal.uploads import UploadPhotoInput
 from app.service.staged_upload_storage import PreviewObject, StagedUploadStorageService
 from app.service.staff_drive import StaffDriveService
 from app.service.staff_notifications import StaffNotificationsService

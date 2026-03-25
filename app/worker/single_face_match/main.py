@@ -10,7 +10,7 @@ from app.infra.database import engine
 from app.infra.minio import Bucket, IMAGES_BUCKET_NAME, init_minio_client
 from app.infra.nats import NatsClient, NatsSubjects
 from app.infra.redis import RedisClient
-from app.schema.dto.single_face_match import BBoxPayload, SingleFaceMatchJob
+from app.schema.internal.single_face_match import BBoxPayload, SingleFaceMatchJob
 from app.service.face_embedding import FaceEmbeddingService, FaceImagePayload
 from app.service.face_match import SingleFaceMatchService
 
@@ -119,7 +119,7 @@ async def run_worker() -> None:
         service = SingleFaceMatchService(
             conn=conn,
             photo_face_querier=container.photo_face_querier,
-            user_match_service=container.user_match_service,
+            user_service=container.auth_service,
             user_notification_service=container.user_notifications_service,
         )
         worker = SingleFaceMatchWorker(service, container.face_embedding_service)
