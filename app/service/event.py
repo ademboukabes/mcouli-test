@@ -12,7 +12,6 @@ from app.schema.response.web.event import (
     UserEventResponse,
     ParticipantResponse
 )
-# Ensure these imports match your actual folder structure
 from db.generated import events as event_queries
 from db.generated import eventParticipant as participant_queries
 from db.generated import models
