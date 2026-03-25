@@ -2,6 +2,7 @@
 # versions:
 #   sqlc v1.30.0
 # source: photo_faces.sql
+import dataclasses
 from typing import Any, Optional
 import uuid
 
@@ -9,6 +10,100 @@ import sqlalchemy
 import sqlalchemy.ext.asyncio
 
 from db.generated import models
+
+
+PHOTO_FACES_ENSURE_FACE_MATCH = """-- name: photo_faces_ensure_face_match \\:one
+WITH upserted_photo_face AS (
+    INSERT INTO photo_faces (
+        photo_id,
+        face_index,
+        embedding,
+        bbox
+    ) VALUES (
+        :p1,
+        :p2,
+        CAST(:p3 AS vector),
+        :p4
+    ) ON CONFLICT (photo_id, face_index)
+    DO UPDATE SET embedding = EXCLUDED.embedding,
+                  bbox = EXCLUDED.bbox
+    RETURNING id, photo_id
+),
+existing_match AS (
+    SELECT 1
+    FROM face_matches fm
+    JOIN photo_faces pf ON pf.id = fm.photo_face_id
+    WHERE pf.photo_id = :p1
+    LIMIT 1
+),
+inserted_match AS (
+    INSERT INTO face_matches (photo_face_id, user_id, confidence)
+    SELECT upserted_photo_face.id, :p5, :p6
+    WHERE NOT EXISTS (SELECT 1 FROM existing_match)
+    RETURNING id
+)
+SELECT upserted_photo_face.id AS photo_face_id,
+       inserted_match.id AS face_match_id
+FROM upserted_photo_face
+LEFT JOIN inserted_match ON TRUE
+"""
+
+
+@dataclasses.dataclass()
+class PhotoFacesEnsureFaceMatchParams:
+    photo_id: uuid.UUID
+    face_index: int
+    column_3: Any
+    bbox: Optional[str]
+    user_id: uuid.UUID
+    confidence: float
+
+
+@dataclasses.dataclass()
+class PhotoFacesEnsureFaceMatchRow:
+    photo_face_id: uuid.UUID
+    face_match_id: Optional[uuid.UUID]
+
+
+PHOTO_FACES_FIND_CLOSEST_USER = """-- name: photo_faces_find_closest_user \\:one
+SELECT id,
+       (face_embedding <=> CAST(:p1 AS vector)) AS distance
+FROM users
+WHERE face_embedding IS NOT NULL
+ORDER BY distance ASC
+LIMIT 1
+"""
+
+
+@dataclasses.dataclass()
+class PhotoFacesFindClosestUserRow:
+    id: uuid.UUID
+    distance: Optional[Any]
+
+
+PHOTO_FACES_MATCH_EXISTS_FOR_PHOTO = """-- name: photo_faces_match_exists_for_photo \\:one
+SELECT 1
+FROM face_matches fm
+JOIN photo_faces pf ON pf.id = fm.photo_face_id
+WHERE pf.photo_id = :p1
+LIMIT 1
+"""
+
+
+PHOTO_FACES_MATCH_EXISTS_FOR_PHOTO_FACE = """-- name: photo_faces_match_exists_for_photo_face \\:one
+SELECT 1
+FROM face_matches
+WHERE photo_face_id = :p1
+LIMIT 1
+"""
+
+
+PHOTO_FACES_PHOTO_EXISTS = """-- name: photo_faces_photo_exists \\:one
+SELECT 1
+FROM photos
+WHERE id = :p1
+LIMIT 1
+"""
 
 
 UPSERT_PHOTO_FACE = """-- name: upsert_photo_face \\:one
@@ -30,6 +125,49 @@ RETURNING id, photo_id, face_index, embedding, bbox, created_at
 class AsyncQuerier:
     def __init__(self, conn: sqlalchemy.ext.asyncio.AsyncConnection):
         self._conn = conn
+
+    async def photo_faces_ensure_face_match(self, arg: PhotoFacesEnsureFaceMatchParams) -> Optional[PhotoFacesEnsureFaceMatchRow]:
+        row = (await self._conn.execute(sqlalchemy.text(PHOTO_FACES_ENSURE_FACE_MATCH), {
+            "p1": arg.photo_id,
+            "p2": arg.face_index,
+            "p3": arg.column_3,
+            "p4": arg.bbox,
+            "p5": arg.user_id,
+            "p6": arg.confidence,
+        })).first()
+        if row is None:
+            return None
+        return PhotoFacesEnsureFaceMatchRow(
+            photo_face_id=row[0],
+            face_match_id=row[1],
+        )
+
+    async def photo_faces_find_closest_user(self, *, dollar_1: Any) -> Optional[PhotoFacesFindClosestUserRow]:
+        row = (await self._conn.execute(sqlalchemy.text(PHOTO_FACES_FIND_CLOSEST_USER), {"p1": dollar_1})).first()
+        if row is None:
+            return None
+        return PhotoFacesFindClosestUserRow(
+            id=row[0],
+            distance=row[1],
+        )
+
+    async def photo_faces_match_exists_for_photo(self, *, photo_id: uuid.UUID) -> Optional[int]:
+        row = (await self._conn.execute(sqlalchemy.text(PHOTO_FACES_MATCH_EXISTS_FOR_PHOTO), {"p1": photo_id})).first()
+        if row is None:
+            return None
+        return row[0]
+
+    async def photo_faces_match_exists_for_photo_face(self, *, photo_face_id: uuid.UUID) -> Optional[int]:
+        row = (await self._conn.execute(sqlalchemy.text(PHOTO_FACES_MATCH_EXISTS_FOR_PHOTO_FACE), {"p1": photo_face_id})).first()
+        if row is None:
+            return None
+        return row[0]
+
+    async def photo_faces_photo_exists(self, *, id: uuid.UUID) -> Optional[int]:
+        row = (await self._conn.execute(sqlalchemy.text(PHOTO_FACES_PHOTO_EXISTS), {"p1": id})).first()
+        if row is None:
+            return None
+        return row[0]
 
     async def upsert_photo_face(self, *, photo_id: uuid.UUID, face_index: int, dollar_3: Any, bbox: Optional[str]) -> Optional[models.PhotoFace]:
         row = (await self._conn.execute(sqlalchemy.text(UPSERT_PHOTO_FACE), {

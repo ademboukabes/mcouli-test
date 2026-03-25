@@ -350,3 +350,11 @@ class AuthService:
         except Exception as exc:
             logger.error("Failed to unblock user: %s", exc)
             raise DBException.handle(exc)
+
+    async def find_closest_user(self, *, embedding_literal: str) -> ClosestUserMatch | None:
+        row = await self.user_querier.find_closest_user_by_embedding(
+            dollar_1=embedding_literal,
+        )
+        if row is None or row.distance is None:
+            return None
+        return ClosestUserMatch(user_id=row.id, distance=float(row.distance))

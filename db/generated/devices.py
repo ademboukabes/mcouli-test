@@ -37,7 +37,7 @@ INSERT INTO user_devices (
 ) VALUES (
     COALESCE(:p1, uuid_generate_v4()), :p2, :p3, :p4, :p5
 )
-RETURNING id, user_id, device_name, device_type, push_token, totp_secret, is_active, is_invalid_token, is_2fa_enabled, last_active, created_at
+RETURNING id, user_id, device_name, device_type, totp_secret, is_2fa_enabled, last_active, created_at, push_token, is_active, is_invalid_token
 """
 
 
@@ -68,13 +68,13 @@ AND is_2fa_enabled = FALSE
 
 
 GET_DEVICE__BY_ID = """-- name: get_device__by_id \\:one
-SELECT id, user_id, device_name, device_type, push_token, totp_secret, is_active, is_invalid_token, is_2fa_enabled, last_active, created_at from user_devices
+SELECT id, user_id, device_name, device_type, totp_secret, is_2fa_enabled, last_active, created_at, push_token, is_active, is_invalid_token from user_devices
 WHERE id =:p1
 """
 
 
 LIST_USER_DEVICES = """-- name: list_user_devices \\:many
-SELECT id, user_id, device_name, device_type, push_token, totp_secret, is_active, is_invalid_token, is_2fa_enabled, last_active, created_at
+SELECT id, user_id, device_name, device_type, totp_secret, is_2fa_enabled, last_active, created_at, push_token, is_active, is_invalid_token
 FROM user_devices
 WHERE user_id = :p1
 ORDER BY last_active DESC
@@ -112,7 +112,7 @@ SET
     is_invalid_token = FALSE
 WHERE id = :p1
 AND user_id = :p3
-RETURNING id, user_id, device_name, device_type, push_token, totp_secret, is_active, is_invalid_token, is_2fa_enabled, last_active, created_at
+RETURNING id, user_id, device_name, device_type, totp_secret, is_2fa_enabled, last_active, created_at, push_token, is_active, is_invalid_token
 """
 
 
@@ -144,13 +144,13 @@ class AsyncQuerier:
             user_id=row[1],
             device_name=row[2],
             device_type=row[3],
-            push_token=row[4],
-            totp_secret=row[5],
-            is_active=row[6],
-            is_invalid_token=row[7],
-            is_2fa_enabled=row[8],
-            last_active=row[9],
-            created_at=row[10],
+            totp_secret=row[4],
+            is_2fa_enabled=row[5],
+            last_active=row[6],
+            created_at=row[7],
+            push_token=row[8],
+            is_active=row[9],
+            is_invalid_token=row[10],
         )
 
     async def deactivate_device(self, *, id: uuid.UUID, user_id: uuid.UUID) -> None:
@@ -168,13 +168,13 @@ class AsyncQuerier:
             user_id=row[1],
             device_name=row[2],
             device_type=row[3],
-            push_token=row[4],
-            totp_secret=row[5],
-            is_active=row[6],
-            is_invalid_token=row[7],
-            is_2fa_enabled=row[8],
-            last_active=row[9],
-            created_at=row[10],
+            totp_secret=row[4],
+            is_2fa_enabled=row[5],
+            last_active=row[6],
+            created_at=row[7],
+            push_token=row[8],
+            is_active=row[9],
+            is_invalid_token=row[10],
         )
 
     async def list_user_devices(self, *, user_id: uuid.UUID) -> AsyncIterator[models.UserDevice]:
@@ -185,13 +185,13 @@ class AsyncQuerier:
                 user_id=row[1],
                 device_name=row[2],
                 device_type=row[3],
-                push_token=row[4],
-                totp_secret=row[5],
-                is_active=row[6],
-                is_invalid_token=row[7],
-                is_2fa_enabled=row[8],
-                last_active=row[9],
-                created_at=row[10],
+                totp_secret=row[4],
+                is_2fa_enabled=row[5],
+                last_active=row[6],
+                created_at=row[7],
+                push_token=row[8],
+                is_active=row[9],
+                is_invalid_token=row[10],
             )
 
     async def mark_device_token_invalid(self, *, push_token: Optional[str]) -> None:
@@ -212,11 +212,11 @@ class AsyncQuerier:
             user_id=row[1],
             device_name=row[2],
             device_type=row[3],
-            push_token=row[4],
-            totp_secret=row[5],
-            is_active=row[6],
-            is_invalid_token=row[7],
-            is_2fa_enabled=row[8],
-            last_active=row[9],
-            created_at=row[10],
+            totp_secret=row[4],
+            is_2fa_enabled=row[5],
+            last_active=row[6],
+            created_at=row[7],
+            push_token=row[8],
+            is_active=row[9],
+            is_invalid_token=row[10],
         )

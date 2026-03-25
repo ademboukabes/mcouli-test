@@ -81,7 +81,8 @@ class Settings(BaseSettings):
                 return False
             if lowered in {"true", "1", "yes"}:
                 return True
-        return value
+            return value
+        
 
 
 settings = Settings()  # type: ignore

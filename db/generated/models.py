@@ -221,7 +221,6 @@ class User:
     updated_at: datetime.datetime
     display_name: Optional[str]
     face_embedding: Optional[Any]
-    blocked: bool
     deleted_at: Optional[datetime.datetime]
     blocked: bool
 
@@ -232,13 +231,13 @@ class UserDevice:
     user_id: uuid.UUID
     device_name: Optional[str]
     device_type: Optional[str]
-    push_token: Optional[str]
     totp_secret: Optional[str]
-    is_active: bool
-    is_invalid_token: bool
     is_2fa_enabled: bool
     last_active: datetime.datetime
     created_at: datetime.datetime
+    push_token: Optional[str]
+    is_active: bool
+    is_invalid_token: bool
 
 
 @dataclasses.dataclass()

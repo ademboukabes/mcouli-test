@@ -52,3 +52,11 @@ SET face_embedding = $1::vector,
     updated_at = NOW()
 WHERE id = $2
 RETURNING *;
+
+-- name: FindClosestUserByEmbedding :one
+SELECT id,
+       (face_embedding <=> $1::vector) AS distance
+FROM users
+WHERE face_embedding IS NOT NULL
+ORDER BY distance ASC
+LIMIT 1;
