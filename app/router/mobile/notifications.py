@@ -10,23 +10,23 @@ router = APIRouter(prefix="/notifications")
 
 
 @router.get("", response_model=UserNotificationListResponse)
-async def list_user_notifications(
+async def get_all_notifications(
     container: Container = Depends(get_container),
     current_user: MobileUserSchema = Depends(get_current_mobile_user),
 ) -> UserNotificationListResponse:
-    notifications = await container.user_notifications_service.list_notifications(
+    notifications = await container.user_notifications_service.get_all_notifications(
         user_id=current_user.user_id,
     )
     return UserNotificationListResponse.from_models(notifications)
 
 
 @router.post("/read", response_model=UserNotificationListResponse)
-async def mark_user_notifications_as_read(
+async def mark_as_read(
     req: MarkUserNotificationsReadRequest,
     container: Container = Depends(get_container),
     current_user: MobileUserSchema = Depends(get_current_mobile_user),
 ) -> UserNotificationListResponse:
-    notifications = await container.user_notifications_service.mark_many_as_read(
+    notifications = await container.user_notifications_service.mark_notifications_as_read(
         notification_ids=req.notification_ids,
         user_id=current_user.user_id,
     )

@@ -81,7 +81,7 @@ class FaceEmbedding:
         if not faces:
             raise ValueError("No faces detected by the model")
 
-        x1, y1, x2, y2 = bboxes[0]
+        x1, y1, x2, y2 = bboxes[0] # type: ignore
         target_cx = (x1 + x2) / 2
         target_cy = (y1 + y2) / 2
 

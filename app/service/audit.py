@@ -41,7 +41,7 @@ class AuditService:
             raise AppException.internal_error("Failed to persist audit event")
         return audit
 
-    async def publish_event(
+    async def create_record(
         self,
         *,
         event_type: AuditEventType,
@@ -80,8 +80,11 @@ class AuditService:
             events.append(event)
 
         user_ids = {event.user_id for event in events if event.user_id is not None}
-        actors = await self._load_actors(user_ids)
-
+        actors: dict[UUID, User] = {}
+        for user_id in user_ids:
+            user = await self.user_querier.get_user_by_id(id=user_id)
+            if user:
+                actors[user_id] = user
         return [
             (
                 event,
@@ -89,11 +92,3 @@ class AuditService:
             )
             for event in events
         ]
-
-    async def _load_actors(self, user_ids: set[UUID]) -> dict[UUID, User]:
-        actors: dict[UUID, User] = {}
-        for user_id in user_ids:
-            user = await self.user_querier.get_user_by_id(id=user_id)
-            if user:
-                actors[user_id] = user
-        return actors

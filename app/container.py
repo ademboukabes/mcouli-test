@@ -13,7 +13,6 @@ from app.service.staff_notifications import StaffNotificationsService
 from app.service.staff_user import StaffUserService
 
 from app.service.audit import AuditService
-from app.service.notification import NotificationGatewayService
 from app.service.upload_requests import UploadRequestsService
 from app.service.users import AuthService
 from app.service.user_notification import UserNotificationService
@@ -103,8 +102,11 @@ class Container:
             staff_notifications_service=self.staff_notifications_service,
         )
 
+        notification_queue = NotificationQueue(settings=NotifSetting)
+
         self.user_notifications_service = UserNotificationService(
             notification_querier=self.notification_querier,
+            notification_queue=notification_queue,
         )
 
         self.audit_service = AuditService(
@@ -121,12 +123,6 @@ class Container:
             e_querier=self.event_querier,
             p_querier=self.participant_querier,
         )
-
-        notification_queue = NotificationQueue(settings=NotifSetting)
-        self.notification_gateway_service = NotificationGatewayService(notification_queue)
-
-
-
 
 async def get_container(
     conn: sqlalchemy.ext.asyncio.AsyncConnection = Depends(get_db),
