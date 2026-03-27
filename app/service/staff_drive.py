@@ -4,6 +4,7 @@ import json
 import secrets
 import urllib.parse
 import uuid
+from datetime import datetime, timedelta, timezone
 
 from cryptography.fernet import Fernet, InvalidToken
 
@@ -20,6 +21,7 @@ class StaffDriveService:
     STATE_PREFIX = "google_drive_oauth_state:{state}"
     STATE_TTL_SECONDS = 600
     PROVIDER = "google_drive"
+    TOKEN_REFRESH_BUFFER = timedelta(minutes=5)
 
     def __init__(
         self,
@@ -128,8 +130,50 @@ class StaffDriveService:
             raise AppException.bad_request("Staff Google Drive is not connected")
         return connection
 
+    @classmethod
+    def _token_needs_refresh(cls, connection: StaffDriveConnection) -> bool:
+        if connection.token_expires_at is None:
+            return False
+        return connection.token_expires_at <= datetime.now(timezone.utc) + cls.TOKEN_REFRESH_BUFFER
+
+    async def _refresh_connection_access_token(
+        self,
+        connection: StaffDriveConnection,
+    ) -> StaffDriveConnection:
+        if connection.refresh_token is None:
+            raise AppException.bad_request(
+                "Google Drive connection expired and must be reconnected"
+            )
+
+        refresh_token = self.decrypt(connection.refresh_token)
+        token = await GoogleDriveClient.refresh_access_token(refresh_token)
+
+        encrypted_access_token = self._encrypt(token.access_token)
+        encrypted_refresh_token = connection.refresh_token
+        if token.refresh_token:
+            encrypted_refresh_token = self._encrypt(token.refresh_token)
+
+        refreshed_connection = await self.drive_connection_querier.upsert_staff_drive_connection(
+            arg=drive_queries.UpsertStaffDriveConnectionParams(
+                staff_user_id=connection.staff_user_id,
+                provider=connection.provider,
+                google_email=connection.google_email,
+                google_account_id=connection.google_account_id,
+                access_token=encrypted_access_token,
+                refresh_token=encrypted_refresh_token,
+                token_expires_at=token.expires_at,
+                scopes=token.scope,
+            )
+        )
+        if refreshed_connection is None:
+            raise AppException.internal_error("Failed to refresh Google Drive connection")
+
+        return refreshed_connection
+
     async def get_access_token_for_staff_user(self, staff_user_id: uuid.UUID) -> str:
         connection = await self.get_active_connection_or_raise(staff_user_id)
+        if self._token_needs_refresh(connection):
+            connection = await self._refresh_connection_access_token(connection)
         return self.decrypt(connection.access_token)
 
     async def disconnect(self, staff_user_id: uuid.UUID) -> None:

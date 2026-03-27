@@ -122,6 +122,31 @@ class GoogleDriveClient:
         )
 
     @staticmethod
+    async def refresh_access_token(refresh_token: str) -> GoogleTokenResponse:
+        GoogleDriveClient.validate_settings()
+        payload = {
+            "client_id": settings.GOOGLE_CLIENT_ID,
+            "client_secret": settings.GOOGLE_CLIENT_SECRET,
+            "refresh_token": refresh_token,
+            "grant_type": "refresh_token",
+        }
+        data = await GoogleDriveClient._post_form(GOOGLE_TOKEN_URL, payload)
+        expires_at = None
+        expires_in = data.get("expires_in")
+        if isinstance(expires_in, int):
+            expires_at = datetime.now(timezone.utc) + timedelta(seconds=expires_in)
+
+        return GoogleTokenResponse(
+            access_token=GoogleDriveClient._require_str(data, "access_token"),
+            refresh_token=GoogleDriveClient._optional_str(data, "refresh_token"),
+            expires_at=expires_at,
+            scope=GoogleDriveClient._optional_str(data, "scope")
+            or settings.GOOGLE_OAUTH_SCOPES,
+            token_type=GoogleDriveClient._optional_str(data, "token_type")
+            or "Bearer",
+        )
+
+    @staticmethod
     async def get_user_info(access_token: str) -> GoogleUserInfo:
         data = await GoogleDriveClient._get_json(
             GOOGLE_USERINFO_URL,
