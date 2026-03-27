@@ -1,11 +1,12 @@
 -- name: CreateUploadRequest :one
 INSERT INTO upload_requests (
     event_id,
+    group_id,
     drive_file_id,
     requested_by,
     photo_count
 ) VALUES (
-    $1, $2, $3, $4
+    $1, $2, $3, $4, $5
 )
 RETURNING *;
 
@@ -14,11 +15,34 @@ SELECT *
 FROM upload_requests
 WHERE id = $1;
 
+-- name: ListUploadRequestsByGroupID :many
+SELECT *
+FROM upload_requests
+WHERE group_id = $1
+ORDER BY created_at ASC;
+
 -- name: ListUploadRequests :many
 SELECT *
 FROM upload_requests
-WHERE requested_by = $1::uuid
-  AND status  = COALESCE(sqlc.narg('p2')::upload_request_status, status)
+ORDER BY created_at DESC;
+
+-- name: ListUploadRequestsByStatus :many
+SELECT *
+FROM upload_requests
+WHERE status = $1
+ORDER BY created_at DESC;
+
+-- name: ListUploadRequestsByRequester :many
+SELECT *
+FROM upload_requests
+WHERE requested_by = $1
+ORDER BY created_at DESC;
+
+-- name: ListUploadRequestsByRequesterAndStatus :many
+SELECT *
+FROM upload_requests
+WHERE requested_by = $1
+  AND status = $2
 ORDER BY created_at DESC;
 
 -- name: ApproveUploadRequest :one
@@ -40,3 +64,7 @@ SET status = 'rejected',
 WHERE id = $1
   AND status = 'pending'
 RETURNING *;
+
+-- name: DeleteUploadRequest :exec
+DELETE FROM upload_requests
+WHERE id = $1;

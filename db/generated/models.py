@@ -185,6 +185,7 @@ class StaffUser:
 class UploadRequest:
     id: uuid.UUID
     event_id: uuid.UUID
+    group_id: Optional[uuid.UUID]
     drive_file_id: Optional[str]
     requested_by: uuid.UUID
     approved_by: Optional[uuid.UUID]
@@ -192,6 +193,21 @@ class UploadRequest:
     created_at: datetime.datetime
     approved_at: Optional[datetime.datetime]
     photo_count: int
+    rejection_reason: Optional[str]
+
+
+@dataclasses.dataclass()
+class UploadRequestGroup:
+    id: uuid.UUID
+    event_id: uuid.UUID
+    folder_id: str
+    requested_by: uuid.UUID
+    approved_by: Optional[uuid.UUID]
+    status: Any
+    total_photo_count: int
+    batch_count: int
+    created_at: datetime.datetime
+    approved_at: Optional[datetime.datetime]
     rejection_reason: Optional[str]
 
 

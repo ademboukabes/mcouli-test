@@ -23,6 +23,7 @@ from db.generated import session as session_queries
 from db.generated import staff_drive_connections as staff_drive_queries
 from db.generated import staff_notifications as staff_notification_queries
 from db.generated import stuff_user as staff_user_queries
+from db.generated import upload_request_groups as upload_request_group_queries
 from db.generated import upload_request_photos as upload_request_photo_queries
 from db.generated import upload_requests as upload_request_queries
 from db.generated import user as user_queries
@@ -52,6 +53,7 @@ class Container:
         self.device_querier = device_queries.AsyncQuerier(conn)
         self.staff_user_querier = staff_user_queries.AsyncQuerier(conn)
         self.staff_drive_querier = staff_drive_queries.AsyncQuerier(conn)
+        self.upload_request_group_querier = upload_request_group_queries.AsyncQuerier(conn)
         self.upload_request_querier = upload_request_queries.AsyncQuerier(conn)
         self.upload_request_photo_querier = upload_request_photo_queries.AsyncQuerier(conn)
         self.photo_querier = photo_queries.AsyncQuerier(conn)
@@ -96,6 +98,7 @@ class Container:
         self.staged_upload_storage_service = StagedUploadStorageService()
 
         self.upload_requests_service = UploadRequestsService(
+            upload_request_group_querier=self.upload_request_group_querier,
             upload_request_querier=self.upload_request_querier,
             upload_request_photo_querier=self.upload_request_photo_querier,
             photo_querier=self.photo_querier,

@@ -2,6 +2,7 @@ import base64
 import hashlib
 import json
 import secrets
+import urllib.parse
 import uuid
 
 from cryptography.fernet import Fernet, InvalidToken
@@ -30,17 +31,42 @@ class StaffDriveService:
         self.drive_connection_querier = drive_connection_querier
         self.redis = redis
 
-    async def create_connect_url(self, staff_user: StaffUser) -> tuple[str, str]:
+    async def create_connect_url(
+        self,
+        staff_user: StaffUser,
+        redirect_url: str | None = None,
+    ) -> tuple[str, str]:
         state = secrets.token_urlsafe(32)
+        state_payload: dict[str, str] = {"staff_user_id": str(staff_user.id)}
+        if redirect_url is not None:
+            state_payload["redirect_url"] = self._validate_redirect_url(redirect_url)
+
         await self.redis.set(
             self.STATE_PREFIX.format(state=state),
-            json.dumps({"staff_user_id": str(staff_user.id)}),
+            json.dumps(state_payload),
             expire=self.STATE_TTL_SECONDS,
             nx=True,
         )
         return GoogleDriveClient.build_consent_url(state), state
 
-    async def handle_callback(self, code: str, state: str) -> StaffDriveConnection:
+    async def get_callback_redirect_url(self, state: str) -> str | None:
+        state_payload = await self.redis.get(self.STATE_PREFIX.format(state=state))
+        if state_payload is None:
+            return None
+        try:
+            payload = json.loads(state_payload)
+        except json.JSONDecodeError:
+            return None
+        redirect_url = payload.get("redirect_url")
+        if isinstance(redirect_url, str) and redirect_url:
+            return redirect_url
+        return None
+
+    async def handle_callback(
+        self,
+        code: str,
+        state: str,
+    ) -> tuple[StaffDriveConnection, str | None]:
         state_key = self.STATE_PREFIX.format(state=state)
         state_payload = await self.redis.get(state_key)
         if state_payload is None:
@@ -49,9 +75,14 @@ class StaffDriveService:
         await self.redis.delete(state_key)
 
         try:
-            staff_user_id = uuid.UUID(json.loads(state_payload)["staff_user_id"])
+            payload = json.loads(state_payload)
+            staff_user_id = uuid.UUID(payload["staff_user_id"])
         except (KeyError, ValueError, json.JSONDecodeError) as exc:
             raise AppException.bad_request("Invalid OAuth state payload") from exc
+
+        redirect_url = payload.get("redirect_url")
+        if redirect_url is not None and not isinstance(redirect_url, str):
+            raise AppException.bad_request("Invalid OAuth redirect URL")
 
         staff_user = await self.staff_user_querier.get_staff_user_by_id(id=staff_user_id)
         if staff_user is None:
@@ -67,22 +98,20 @@ class StaffDriveService:
 
         connection = await self.drive_connection_querier.upsert_staff_drive_connection(
             arg=drive_queries.UpsertStaffDriveConnectionParams(
-            staff_user_id=staff_user.id,
-            provider=self.PROVIDER,
-            google_email=user_info.email,
-            google_account_id=user_info.id,
-            access_token=encrypted_access_token,
-            refresh_token=encrypted_refresh_token,
-            token_expires_at=token.expires_at,
-            scopes=token.scope,
-
+                staff_user_id=staff_user.id,
+                provider=self.PROVIDER,
+                google_email=user_info.email,
+                google_account_id=user_info.id,
+                access_token=encrypted_access_token,
+                refresh_token=encrypted_refresh_token,
+                token_expires_at=token.expires_at,
+                scopes=token.scope,
             )
-
         )
         if connection is None:
             raise AppException.internal_error("Failed to save Google Drive connection")
 
-        return connection
+        return connection, redirect_url
 
     async def get_status(self, staff_user_id: uuid.UUID) -> StaffDriveConnection | None:
         return await self.drive_connection_querier.get_active_staff_drive_connection_by_staff_user_id(
@@ -125,3 +154,27 @@ class StaffDriveService:
     def _fernet(self) -> Fernet:
         digest = hashlib.sha256(settings.encryption_key.encode("utf-8")).digest()
         return Fernet(base64.urlsafe_b64encode(digest))
+
+    @staticmethod
+    def _validate_redirect_url(redirect_url: str) -> str:
+        parsed = urllib.parse.urlparse(redirect_url)
+        if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+            raise AppException.bad_request("Invalid redirect URL")
+        return redirect_url
+
+    @staticmethod
+    def build_frontend_callback_url(
+        redirect_url: str,
+        *,
+        status: str,
+        google_email: str | None = None,
+        error: str | None = None,
+    ) -> str:
+        parsed = urllib.parse.urlparse(redirect_url)
+        query = urllib.parse.parse_qsl(parsed.query, keep_blank_values=True)
+        query.append(("status", status))
+        if google_email is not None:
+            query.append(("google_email", google_email))
+        if error is not None:
+            query.append(("error", error))
+        return urllib.parse.urlunparse(parsed._replace(query=urllib.parse.urlencode(query)))

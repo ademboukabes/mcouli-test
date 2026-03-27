@@ -38,6 +38,7 @@ class UploadRequestSchema(BaseModel):
 
     id: UUID
     event_id: UUID
+    group_id: UUID | None
     drive_file_id: str | None
     requested_by: UUID
     approved_by: UUID | None
@@ -57,6 +58,7 @@ class UploadRequestSchema(BaseModel):
         return cls(
             id=upload_request.id,
             event_id=upload_request.event_id,
+            group_id=upload_request.group_id,
             drive_file_id=upload_request.drive_file_id,
             requested_by=upload_request.requested_by,
             approved_by=upload_request.approved_by,

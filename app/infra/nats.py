@@ -9,9 +9,9 @@ from pydantic import BaseModel
 
 from app.core.config import settings
 from app.core.constant import (
-    NOTIFICATION_EVENT_SUBJECT,
     AUDIT_EVENT_SUBJECT,
     FINAL_BUCKET_CLEANUP_SUBJECT,
+    NOTIFICATION_EVENT_SUBJECT,
 )
 
 
@@ -25,11 +25,15 @@ class NatsSubjects(Enum):
     USER_LOGOUT = "user.logout"
     NOTIFICATION_EVENT = NOTIFICATION_EVENT_SUBJECT
     AUDIT_EVENT = AUDIT_EVENT_SUBJECT
+    STAFF_UPLOAD_GROUP_CREATED = "staff.upload_group.created"
+    STAFF_UPLOAD_GROUP_APPROVED = "staff.upload_group.approved"
+    STAFF_UPLOAD_GROUP_REJECTED = "staff.upload_group.rejected"
     FINAL_BUCKET_CLEANUP = FINAL_BUCKET_CLEANUP_SUBJECT
     STAFF_UPLOAD_REQUEST_CREATED = "staff.upload_request.created"
     STAFF_UPLOAD_REQUEST_APPROVED = "staff.upload_request.approved"
     STAFF_UPLOAD_REQUEST_REJECTED = "staff.upload_request.rejected"
     SINGLE_FACE_MATCH_REQUESTED = "photo_faces.single.requested"
+
 
 class NatsClient:
     _nc: Optional[NATS] = None
@@ -51,7 +55,7 @@ class NatsClient:
                 password=password or settings.NATS_PASSWORD,
             )
             NatsClient._nc = nc
-            NatsClient._js = nc.jetstream() # type: ignore
+            NatsClient._js = nc.jetstream()  # type: ignore
 
     @staticmethod
     async def close() -> None:
@@ -77,11 +81,12 @@ class NatsClient:
             await NatsClient.connect()
         nc = NatsClient._nc
         assert nc is not None
+
         async def _wrapper(msg: Msg) -> None:
             await callback(msg.data)
 
         subject_name = subject.value if isinstance(subject, NatsSubjects) else subject
-        await nc.subscribe(subject_name, cb=_wrapper) # type: ignore
+        await nc.subscribe(subject_name, cb=_wrapper)  # type: ignore
 
 
     @staticmethod
@@ -90,7 +95,7 @@ class NatsClient:
             await NatsClient.connect()
         js = NatsClient._js
         assert js is not None
-        subject_name = subject.value if isinstance(subject, NatsSubjects) else subject # type: ignore
+        subject_name = subject.value if isinstance(subject, NatsSubjects) else subject  # type: ignore
         await js.publish(subject_name, message, stream=stream_name)
 
     @staticmethod
@@ -111,9 +116,8 @@ class NatsClient:
             await msg.ack()
         js = NatsClient._js
         assert js is not None
-        subject_name = subject.value
         await js.subscribe(
-            subject=subject_name,
+            subject=subject.value,
             stream=stream_name,
             durable=durable_name,
             cb=_wrapper,

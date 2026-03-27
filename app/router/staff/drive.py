@@ -1,4 +1,5 @@
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import RedirectResponse
 
 from app.container import Container, get_container
 from app.core.exceptions import AppException
@@ -17,11 +18,13 @@ router = APIRouter(prefix="/drive")
 
 @router.get("/connect", response_model=GoogleDriveConnectResponse)
 async def connect_google_drive(
+    redirect_url: str | None = Query(default=None),
     current_staff_user: StaffUser = Depends(get_current_staff_user),
     container: Container = Depends(get_container),
 ) -> GoogleDriveConnectResponse:
     authorization_url, state = await container.staff_drive_service.create_connect_url(
-        current_staff_user
+        current_staff_user,
+        redirect_url=redirect_url,
     )
     return GoogleDriveConnectResponse(authorization_url=authorization_url, state=state)
 
@@ -32,11 +35,40 @@ async def google_drive_callback(
     state: str = Query(...),
     error: str | None = Query(default=None),
     container: Container = Depends(get_container),
-) -> GoogleDriveCallbackResponse:
+) -> GoogleDriveCallbackResponse | RedirectResponse:
+    redirect_url = await container.staff_drive_service.get_callback_redirect_url(state)
     if error is not None:
+        if redirect_url is not None:
+            return RedirectResponse(
+                container.staff_drive_service.build_frontend_callback_url(
+                    redirect_url,
+                    status="error",
+                    error=error,
+                )
+            )
         raise AppException.bad_request(f"Google OAuth error: {error}")
 
-    connection = await container.staff_drive_service.handle_callback(code, state)
+    try:
+        connection, redirect_url = await container.staff_drive_service.handle_callback(code, state)
+    except HTTPException as exc:
+        if redirect_url is not None:
+            return RedirectResponse(
+                container.staff_drive_service.build_frontend_callback_url(
+                    redirect_url,
+                    status="error",
+                    error=str(exc.detail),
+                )
+            )
+        raise
+
+    if redirect_url is not None:
+        return RedirectResponse(
+            container.staff_drive_service.build_frontend_callback_url(
+                redirect_url,
+                status="success",
+                google_email=connection.google_email,
+            )
+        )
     return GoogleDriveCallbackResponse(
         message="Google Drive connected successfully",
         google_email=connection.google_email,

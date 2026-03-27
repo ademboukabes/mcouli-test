@@ -15,8 +15,7 @@ from app.core.constant import (
     GOOGLE_TOKEN_URL,
     GOOGLE_USERINFO_URL,
 )
-
-
+GOOGLE_DRIVE_LIST_FILES_URL = "https://www.googleapis.com/drive/v3/files"
 
 
 @dataclass
@@ -50,6 +49,8 @@ class GoogleDriveFileDownload:
 
 
 class GoogleDriveClient:
+    _drive_folder_mime_type = "application/vnd.google-apps.folder"
+
     @staticmethod
     def _require_str(data: dict[str, object], key: str) -> str:
         value = data.get(key)
@@ -182,6 +183,71 @@ class GoogleDriveClient:
             },
         )
         return GoogleDriveFileDownload(metadata=metadata, content=content)
+
+    @staticmethod
+    async def list_folder_files(
+        *,
+        access_token: str,
+        folder_id: str,
+    ) -> list[GoogleDriveFileMetadata]:
+        files: list[GoogleDriveFileMetadata] = []
+        next_page_token: str | None = None
+
+        while True:
+            query_params = {
+                "q": f"'{folder_id}' in parents and trashed = false",
+                "fields": "nextPageToken,files(id,name,mimeType,size)",
+                "supportsAllDrives": "true",
+                "includeItemsFromAllDrives": "true",
+                "pageSize": "100",
+            }
+            if next_page_token is not None:
+                query_params["pageToken"] = next_page_token
+
+            data = await GoogleDriveClient._get_json(
+                GOOGLE_DRIVE_LIST_FILES_URL,
+                headers={"Authorization": f"Bearer {access_token}"},
+                query_params=query_params,
+                error_context="Google Drive folder listing request",
+            )
+
+            raw_files = data.get("files", [])
+            if not isinstance(raw_files, list):
+                raise AppException.bad_request("Google Drive folder listing response is invalid")
+
+            for raw_file in raw_files:
+                if not isinstance(raw_file, dict):
+                    raise AppException.bad_request("Google Drive folder entry is invalid")
+                metadata = GoogleDriveClient._file_metadata_from_dict(raw_file)
+                if metadata.mime_type == GoogleDriveClient._drive_folder_mime_type:
+                    continue
+                files.append(metadata)
+
+            next_page_token_raw = data.get("nextPageToken")
+            if next_page_token_raw is None:
+                break
+            if not isinstance(next_page_token_raw, str) or not next_page_token_raw:
+                raise AppException.bad_request("Google Drive next page token is invalid")
+            next_page_token = next_page_token_raw
+
+        return files
+
+    @staticmethod
+    def _file_metadata_from_dict(data: dict[str, object]) -> GoogleDriveFileMetadata:
+        size_raw = data.get("size", "0")
+        if not isinstance(size_raw, (str, int)):
+            raise AppException.bad_request("Google Drive file size is invalid")
+        try:
+            size_bytes = int(size_raw)
+        except (TypeError, ValueError) as exc:
+            raise AppException.bad_request("Google Drive file size is invalid") from exc
+
+        return GoogleDriveFileMetadata(
+            id=GoogleDriveClient._require_str(data, "id"),
+            name=GoogleDriveClient._require_str(data, "name"),
+            mime_type=GoogleDriveClient._require_str(data, "mimeType"),
+            size_bytes=size_bytes,
+        )
 
     @staticmethod
     async def _post_form(url: str, payload: dict[str, str]) -> dict[str, object]:
