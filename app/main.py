@@ -66,7 +66,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
                 raise RuntimeError("Cannot connect to MinIO after multiple attempts") from e
             await asyncio.sleep(RETRY_DELAY)
 
-    RedisClient(
+    RedisClient.init(
         host=settings.REDIS_HOST,
         port=settings.REDIS_PORT,
         password=settings.REDIS_PASSWORD,

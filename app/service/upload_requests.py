@@ -261,7 +261,7 @@ class UploadRequestsService:
         publish_event: bool = True,
     ) -> UploadRequestDetails:
         self._validate_create_request_inputs(photos)
-
+        upload_request = None
         try:
             upload_request = await self.upload_request_querier.create_upload_request(
                 event_id=event_id,
@@ -499,6 +499,7 @@ class UploadRequestsService:
         day_number: int | None,
         requested_by: StaffUser,
     ) -> UploadRequestGroupDetails:
+        upload_group = None
         access_token = await self.staff_drive_service.get_access_token_for_staff_user(
             requested_by.id
         )
