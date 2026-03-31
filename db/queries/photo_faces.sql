@@ -73,3 +73,28 @@ SELECT upserted_photo_face.id AS photo_face_id,
        inserted_match.id AS face_match_id
 FROM upserted_photo_face
 LEFT JOIN inserted_match ON TRUE;
+-- name: InsertPhotoFaceWithApproval :one
+WITH matched_user AS (
+    SELECT id AS user_id
+    FROM users
+    WHERE face_embedding IS NOT NULL
+      AND deleted_at IS NULL
+      AND face_embedding <#> $3::vector <= $4  
+    ORDER BY face_embedding <#> $3::vector ASC
+    LIMIT 1
+),
+insert_face AS (
+INSERT INTO photo_faces (photo_id, face_index, embedding, bbox)
+VALUES ($1, $2, $3::vector, $5)
+RETURNING id, photo_id, face_index
+),
+matched AS (
+    SELECT insert_face.photo_id, matched_user.user_id
+    FROM insert_face, matched_user
+    WHERE matched_user.user_id IS NOT NULL
+)
+INSERT INTO photo_approvals (photo_id, user_id, decision)
+SELECT photo_id, user_id, 'pending'
+FROM insert_face
+WHERE user_id IS NOT NULL
+RETURNING *;

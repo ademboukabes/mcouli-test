@@ -33,6 +33,7 @@ class NatsSubjects(Enum):
     STAFF_UPLOAD_REQUEST_APPROVED = "staff.upload_request.approved"
     STAFF_UPLOAD_REQUEST_REJECTED = "staff.upload_request.rejected"
     SINGLE_FACE_MATCH_REQUESTED = "photo_faces.single.requested"
+    PHOTO_GROUP_PROCESS = "photo.group.process"
 
 
 class NatsClient:

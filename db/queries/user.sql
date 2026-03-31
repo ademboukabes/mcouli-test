@@ -60,3 +60,8 @@ FROM users
 WHERE face_embedding IS NOT NULL
 ORDER BY distance ASC
 LIMIT 1;
+-- name: ListUsersWithEmbedding :many
+SELECT id, face_embedding
+FROM users
+WHERE face_embedding IS NOT NULL
+AND deleted_at IS NULL;
