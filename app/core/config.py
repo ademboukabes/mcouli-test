@@ -75,6 +75,8 @@ class Settings(BaseSettings):
     @field_validator("debug", mode="before")
     @classmethod
     def _parse_debug(cls, value):  # type: ignore[no-untyped-def]
+        if value is None:
+            return True
         if isinstance(value, str):
             lowered = value.strip().lower()
             if lowered in {"release", "prod", "production", "false", "0", "no"}:
@@ -82,7 +84,7 @@ class Settings(BaseSettings):
             if lowered in {"true", "1", "yes"}:
                 return True
             return value
-        
+        return value
 
 
 settings = Settings()  # type: ignore

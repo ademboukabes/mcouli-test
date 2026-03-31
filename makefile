@@ -16,7 +16,7 @@ ifneq ("$(wildcard .env)","")
     export
 endif
 
-.PHONY: migration-create m-up m-down gen get_db run-app lint
+.PHONY: migration-create m-up m-down gen get_db run-app run-workers lint
 
 # Helper variable to call your new cleaning script
 CLEAN_SCHEMA = uv run python scripts/clean_schema.py db/schema.sql
@@ -55,7 +55,15 @@ get_db:
 	psql -U $(POSTGRES_USER) -d $(POSTGRES_DB) -h localhost -p $(POSTGRES_PORT)
 
 run-app:
-	uv run fastapi dev app/main.py 
+	uv run fastapi dev app/main.py
+
+run-workers:
+	@trap 'kill 0; exit' INT TERM; \
+	uv run python -m app.worker.audit.main & \
+	uv run python -m app.worker.notification.main & \
+	uv run python -m app.worker.single_face_match.main & \
+	uv run python -m app.worker.storage_cleaner.main & \
+	wait
 
 lint:
 	uv run ruff check .

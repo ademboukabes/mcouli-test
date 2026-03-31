@@ -1,6 +1,12 @@
 """Audit worker package exports."""
 from __future__ import annotations
 
-from .main import main  # noqa: F401
-
 __all__ = ["main"]
+
+
+def __getattr__(name: str):  # type: ignore[no-untyped-def]
+    if name == "main":
+        from .main import main
+
+        return main
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

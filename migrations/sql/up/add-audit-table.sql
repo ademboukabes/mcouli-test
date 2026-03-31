@@ -1,11 +1,15 @@
-CREATE TYPE IF NOT EXISTS public.audit_event_type AS ENUM (
-    'user.signup',
-    'user.login',
-    'user.logout',
-    'upload_request.created',
-    'upload_request.approved',
-    'upload_request.rejected'
-);
+DO $$ BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'audit_event_type') THEN
+        CREATE TYPE public.audit_event_type AS ENUM (
+            'user.signup',
+            'user.login',
+            'user.logout',
+            'upload_request.created',
+            'upload_request.approved',
+            'upload_request.rejected'
+        );
+    END IF;
+END $$;
 
 CREATE TABLE IF NOT EXISTS public.audit_events (
     id uuid DEFAULT public.uuid_generate_v4() NOT NULL,
