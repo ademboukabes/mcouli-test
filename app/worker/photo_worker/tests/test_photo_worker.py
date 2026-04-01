@@ -267,7 +267,7 @@ async def test_cleanup_scheduled_after_single_face(
     single_face_service: AsyncMock,
     event: PhotoProcessEvent,
 ) -> None:
-    """After single face processing, a cleanup event should be published."""
+    """After single face processing, both audit and cleanup events should be published."""
     face_service.detect_faces = AsyncMock(return_value=[_make_face()])
 
     with (
@@ -280,11 +280,13 @@ async def test_cleanup_scheduled_after_single_face(
         )
         await worker.handle_message(_event_bytes(event))
 
-    mock_nats.publish.assert_called_once()
-    subject, payload_bytes = mock_nats.publish.call_args.args
     from app.infra.nats import NatsSubjects
-    assert subject == NatsSubjects.FINAL_BUCKET_CLEANUP
-    cleanup_payload = json.loads(payload_bytes)
+    assert mock_nats.publish.call_count == 2
+    audit_call = mock_nats.publish.call_args_list[0]
+    assert audit_call.args[0] == NatsSubjects.AUDIT_EVENT
+    cleanup_call = mock_nats.publish.call_args_list[1]
+    assert cleanup_call.args[0] == NatsSubjects.FINAL_BUCKET_CLEANUP
+    cleanup_payload = json.loads(cleanup_call.args[1])
     assert event.image_ref in cleanup_payload["storage_keys"]
 
 
@@ -295,7 +297,7 @@ async def test_cleanup_scheduled_after_group_photo(
     photo_face_querier: AsyncMock,
     event: PhotoProcessEvent,
 ) -> None:
-    """After group photo processing, a cleanup event should be published."""
+    """After group photo processing, both audit and cleanup events should be published."""
     faces = [_make_face(), _make_face()]
     face_service.detect_faces = AsyncMock(return_value=faces)
     photo_face_querier.insert_photo_face_with_approval = AsyncMock(return_value=None)
@@ -310,11 +312,11 @@ async def test_cleanup_scheduled_after_group_photo(
         )
         await worker.handle_message(_event_bytes(event))
 
-    mock_nats.publish.assert_called_once()
-    subject, payload_bytes = mock_nats.publish.call_args.args
     from app.infra.nats import NatsSubjects
-    assert subject == NatsSubjects.FINAL_BUCKET_CLEANUP
-    cleanup_payload = json.loads(payload_bytes)
+    assert mock_nats.publish.call_count == 2
+    cleanup_call = mock_nats.publish.call_args_list[1]
+    assert cleanup_call.args[0] == NatsSubjects.FINAL_BUCKET_CLEANUP
+    cleanup_payload = json.loads(cleanup_call.args[1])
     assert event.image_ref in cleanup_payload["storage_keys"]
 
 

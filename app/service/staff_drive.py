@@ -176,6 +176,15 @@ class StaffDriveService:
             connection = await self._refresh_connection_access_token(connection)
         return self.decrypt(connection.access_token)
 
+    async def get_system_access_token(self) -> str:
+        """Get an access token from any active staff Drive connection."""
+        connection = await self.drive_connection_querier.get_any_active_staff_drive_connection()
+        if connection is None:
+            raise AppException.not_found("No active Google Drive connection")
+        if self._token_needs_refresh(connection):
+            connection = await self._refresh_connection_access_token(connection)
+        return self.decrypt(connection.access_token)
+
     async def disconnect(self, staff_user_id: uuid.UUID) -> None:
         connection = await self.get_status(staff_user_id)
         if connection is None:

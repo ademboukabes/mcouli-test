@@ -34,6 +34,13 @@ WHERE staff_user_id = $1
   AND provider = $2
   AND revoked_at IS NULL;
 
+-- name: GetAnyActiveStaffDriveConnection :one
+SELECT *
+FROM staff_drive_connections
+WHERE revoked_at IS NULL
+ORDER BY connected_at DESC
+LIMIT 1;
+
 -- name: RevokeStaffDriveConnectionByStaffUserID :exec
 UPDATE staff_drive_connections
 SET revoked_at = NOW(),

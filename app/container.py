@@ -14,6 +14,7 @@ from app.service.staff_user import StaffUserService
 
 from app.service.audit import AuditService
 from app.service.photo_approval import PhotoApprovalService
+from app.service.user_photo import UserPhotoService
 from app.service.upload_requests import UploadRequestsService
 from app.service.users import AuthService
 from app.service.user_notification import UserNotificationService
@@ -140,6 +141,11 @@ class Container:
             photo_querier=self.photo_querier,
             storage_service=self.staged_upload_storage_service,
             audit_service=self.audit_service,
+        )
+
+        self.user_photo_service = UserPhotoService(
+            photo_querier=self.photo_querier,
+            staff_drive_service=self.staff_drive_service,
         )
 
 async def get_container(

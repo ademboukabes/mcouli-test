@@ -23,6 +23,7 @@ from app.service.user_notification import UserNotificationService
 from app.worker.photo_worker.schema.event import PhotoProcessEvent
 from app.worker.photo_worker.settings import settings as worker_settings
 from db.generated import photo_faces as photo_face_queries
+from db.generated import processing_jobs as processing_job_queries
 from db.generated.photo_faces import InsertPhotoFaceWithApprovalParams
 
 
@@ -41,32 +42,41 @@ class PhotoWorker:
         single_face_service: SingleFaceMatchService,
         user_notification_service: UserNotificationService,
         photo_face_querier: photo_face_queries.AsyncQuerier,
+        processing_job_querier: processing_job_queries.AsyncQuerier | None = None,
     ) -> None:
         self._conn = conn
         self._face_service = face_embedding_service
         self._single_face_service = single_face_service
         self._notification_service = user_notification_service
         self._photo_face_querier = photo_face_querier
+        self._pj_querier = processing_job_querier
 
     async def handle_message(self, data: bytes) -> None:
         event = self._parse_event(data)
         if event is None:
             return
 
+        job = await self._create_job(event)
+
         try:
             payload = await self._load_image(event.image_ref)
         except Exception as exc:
             logger.warning("Failed to load image for photo %s: %s", event.photo_id, exc)
+            await self._update_job(job, "failed")
             return
+
+        await self._update_job(job, "running")
 
         try:
             faces = await self._face_service.detect_faces(payload)
         except Exception as exc:
             logger.warning("Face detection failed for photo %s: %s", event.photo_id, exc)
+            await self._update_job(job, "failed")
             return
 
         if not faces:
             logger.info("No faces detected in photo %s", event.photo_id)
+            await self._update_job(job, "completed")
             await self._schedule_cleanup(event.image_ref)
             return
 
@@ -75,6 +85,7 @@ class PhotoWorker:
         else:
             await self._handle_group_photo(event, faces)
 
+        await self._update_job(job, "completed")
         await self._publish_audit(event, len(faces))
         await self._schedule_cleanup(event.image_ref)
 
@@ -164,9 +175,29 @@ class PhotoWorker:
                 )
 
 
+    async def _create_job(self, event: PhotoProcessEvent) -> object | None:
+        if self._pj_querier is None:
+            return None
+        try:
+            return await self._pj_querier.create_processing_job(
+                photo_id=event.photo_id, job_type="face_detection",
+            )
+        except Exception as exc:
+            logger.warning("Failed to create processing job for photo %s: %s", event.photo_id, exc)
+            return None
+
+    async def _update_job(self, job: object | None, status: str) -> None:
+        if job is None or self._pj_querier is None:
+            return
+        try:
+            await self._pj_querier.update_processing_job_status(id=job.id, status=status)  # type: ignore[union-attr]
+        except Exception as exc:
+            logger.warning("Failed to update processing job: %s", exc)
+
     @staticmethod
     async def _publish_audit(event: PhotoProcessEvent, faces_count: int) -> None:
         from app.core.constant import AuditEventType
+        from app.worker.audit.schema.audit import AuditEventMessage
         msg = AuditEventMessage(
             event_type=AuditEventType.PHOTO_PROCESSED,
             metadata={"photo_id": str(event.photo_id), "faces_count": faces_count},
@@ -259,6 +290,7 @@ async def run_worker() -> None:
             single_face_service=single_face_service,
             user_notification_service=container.user_notifications_service,
             photo_face_querier=container.photo_face_querier,
+            processing_job_querier=container.processing_job_querier,
         )
 
         await NatsClient.js_subscribe(

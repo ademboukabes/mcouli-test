@@ -22,6 +22,15 @@ WHERE staff_user_id = :p1
 """
 
 
+GET_ANY_ACTIVE_STAFF_DRIVE_CONNECTION = """-- name: get_any_active_staff_drive_connection \\:one
+SELECT id, staff_user_id, provider, google_email, google_account_id, access_token, refresh_token, token_expires_at, scopes, connected_at, revoked_at, created_at, updated_at
+FROM staff_drive_connections
+WHERE revoked_at IS NULL
+ORDER BY connected_at DESC
+LIMIT 1
+"""
+
+
 REVOKE_STAFF_DRIVE_CONNECTION_BY_STAFF_USER_ID = """-- name: revoke_staff_drive_connection_by_staff_user_id \\:exec
 UPDATE staff_drive_connections
 SET revoked_at = NOW(),
@@ -81,6 +90,26 @@ class AsyncQuerier:
 
     async def get_active_staff_drive_connection_by_staff_user_id(self, *, staff_user_id: uuid.UUID, provider: str) -> Optional[models.StaffDriveConnection]:
         row = (await self._conn.execute(sqlalchemy.text(GET_ACTIVE_STAFF_DRIVE_CONNECTION_BY_STAFF_USER_ID), {"p1": staff_user_id, "p2": provider})).first()
+        if row is None:
+            return None
+        return models.StaffDriveConnection(
+            id=row[0],
+            staff_user_id=row[1],
+            provider=row[2],
+            google_email=row[3],
+            google_account_id=row[4],
+            access_token=row[5],
+            refresh_token=row[6],
+            token_expires_at=row[7],
+            scopes=row[8],
+            connected_at=row[9],
+            revoked_at=row[10],
+            created_at=row[11],
+            updated_at=row[12],
+        )
+
+    async def get_any_active_staff_drive_connection(self) -> Optional[models.StaffDriveConnection]:
+        row = (await self._conn.execute(sqlalchemy.text(GET_ANY_ACTIVE_STAFF_DRIVE_CONNECTION))).first()
         if row is None:
             return None
         return models.StaffDriveConnection(
