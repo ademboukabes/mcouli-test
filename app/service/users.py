@@ -84,6 +84,7 @@ class AuthService:
         existing_user = await self.user_querier.get_user_by_email(email=req.email)
         user: User | None = None
 
+        is_new_user = False
         if existing_user is not None:
             if existing_user.blocked:
                 raise AppException.forbidden("User is blocked")
@@ -92,6 +93,7 @@ class AuthService:
             user = existing_user
             logger.info("existing user login: %s", req.email)
         else:
+            is_new_user = True
             hashed = hash_password(req.password)
             logger.info("creating new user for %s", req.email)
             user = await self.user_querier.create_user(
@@ -145,6 +147,8 @@ class AuthService:
             refresh_token=refresh_token,
             session_id=str(session.id),
             expires_in=expiry,
+            user_id=user_id,
+            is_new_user=is_new_user,
         )
 
     async def refresh_token(
@@ -181,6 +185,7 @@ class AuthService:
             refresh_token=new_refresh_token,
             session_id=session_id,
             expires_in=expiry,
+            user_id=session.user_id,
         )
 
     async def logout(

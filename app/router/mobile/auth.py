@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends
 from uuid import UUID
 
 from app.container import get_container, Container
+from app.core.constant import AuditEventType
 from app.deps.token_auth import MobileUserSchema, get_current_mobile_user
 
 from app.schema.request.mobile.auth import (
@@ -22,7 +23,14 @@ async def mobile_register_login(
     req: MobileAuthRequest,
     container: Container = Depends(get_container),
 ) -> MobileAuthResponse:
-    return await container.auth_service.mobile_register_login(container.redis, req)
+    result = await container.auth_service.mobile_register_login(container.redis, req)
+    event_type = AuditEventType.USER_SIGNUP if result.is_new_user else AuditEventType.USER_LOGIN
+    await container.audit_service.create_record(
+        event_type=event_type,
+        user_id=result.user_id,
+        metadata={"email": req.email},
+    )
+    return result
 
 
 @router.post("/refresh", response_model=MobileAuthResponse)
@@ -38,11 +46,16 @@ async def logout(
     container: Container = Depends(get_container),
     current_user: MobileUserSchema = Depends(get_current_mobile_user),
 ) -> dict[str, str]:
-    return await container.auth_service.logout(
+    result = await container.auth_service.logout(
         container.redis,
         str(current_user.user_id),
         str(current_user.session_id),
     )
+    await container.audit_service.create_record(
+        event_type=AuditEventType.USER_LOGOUT,
+        user_id=current_user.user_id,
+    )
+    return result
 
 
 @router.post("/revoke-device")

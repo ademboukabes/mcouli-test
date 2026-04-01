@@ -21,6 +21,8 @@ class AuditEventType(str, Enum):
     UPLOAD_REQUEST_CREATED = "upload_request.created"
     UPLOAD_REQUEST_APPROVED = "upload_request.approved"
     UPLOAD_REQUEST_REJECTED = "upload_request.rejected"
+    PHOTO_PROCESSED = "photo.processed"
+    PHOTO_APPROVAL_DECIDED = "photo_approval.decided"
 
 
 IMAGE_ALLOWED_TYPES = {

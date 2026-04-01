@@ -7,6 +7,8 @@ import uuid
 
 from sqlalchemy.exc import IntegrityError
 
+from app.schema.internal.uploads import UploadPhotoInput
+from app.core.constant import AuditEventType
 from app.core.exceptions import AppException
 from app.core.logger import logger
 from app.infra.google_drive import (

@@ -31,3 +31,5 @@ class MobileAuthResponse(BaseModel):
     refresh_token: str
     session_id: str
     expires_in: int
+    user_id: uuid.UUID
+    is_new_user: bool = False
