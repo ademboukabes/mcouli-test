@@ -258,6 +258,102 @@ class GoogleDriveClient:
         return files
 
     @staticmethod
+    async def list_folder_contents(
+        *,
+        access_token: str,
+        folder_id: str | None = None,
+    ) -> list[GoogleDriveFileMetadata]:
+        """Like list_folder_files but includes folders. folder_id=None means root."""
+        parent = folder_id or "root"
+        items: list[GoogleDriveFileMetadata] = []
+        next_page_token: str | None = None
+
+        while True:
+            query_params = {
+                "q": f"'{parent}' in parents and trashed = false",
+                "fields": "nextPageToken,files(id,name,mimeType,size)",
+                "supportsAllDrives": "true",
+                "includeItemsFromAllDrives": "true",
+                "pageSize": "100",
+            }
+            if next_page_token is not None:
+                query_params["pageToken"] = next_page_token
+
+            data = await GoogleDriveClient._get_json(
+                GOOGLE_DRIVE_LIST_FILES_URL,
+                headers={"Authorization": f"Bearer {access_token}"},
+                query_params=query_params,
+                error_context="Google Drive folder browse request",
+            )
+
+            raw_files = data.get("files", [])
+            if not isinstance(raw_files, list):
+                raise AppException.bad_request("Google Drive folder listing response is invalid")
+
+            for raw_file in raw_files:
+                if not isinstance(raw_file, dict):
+                    continue
+                items.append(GoogleDriveClient._file_metadata_from_dict(raw_file))
+
+            next_page_token_raw = data.get("nextPageToken")
+            if not isinstance(next_page_token_raw, str) or not next_page_token_raw:
+                break
+            next_page_token = next_page_token_raw
+
+        return items
+
+    @staticmethod
+    async def search_files(
+        *,
+        access_token: str,
+        query: str,
+        file_type: str | None = None,
+    ) -> list[GoogleDriveFileMetadata]:
+        """Search Drive by name. file_type can be 'folder' or 'image'."""
+        q_parts = [f"name contains '{query}'", "trashed = false"]
+        if file_type == "folder":
+            q_parts.append(f"mimeType = '{GoogleDriveClient._drive_folder_mime_type}'")
+        elif file_type == "image":
+            q_parts.append("mimeType contains 'image/'")
+
+        items: list[GoogleDriveFileMetadata] = []
+        next_page_token: str | None = None
+
+        while True:
+            query_params = {
+                "q": " and ".join(q_parts),
+                "fields": "nextPageToken,files(id,name,mimeType,size)",
+                "supportsAllDrives": "true",
+                "includeItemsFromAllDrives": "true",
+                "pageSize": "100",
+            }
+            if next_page_token is not None:
+                query_params["pageToken"] = next_page_token
+
+            data = await GoogleDriveClient._get_json(
+                GOOGLE_DRIVE_LIST_FILES_URL,
+                headers={"Authorization": f"Bearer {access_token}"},
+                query_params=query_params,
+                error_context="Google Drive search request",
+            )
+
+            raw_files = data.get("files", [])
+            if not isinstance(raw_files, list):
+                break
+
+            for raw_file in raw_files:
+                if not isinstance(raw_file, dict):
+                    continue
+                items.append(GoogleDriveClient._file_metadata_from_dict(raw_file))
+
+            next_page_token_raw = data.get("nextPageToken")
+            if not isinstance(next_page_token_raw, str) or not next_page_token_raw:
+                break
+            next_page_token = next_page_token_raw
+
+        return items
+
+    @staticmethod
     def _file_metadata_from_dict(data: dict[str, object]) -> GoogleDriveFileMetadata:
         size_raw = data.get("size", "0")
         if not isinstance(size_raw, (str, int)):

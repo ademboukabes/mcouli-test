@@ -23,3 +23,15 @@ class GoogleDriveCallbackResponse(BaseModel):
 
 class GoogleDriveDisconnectResponse(BaseModel):
     message: str
+
+
+class DriveItemSchema(BaseModel):
+    id: str
+    name: str
+    mime_type: str
+    size_bytes: int
+    is_folder: bool
+
+
+class DriveBrowseResponse(BaseModel):
+    items: list[DriveItemSchema]

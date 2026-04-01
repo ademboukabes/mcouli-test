@@ -1,10 +1,15 @@
+from typing import Literal
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import RedirectResponse
 
 from app.container import Container, get_container
 from app.core.exceptions import AppException
 from app.deps.cookie_auth import get_current_staff_user
+from app.infra.google_drive import GoogleDriveClient
 from app.schema.response.staff.drive import (
+    DriveBrowseResponse,
+    DriveItemSchema,
     GoogleDriveCallbackResponse,
     GoogleDriveConnectResponse,
     GoogleDriveConnectionStatusResponse,
@@ -100,3 +105,56 @@ async def disconnect_google_drive(
 ) -> GoogleDriveDisconnectResponse:
     await container.staff_drive_service.disconnect(current_staff_user.id)
     return GoogleDriveDisconnectResponse(message="Google Drive disconnected successfully")
+
+
+@router.get("/browse", response_model=DriveBrowseResponse)
+async def browse_drive(
+    folder_id: str | None = Query(default=None),
+    current_staff_user: StaffUser = Depends(get_current_staff_user),
+    container: Container = Depends(get_container),
+) -> DriveBrowseResponse:
+    access_token = await container.staff_drive_service.get_access_token_for_staff_user(
+        current_staff_user.id
+    )
+    files = await GoogleDriveClient.list_folder_contents(
+        access_token=access_token, folder_id=folder_id,
+    )
+    return DriveBrowseResponse(
+        items=[
+            DriveItemSchema(
+                id=f.id,
+                name=f.name,
+                mime_type=f.mime_type,
+                size_bytes=f.size_bytes,
+                is_folder=f.mime_type == GoogleDriveClient._drive_folder_mime_type,
+            )
+            for f in files
+        ]
+    )
+
+
+@router.get("/search", response_model=DriveBrowseResponse)
+async def search_drive(
+    q: str = Query(..., min_length=1),
+    type: Literal["folder", "image"] | None = Query(default=None),
+    current_staff_user: StaffUser = Depends(get_current_staff_user),
+    container: Container = Depends(get_container),
+) -> DriveBrowseResponse:
+    access_token = await container.staff_drive_service.get_access_token_for_staff_user(
+        current_staff_user.id
+    )
+    files = await GoogleDriveClient.search_files(
+        access_token=access_token, query=q, file_type=type,
+    )
+    return DriveBrowseResponse(
+        items=[
+            DriveItemSchema(
+                id=f.id,
+                name=f.name,
+                mime_type=f.mime_type,
+                size_bytes=f.size_bytes,
+                is_folder=f.mime_type == GoogleDriveClient._drive_folder_mime_type,
+            )
+            for f in files
+        ]
+    )

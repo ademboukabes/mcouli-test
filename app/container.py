@@ -19,6 +19,7 @@ from app.service.users import AuthService
 from app.service.user_notification import UserNotificationService
 from db.generated import devices as device_queries
 from db.generated import photo_approvals as photo_approval_queries
+from db.generated import processing_jobs as processing_job_queries
 from db.generated import photo_faces as photo_face_queries
 from db.generated import photos as photo_queries
 from db.generated import session as session_queries
@@ -61,6 +62,7 @@ class Container:
         self.photo_querier = photo_queries.AsyncQuerier(conn)
         self.photo_approval_querier = photo_approval_queries.AsyncQuerier(conn)
         self.photo_face_querier = photo_face_queries.AsyncQuerier(conn)
+        self.processing_job_querier = processing_job_queries.AsyncQuerier(conn)
         self.staff_notification_querier = staff_notification_queries.AsyncQuerier(conn)
         self.notification_querier = notification_queries.AsyncQuerier(conn)
         self.audit_querier = audit_queries.AsyncQuerier(conn)
