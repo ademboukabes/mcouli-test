@@ -9,7 +9,7 @@ from app.infra.minio import Bucket, IMAGES_BUCKET_NAME
 from app.service.staff_drive import StaffDriveService
 from db.generated import photos as photo_queries
 from db.generated.models import Photo
-from db.generated.photos import ListUserPhotosParams
+from db.generated.photos import ListEventPhotosForUserParams, ListUserPhotosParams
 
 
 class UserPhotoService:
@@ -36,6 +36,28 @@ class UserPhotoService:
             ListUserPhotosParams(
                 user_id=user_id,
                 column_2=event_id,  # type: ignore[arg-type]
+                column_3=sort,
+                limit=limit,
+                offset=offset,
+            )
+        ):
+            photos.append(photo)
+        return photos
+
+    async def list_event_photos(
+        self,
+        *,
+        user_id: UUID,
+        event_id: UUID,
+        sort: str = "desc",
+        limit: int = 50,
+        offset: int = 0,
+    ) -> list[Photo]:
+        photos: list[Photo] = []
+        async for photo in self._photo_querier.list_event_photos_for_user(
+            ListEventPhotosForUserParams(
+                user_id=user_id,
+                event_id=event_id,
                 column_3=sort,
                 limit=limit,
                 offset=offset,
