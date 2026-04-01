@@ -2,7 +2,7 @@
 # versions:
 #   sqlc v1.30.0
 # source: photo_approvals.sql
-from typing import Optional
+from typing import AsyncIterator, Optional
 import uuid
 
 import sqlalchemy
@@ -23,12 +23,66 @@ RETURNING id, photo_id, user_id, decision, decided_at
 """
 
 
+GET_PENDING_APPROVALS_BY_USER_ID = """-- name: get_pending_approvals_by_user_id \\:many
+SELECT id, photo_id, user_id, decision, decided_at FROM photo_approvals
+WHERE user_id = :p1 AND decision = 'pending'
+ORDER BY decided_at DESC
+"""
+
+
+GET_PHOTO_APPROVALS_BY_PHOTO_ID = """-- name: get_photo_approvals_by_photo_id \\:many
+SELECT id, photo_id, user_id, decision, decided_at FROM photo_approvals WHERE photo_id = :p1
+"""
+
+
+UPDATE_PHOTO_APPROVAL_DECISION = """-- name: update_photo_approval_decision \\:one
+UPDATE photo_approvals
+SET decision = :p2, decided_at = now()
+WHERE photo_id = :p1 AND user_id = :p3
+RETURNING id, photo_id, user_id, decision, decided_at
+"""
+
+
 class AsyncQuerier:
     def __init__(self, conn: sqlalchemy.ext.asyncio.AsyncConnection):
         self._conn = conn
 
     async def create_photo_approval(self, *, photo_id: uuid.UUID, user_id: uuid.UUID, decision: str) -> Optional[models.PhotoApproval]:
         row = (await self._conn.execute(sqlalchemy.text(CREATE_PHOTO_APPROVAL), {"p1": photo_id, "p2": user_id, "p3": decision})).first()
+        if row is None:
+            return None
+        return models.PhotoApproval(
+            id=row[0],
+            photo_id=row[1],
+            user_id=row[2],
+            decision=row[3],
+            decided_at=row[4],
+        )
+
+    async def get_pending_approvals_by_user_id(self, *, user_id: uuid.UUID) -> AsyncIterator[models.PhotoApproval]:
+        result = await self._conn.stream(sqlalchemy.text(GET_PENDING_APPROVALS_BY_USER_ID), {"p1": user_id})
+        async for row in result:
+            yield models.PhotoApproval(
+                id=row[0],
+                photo_id=row[1],
+                user_id=row[2],
+                decision=row[3],
+                decided_at=row[4],
+            )
+
+    async def get_photo_approvals_by_photo_id(self, *, photo_id: uuid.UUID) -> AsyncIterator[models.PhotoApproval]:
+        result = await self._conn.stream(sqlalchemy.text(GET_PHOTO_APPROVALS_BY_PHOTO_ID), {"p1": photo_id})
+        async for row in result:
+            yield models.PhotoApproval(
+                id=row[0],
+                photo_id=row[1],
+                user_id=row[2],
+                decision=row[3],
+                decided_at=row[4],
+            )
+
+    async def update_photo_approval_decision(self, *, photo_id: uuid.UUID, decision: str, user_id: uuid.UUID) -> Optional[models.PhotoApproval]:
+        row = (await self._conn.execute(sqlalchemy.text(UPDATE_PHOTO_APPROVAL_DECISION), {"p1": photo_id, "p2": decision, "p3": user_id})).first()
         if row is None:
             return None
         return models.PhotoApproval(

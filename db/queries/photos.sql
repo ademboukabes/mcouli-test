@@ -9,3 +9,12 @@ INSERT INTO photos (
     $1, $2, $3, $4, $5
 )
 RETURNING *;
+
+-- name: GetPhotoById :one
+SELECT * FROM photos WHERE id = $1;
+
+-- name: UpdatePhotoStatus :one
+UPDATE photos
+SET status = $2
+WHERE id = $1
+RETURNING *;

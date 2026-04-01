@@ -7,8 +7,6 @@ from pydantic import BaseModel, Field
 
 
 class PhotoProcessEvent(BaseModel):
-    """Unified event for photo face processing (single and group)."""
-
     photo_id: uuid.UUID
     image_ref: str
     event_id: uuid.UUID | None = None

@@ -11,6 +11,7 @@ from app.schema.internal.single_face_match import BBoxPayload, ClosestUserMatch,
 from app.service.user_notification import UserNotificationService
 from app.service.users import AuthService
 from db.generated import photo_faces as photo_face_queries
+from db.generated import photos as photo_queries
 
 
 class SingleFaceMatchService:
@@ -19,11 +20,13 @@ class SingleFaceMatchService:
         *,
         conn: AsyncConnection,
         photo_face_querier: photo_face_queries.AsyncQuerier,
+        photo_querier: photo_queries.AsyncQuerier,
         user_match_service: AuthService,
         user_notification_service: UserNotificationService,
     ) -> None:
         self.conn = conn
         self.photo_face_querier = photo_face_querier
+        self.photo_querier = photo_querier
         self.user_match_service = user_match_service
         self.user_notification_service = user_notification_service
 
@@ -60,6 +63,14 @@ class SingleFaceMatchService:
                     logger.info("No user embeddings available for matching")
                     return
 
+                from app.worker.photo_worker.settings import settings as worker_settings
+                if matched_user.distance > worker_settings.similarity_threshold:
+                    logger.info(
+                        "Closest user distance %.4f exceeds threshold %.4f for photo %s; skipping",
+                        matched_user.distance, worker_settings.similarity_threshold, job.photo_id,
+                    )
+                    return
+
                 params = photo_face_queries.PhotoFacesEnsureFaceMatchParams(
                     photo_id=job.photo_id,
                     face_index=job.face_index,
@@ -89,7 +100,10 @@ class SingleFaceMatchService:
             logger.error("Out of memory while matching photo %s", job.photo_id)
             return
 
-        if created_face_match_id :
+        if created_face_match_id:
+            await self.photo_querier.update_photo_status(
+                id=job.photo_id, status="approved",
+            )
             await self.user_notification_service.create_notification(
                 user_id=matched_user.user_id,
                 type="face_match",

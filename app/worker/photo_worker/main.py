@@ -235,6 +235,7 @@ async def run_worker() -> None:
         single_face_service = SingleFaceMatchService(
             conn=conn,
             photo_face_querier=container.photo_face_querier,
+            photo_querier=container.photo_querier,
             user_match_service=container.auth_service,
             user_notification_service=container.user_notifications_service,
         )

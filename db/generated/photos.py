@@ -4,7 +4,7 @@
 # source: photos.sql
 import dataclasses
 import datetime
-from typing import Optional
+from typing import Any, Optional
 import uuid
 
 import sqlalchemy
@@ -36,6 +36,19 @@ class CreatePhotoParams:
     visibility: str
 
 
+GET_PHOTO_BY_ID = """-- name: get_photo_by_id \\:one
+SELECT id, event_id, uploaded_by, storage_key, taken_at, day_number, visibility, status, created_at FROM photos WHERE id = :p1
+"""
+
+
+UPDATE_PHOTO_STATUS = """-- name: update_photo_status \\:one
+UPDATE photos
+SET status = :p2
+WHERE id = :p1
+RETURNING id, event_id, uploaded_by, storage_key, taken_at, day_number, visibility, status, created_at
+"""
+
+
 class AsyncQuerier:
     def __init__(self, conn: sqlalchemy.ext.asyncio.AsyncConnection):
         self._conn = conn
@@ -48,6 +61,38 @@ class AsyncQuerier:
             "p4": arg.day_number,
             "p5": arg.visibility,
         })).first()
+        if row is None:
+            return None
+        return models.Photo(
+            id=row[0],
+            event_id=row[1],
+            uploaded_by=row[2],
+            storage_key=row[3],
+            taken_at=row[4],
+            day_number=row[5],
+            visibility=row[6],
+            status=row[7],
+            created_at=row[8],
+        )
+
+    async def get_photo_by_id(self, *, id: uuid.UUID) -> Optional[models.Photo]:
+        row = (await self._conn.execute(sqlalchemy.text(GET_PHOTO_BY_ID), {"p1": id})).first()
+        if row is None:
+            return None
+        return models.Photo(
+            id=row[0],
+            event_id=row[1],
+            uploaded_by=row[2],
+            storage_key=row[3],
+            taken_at=row[4],
+            day_number=row[5],
+            visibility=row[6],
+            status=row[7],
+            created_at=row[8],
+        )
+
+    async def update_photo_status(self, *, id: uuid.UUID, status: Any) -> Optional[models.Photo]:
+        row = (await self._conn.execute(sqlalchemy.text(UPDATE_PHOTO_STATUS), {"p1": id, "p2": status})).first()
         if row is None:
             return None
         return models.Photo(

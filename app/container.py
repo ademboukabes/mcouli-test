@@ -13,10 +13,12 @@ from app.service.staff_notifications import StaffNotificationsService
 from app.service.staff_user import StaffUserService
 
 from app.service.audit import AuditService
+from app.service.photo_approval import PhotoApprovalService
 from app.service.upload_requests import UploadRequestsService
 from app.service.users import AuthService
 from app.service.user_notification import UserNotificationService
 from db.generated import devices as device_queries
+from db.generated import photo_approvals as photo_approval_queries
 from db.generated import photo_faces as photo_face_queries
 from db.generated import photos as photo_queries
 from db.generated import session as session_queries
@@ -57,6 +59,7 @@ class Container:
         self.upload_request_querier = upload_request_queries.AsyncQuerier(conn)
         self.upload_request_photo_querier = upload_request_photo_queries.AsyncQuerier(conn)
         self.photo_querier = photo_queries.AsyncQuerier(conn)
+        self.photo_approval_querier = photo_approval_queries.AsyncQuerier(conn)
         self.photo_face_querier = photo_face_queries.AsyncQuerier(conn)
         self.staff_notification_querier = staff_notification_queries.AsyncQuerier(conn)
         self.notification_querier = notification_queries.AsyncQuerier(conn)
@@ -127,6 +130,12 @@ class Container:
         self.event_service = EventService(
             e_querier=self.event_querier,
             p_querier=self.participant_querier,
+        )
+
+        self.photo_approval_service = PhotoApprovalService(
+            photo_approval_querier=self.photo_approval_querier,
+            photo_querier=self.photo_querier,
+            storage_service=self.staged_upload_storage_service,
         )
 
 async def get_container(
