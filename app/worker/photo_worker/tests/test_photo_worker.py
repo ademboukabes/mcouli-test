@@ -255,3 +255,105 @@ async def test_image_load_failure_is_handled(
         await worker.handle_message(_event_bytes(event))
 
     face_service.detect_faces.assert_not_called()
+
+
+# ── cleanup scheduling tests ──────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_cleanup_scheduled_after_single_face(
+    worker: PhotoWorker,
+    face_service: AsyncMock,
+    single_face_service: AsyncMock,
+    event: PhotoProcessEvent,
+) -> None:
+    """After single face processing, a cleanup event should be published."""
+    face_service.detect_faces = AsyncMock(return_value=[_make_face()])
+
+    with (
+        patch.object(worker, "_load_image", new_callable=AsyncMock) as mock_load,
+        patch("app.worker.photo_worker.main.NatsClient") as mock_nats,
+    ):
+        mock_nats.publish = AsyncMock()
+        mock_load.return_value = FaceImagePayload(
+            filename="test.jpg", content_type="image/jpeg", bytes=b"img"
+        )
+        await worker.handle_message(_event_bytes(event))
+
+    mock_nats.publish.assert_called_once()
+    subject, payload_bytes = mock_nats.publish.call_args.args
+    from app.infra.nats import NatsSubjects
+    assert subject == NatsSubjects.FINAL_BUCKET_CLEANUP
+    cleanup_payload = json.loads(payload_bytes)
+    assert event.image_ref in cleanup_payload["storage_keys"]
+
+
+@pytest.mark.asyncio
+async def test_cleanup_scheduled_after_group_photo(
+    worker: PhotoWorker,
+    face_service: AsyncMock,
+    photo_face_querier: AsyncMock,
+    event: PhotoProcessEvent,
+) -> None:
+    """After group photo processing, a cleanup event should be published."""
+    faces = [_make_face(), _make_face()]
+    face_service.detect_faces = AsyncMock(return_value=faces)
+    photo_face_querier.insert_photo_face_with_approval = AsyncMock(return_value=None)
+
+    with (
+        patch.object(worker, "_load_image", new_callable=AsyncMock) as mock_load,
+        patch("app.worker.photo_worker.main.NatsClient") as mock_nats,
+    ):
+        mock_nats.publish = AsyncMock()
+        mock_load.return_value = FaceImagePayload(
+            filename="test.jpg", content_type="image/jpeg", bytes=b"img"
+        )
+        await worker.handle_message(_event_bytes(event))
+
+    mock_nats.publish.assert_called_once()
+    subject, payload_bytes = mock_nats.publish.call_args.args
+    from app.infra.nats import NatsSubjects
+    assert subject == NatsSubjects.FINAL_BUCKET_CLEANUP
+    cleanup_payload = json.loads(payload_bytes)
+    assert event.image_ref in cleanup_payload["storage_keys"]
+
+
+@pytest.mark.asyncio
+async def test_cleanup_scheduled_when_no_faces(
+    worker: PhotoWorker,
+    face_service: AsyncMock,
+    event: PhotoProcessEvent,
+) -> None:
+    """Even if no faces detected, cleanup should still be scheduled."""
+    face_service.detect_faces = AsyncMock(return_value=[])
+
+    with (
+        patch.object(worker, "_load_image", new_callable=AsyncMock) as mock_load,
+        patch("app.worker.photo_worker.main.NatsClient") as mock_nats,
+    ):
+        mock_nats.publish = AsyncMock()
+        mock_load.return_value = FaceImagePayload(
+            filename="test.jpg", content_type="image/jpeg", bytes=b"img"
+        )
+        await worker.handle_message(_event_bytes(event))
+
+    mock_nats.publish.assert_called_once()
+    cleanup_payload = json.loads(mock_nats.publish.call_args.args[1])
+    assert event.image_ref in cleanup_payload["storage_keys"]
+
+
+@pytest.mark.asyncio
+async def test_no_cleanup_on_image_load_failure(
+    worker: PhotoWorker,
+    event: PhotoProcessEvent,
+) -> None:
+    """If image fails to load, no cleanup should be scheduled."""
+    with (
+        patch.object(worker, "_load_image", new_callable=AsyncMock) as mock_load,
+        patch("app.worker.photo_worker.main.NatsClient") as mock_nats,
+    ):
+        mock_nats.publish = AsyncMock()
+        mock_load.side_effect = RuntimeError("MinIO down")
+        await worker.handle_message(_event_bytes(event))
+
+    mock_nats.publish.assert_not_called()
