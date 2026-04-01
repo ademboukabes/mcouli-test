@@ -2,8 +2,10 @@ from __future__ import annotations
 
 from uuid import UUID
 
+from app.core.constant import AuditEventType
 from app.core.exceptions import AppException
 from app.core.logger import logger
+from app.service.audit import AuditService
 from app.service.staged_upload_storage import StagedUploadStorageService
 from db.generated import photo_approvals as photo_approval_queries
 from db.generated import photos as photo_queries
@@ -16,10 +18,12 @@ class PhotoApprovalService:
         photo_approval_querier: photo_approval_queries.AsyncQuerier,
         photo_querier: photo_queries.AsyncQuerier,
         storage_service: StagedUploadStorageService,
+        audit_service: AuditService | None = None,
     ) -> None:
         self._approval_querier = photo_approval_querier
         self._photo_querier = photo_querier
         self._storage_service = storage_service
+        self._audit_service = audit_service
 
     async def decide(
         self,
@@ -35,6 +39,13 @@ class PhotoApprovalService:
         )
         if updated is None:
             raise AppException.not_found("Photo approval not found")
+
+        if self._audit_service is not None:
+            await self._audit_service.create_record(
+                event_type=AuditEventType.PHOTO_APPROVAL_DECIDED,
+                user_id=user_id,
+                metadata={"photo_id": str(photo_id), "decision": decision},
+            )
 
         approvals = []
         async for a in self._approval_querier.get_photo_approvals_by_photo_id(photo_id=photo_id):

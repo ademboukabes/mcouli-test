@@ -17,9 +17,8 @@ from app.infra.google_drive import (
     GoogleDriveFileMetadata,
 )
 from app.infra.nats import NatsClient, NatsSubjects
-from sqlalchemy.exc import IntegrityError
-
-from app.schema.internal.uploads import UploadPhotoInput
+from app.schema.request.staff.uploads import UploadPhotoInput
+from app.service.audit import AuditService
 from app.service.staged_upload_storage import PreviewObject, StagedUploadStorageService
 from app.service.staff_drive import StaffDriveService
 from app.service.staff_notifications import StaffNotificationsService
@@ -63,6 +62,7 @@ class UploadRequestsService:
         staged_upload_storage: StagedUploadStorageService,
         staff_drive_service: StaffDriveService,
         staff_notifications_service: StaffNotificationsService,
+        audit_service: AuditService | None = None,
     ):
         self.upload_request_group_querier = upload_request_group_querier
         self.upload_request_querier = upload_request_querier
@@ -71,6 +71,7 @@ class UploadRequestsService:
         self.staged_upload_storage = staged_upload_storage
         self.staff_drive_service = staff_drive_service
         self.staff_notifications_service = staff_notifications_service
+        self.audit_service = audit_service
 
     @staticmethod
     def _status_value(status: object) -> str:
@@ -454,6 +455,13 @@ class UploadRequestsService:
         except Exception as exc:
             logger.warning("Failed to publish upload request event %s: %s", subject.value, exc)
 
+    async def _audit(self, event_type: AuditEventType, **metadata: object) -> None:
+        if self.audit_service is not None:
+            await self.audit_service.create_record(
+                event_type=event_type,
+                metadata={k: str(v) for k, v in metadata.items()},
+            )
+
     async def _publish_photo_process_events(self, photos: list[Photo]) -> None:
         for photo in photos:
             await self._publish_event(
@@ -796,6 +804,11 @@ class UploadRequestsService:
                 },
             )
             await self._publish_photo_process_events(created_photos)
+            await self._audit(
+                AuditEventType.UPLOAD_REQUEST_APPROVED,
+                request_id=upload_request.id,
+                approved_by=approved_by.id,
+            )
         except Exception:
             await self._cleanup_finalized_objects(finalized_storage_keys)
             raise
@@ -842,6 +855,12 @@ class UploadRequestsService:
             },
         )
         await self._delete_staging_objects_best_effort(staged_photos)
+        await self._audit(
+            AuditEventType.UPLOAD_REQUEST_REJECTED,
+            request_id=upload_request.id,
+            approved_by=approved_by.id,
+            reason=reason or "",
+        )
         return UploadRequestDetails(request=upload_request, photos=rejected_photos)
 
     async def approve_group(
@@ -916,6 +935,11 @@ class UploadRequestsService:
                 },
             )
             await self._publish_photo_process_events(all_created_photos)
+            await self._audit(
+                AuditEventType.UPLOAD_REQUEST_APPROVED,
+                group_id=upload_group.id,
+                approved_by=approved_by.id,
+            )
         except Exception:
             await self._cleanup_finalized_objects(finalized_storage_keys)
             raise

@@ -100,6 +100,11 @@ class Container:
         )
         self.staged_upload_storage_service = StagedUploadStorageService()
 
+        self.audit_service = AuditService(
+            audit_querier=self.audit_querier,
+            user_querier=self.user_querier,
+        )
+
         self.upload_requests_service = UploadRequestsService(
             upload_request_group_querier=self.upload_request_group_querier,
             upload_request_querier=self.upload_request_querier,
@@ -108,6 +113,7 @@ class Container:
             staged_upload_storage=self.staged_upload_storage_service,
             staff_drive_service=self.staff_drive_service,
             staff_notifications_service=self.staff_notifications_service,
+            audit_service=self.audit_service,
         )
 
         notification_queue = NotificationQueue(settings=NotifSetting)
@@ -116,11 +122,6 @@ class Container:
             notification_querier=self.notification_querier,
             notification_queue=notification_queue,
             device_querier=self.device_querier,
-        )
-
-        self.audit_service = AuditService(
-            audit_querier=self.audit_querier,
-            user_querier=self.user_querier,
         )
 
         self.staff_user_service = StaffUserService()
@@ -136,6 +137,7 @@ class Container:
             photo_approval_querier=self.photo_approval_querier,
             photo_querier=self.photo_querier,
             storage_service=self.staged_upload_storage_service,
+            audit_service=self.audit_service,
         )
 
 async def get_container(
