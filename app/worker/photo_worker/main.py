@@ -1,0 +1,280 @@
+from __future__ import annotations
+
+import asyncio
+import json
+from enum import Enum
+
+from sqlalchemy.exc import DBAPIError, SQLAlchemyError
+from sqlalchemy.ext.asyncio import AsyncConnection
+
+from app.container import Container
+from app.core.config import settings
+from app.core.constant import MINIO_URL_PREFIX
+from app.core.logger import logger
+from app.infra.database import engine
+from app.infra.minio import Bucket, IMAGES_BUCKET_NAME, init_minio_client
+from app.infra.nats import NatsClient, NatsSubjects
+from app.infra.redis import RedisClient
+from app.schema.internal.notification import NotificationPriority, UnifiedNotification
+from app.schema.internal.single_face_match import BBoxPayload
+from app.service.face_embedding import DetectedFace, FaceEmbeddingService, FaceImagePayload
+from app.service.face_match import SingleFaceMatchService
+from app.service.user_notification import UserNotificationService
+from app.worker.photo_worker.schema.event import PhotoProcessEvent
+from db.generated import photo_faces as photo_face_queries
+from db.generated.photo_faces import InsertPhotoFaceWithApprovalParams
+
+SIMILARITY_THRESHOLD = 0.5
+
+STREAM_NAME = "photo_processing"
+DURABLE_NAME = "photo_processing_worker"
+
+
+class PhotoApprovalDecision(str, Enum):
+    PENDING = "pending"
+    APPROVED = "approved"
+    REJECTED = "rejected"
+
+
+class PhotoWorker:
+    """Unified worker that processes all photos: detects faces, then branches
+    on single-face (auto-match) vs multi-face (approval request) paths."""
+
+    def __init__(
+        self,
+        conn: AsyncConnection,
+        face_embedding_service: FaceEmbeddingService,
+        single_face_service: SingleFaceMatchService,
+        user_notification_service: UserNotificationService,
+        photo_face_querier: photo_face_queries.AsyncQuerier,
+    ) -> None:
+        self._conn = conn
+        self._face_service = face_embedding_service
+        self._single_face_service = single_face_service
+        self._notification_service = user_notification_service
+        self._photo_face_querier = photo_face_querier
+
+    async def handle_message(self, data: bytes) -> None:
+        event = self._parse_event(data)
+        if event is None:
+            return
+
+        try:
+            payload = await self._load_image(event.image_ref)
+        except Exception as exc:
+            logger.warning("Failed to load image for photo %s: %s", event.photo_id, exc)
+            return
+
+        try:
+            faces = await self._face_service.detect_faces(payload)
+        except Exception as exc:
+            logger.warning("Face detection failed for photo %s: %s", event.photo_id, exc)
+            return
+
+        if not faces:
+            logger.info("No faces detected in photo %s", event.photo_id)
+            return
+
+        if len(faces) == 1:
+            await self._handle_single_face(event, faces[0])
+        else:
+            await self._handle_group_photo(event, faces)
+
+    # ------------------------------------------------------------------
+    # Single-face path: auto-match via face_matches table
+    # ------------------------------------------------------------------
+
+    async def _handle_single_face(self, event: PhotoProcessEvent, face: DetectedFace) -> None:
+        from app.schema.internal.single_face_match import SingleFaceMatchJob
+
+        bbox = BBoxPayload(
+            x1=float(face.bbox[0]),
+            y1=float(face.bbox[1]),
+            x2=float(face.bbox[2]),
+            y2=float(face.bbox[3]),
+        )
+
+        job = SingleFaceMatchJob(
+            photo_id=event.photo_id,
+            face_index=0,
+            image_ref=event.image_ref,
+            bbox=bbox,
+            faces_detected=1,
+        )
+
+        try:
+            await self._single_face_service.process_detected_face(job, face.embedding, bbox)
+        except Exception as exc:
+            logger.exception("Single face match failed for photo %s: %s", event.photo_id, exc)
+
+    # ------------------------------------------------------------------
+    # Group-photo path: approval request per detected face
+    # ------------------------------------------------------------------
+
+    async def _handle_group_photo(self, event: PhotoProcessEvent, faces: list[DetectedFace]) -> None:
+        logger.info("Processing group photo %s with %d faces", event.photo_id, len(faces))
+
+        for face_index, face in enumerate(faces):
+            bbox_json = json.dumps({
+                "x1": float(face.bbox[0]),
+                "y1": float(face.bbox[1]),
+                "x2": float(face.bbox[2]),
+                "y2": float(face.bbox[3]),
+            })
+
+            embedding_literal = "[" + ", ".join(str(x) for x in face.embedding) + "]"
+
+            try:
+                approval = await self._photo_face_querier.insert_photo_face_with_approval(
+                    InsertPhotoFaceWithApprovalParams(
+                        photo_id=event.photo_id,
+                        face_index=face_index,
+                        column_3=embedding_literal,
+                        face_embedding=SIMILARITY_THRESHOLD,
+                        bbox=bbox_json,
+                        decision=PhotoApprovalDecision.PENDING.value,
+                    )
+                )
+            except (DBAPIError, SQLAlchemyError) as exc:
+                logger.warning(
+                    "DB error inserting face %d for photo %s: %s",
+                    face_index, event.photo_id, exc,
+                )
+                continue
+
+            if approval is None:
+                logger.info("No match for face %d in photo %s", face_index, event.photo_id)
+                continue
+
+            try:
+                await self._notification_service.create_notification(
+                    user_id=approval.user_id,
+                    type="photo_approval",
+                    payload={"photo_id": str(approval.photo_id)},
+                    notification=UnifiedNotification(
+                        title="You were found in a photo",
+                        body="Tap to review and approve or reject",
+                        data={
+                            "photo_id": str(approval.photo_id),
+                            "type": "photo_approval",
+                        },
+                        tokens=[],
+                        priority=NotificationPriority.NORMAL,
+                    ),
+                )
+                logger.info("Notified user %s for group photo %s", approval.user_id, approval.photo_id)
+            except Exception as exc:
+                logger.warning(
+                    "Failed to notify user %s for photo %s: %s",
+                    approval.user_id, event.photo_id, exc,
+                )
+
+    # ------------------------------------------------------------------
+    # Helpers
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _parse_event(raw_data: bytes) -> PhotoProcessEvent | None:
+        try:
+            return PhotoProcessEvent.model_validate_json(raw_data)
+        except Exception as exc:
+            logger.warning("Failed to parse photo process event: %s", exc)
+            return None
+
+    async def _load_image(self, image_ref: str) -> FaceImagePayload:
+        bucket_name, object_name = self._parse_minio_ref(image_ref)
+        bucket = Bucket(bucket_name, "")
+
+        last_exc: Exception | None = None
+        for attempt in range(1, settings.MINIO_RETRY_ATTEMPTS + 1):
+            try:
+                data, filename, content_type = await bucket.get(object_name)
+                return FaceImagePayload(
+                    filename=filename,
+                    content_type=content_type,
+                    bytes=data,
+                )
+            except Exception as exc:
+                last_exc = exc
+                logger.warning(
+                    "MinIO fetch failed for %s (attempt %s/%s): %s",
+                    object_name, attempt, settings.MINIO_RETRY_ATTEMPTS, exc,
+                )
+                if attempt < settings.MINIO_RETRY_ATTEMPTS:
+                    await asyncio.sleep(settings.MINIO_RETRY_BASE_SECONDS * attempt)
+
+        assert last_exc is not None
+        raise last_exc
+
+    @staticmethod
+    def _parse_minio_ref(image_ref: str) -> tuple[str, str]:
+        if image_ref.startswith(MINIO_URL_PREFIX):
+            raw = image_ref[len(MINIO_URL_PREFIX):]
+            parts = raw.split("/", 1)
+            if len(parts) != 2 or not parts[0] or not parts[1]:
+                raise ValueError("Invalid MinIO image_ref format")
+            return parts[0], parts[1]
+        return IMAGES_BUCKET_NAME, image_ref
+
+
+async def run_worker() -> None:
+    await init_minio_client(
+        minio_host=settings.MINIO_HOST,
+        minio_port=settings.MINIO_API_PORT,
+        minio_root_user=settings.MINIO_ROOT_USER,
+        minio_root_password=settings.MINIO_ROOT_PASSWORD,
+    )
+    RedisClient(
+        host=settings.REDIS_HOST,
+        port=settings.REDIS_PORT,
+        password=settings.REDIS_PASSWORD,
+    )
+
+    async with engine.connect() as conn:
+        container = Container(conn)
+
+        single_face_service = SingleFaceMatchService(
+            conn=conn,
+            photo_face_querier=container.photo_face_querier,
+            user_match_service=container.auth_service,
+            user_notification_service=container.user_notifications_service,
+        )
+
+        worker = PhotoWorker(
+            conn=conn,
+            face_embedding_service=container.face_embedding_service,
+            single_face_service=single_face_service,
+            user_notification_service=container.user_notifications_service,
+            photo_face_querier=container.photo_face_querier,
+        )
+
+        await NatsClient.js_subscribe(
+            subject=NatsSubjects.PHOTO_PROCESS,
+            callback=worker.handle_message,
+            stream_name=STREAM_NAME,
+            durable_name=DURABLE_NAME,
+        )
+
+        logger.info("PhotoWorker subscribed on %s; waiting for jobs", NatsSubjects.PHOTO_PROCESS.value)
+        try:
+            await asyncio.Event().wait()
+        finally:
+            await _close_minio()
+            await NatsClient.close()
+
+
+async def _close_minio() -> None:
+    client = getattr(Bucket, "client", None)
+    if client is None:
+        return
+    close_session = getattr(client, "close_session", None)
+    if close_session is None:
+        return
+    try:
+        await close_session()
+    except Exception:
+        pass
+
+
+if __name__ == "__main__":
+    asyncio.run(run_worker())

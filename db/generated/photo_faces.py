@@ -12,6 +12,46 @@ import sqlalchemy.ext.asyncio
 from db.generated import models
 
 
+INSERT_PHOTO_FACE_WITH_APPROVAL = """-- name: insert_photo_face_with_approval \\:one
+WITH matched_user AS (
+    SELECT id AS user_id
+    FROM users
+    WHERE face_embedding IS NOT NULL
+      AND deleted_at IS NULL
+      AND face_embedding <=> :p3\\:\\:vector <= :p4
+    ORDER BY face_embedding <=> :p3\\:\\:vector ASC
+    LIMIT 1
+),
+insert_face AS (
+    INSERT INTO photo_faces (photo_id, face_index, embedding, bbox)
+    VALUES (:p1, :p2, :p3\\:\\:vector, :p5)
+    ON CONFLICT (photo_id, face_index)
+    DO UPDATE SET embedding = EXCLUDED.embedding,
+                  bbox = EXCLUDED.bbox
+    RETURNING id, photo_id, face_index
+),
+matched AS (
+    SELECT insert_face.photo_id, matched_user.user_id
+    FROM insert_face, matched_user
+    WHERE matched_user.user_id IS NOT NULL
+)
+INSERT INTO photo_approvals (photo_id, user_id, decision)
+SELECT photo_id, user_id, :p6
+FROM matched
+RETURNING id, photo_id, user_id, decision, decided_at
+"""
+
+
+@dataclasses.dataclass()
+class InsertPhotoFaceWithApprovalParams:
+    photo_id: uuid.UUID
+    face_index: int
+    column_3: Any
+    face_embedding: Optional[Any]
+    bbox: Optional[str]
+    decision: str
+
+
 PHOTO_FACES_ENSURE_FACE_MATCH = """-- name: photo_faces_ensure_face_match \\:one
 WITH upserted_photo_face AS (
     INSERT INTO photo_faces (
@@ -125,6 +165,25 @@ RETURNING id, photo_id, face_index, embedding, bbox, created_at
 class AsyncQuerier:
     def __init__(self, conn: sqlalchemy.ext.asyncio.AsyncConnection):
         self._conn = conn
+
+    async def insert_photo_face_with_approval(self, arg: InsertPhotoFaceWithApprovalParams) -> Optional[models.PhotoApproval]:
+        row = (await self._conn.execute(sqlalchemy.text(INSERT_PHOTO_FACE_WITH_APPROVAL), {
+            "p1": arg.photo_id,
+            "p2": arg.face_index,
+            "p3": arg.column_3,
+            "p4": arg.face_embedding,
+            "p5": arg.bbox,
+            "p6": arg.decision,
+        })).first()
+        if row is None:
+            return None
+        return models.PhotoApproval(
+            id=row[0],
+            photo_id=row[1],
+            user_id=row[2],
+            decision=row[3],
+            decided_at=row[4],
+        )
 
     async def photo_faces_ensure_face_match(self, arg: PhotoFacesEnsureFaceMatchParams) -> Optional[PhotoFacesEnsureFaceMatchRow]:
         row = (await self._conn.execute(sqlalchemy.text(PHOTO_FACES_ENSURE_FACE_MATCH), {

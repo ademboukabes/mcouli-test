@@ -27,7 +27,7 @@ from app.service.upload_requests import UploadRequestGroupDetails
 from db.generated.models import StaffUser, UploadRequestStatus
 
 
-router = APIRouter(prefix="/uploads", tags=["staff-uploads"])
+router = APIRouter(prefix="/uploads")
 
 
 @router.post("/request", response_model=UploadRequestSchema | UploadRequestGroupSchema)

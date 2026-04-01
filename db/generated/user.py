@@ -25,6 +25,22 @@ WHERE id = :p1
 """
 
 
+FIND_CLOSEST_USER_BY_EMBEDDING = """-- name: find_closest_user_by_embedding \\:one
+SELECT id,
+       (face_embedding <=> :p1\\:\\:vector) AS distance
+FROM users
+WHERE face_embedding IS NOT NULL
+ORDER BY distance ASC
+LIMIT 1
+"""
+
+
+@dataclasses.dataclass()
+class FindClosestUserByEmbeddingRow:
+    id: uuid.UUID
+    distance: Optional[Any]
+
+
 GET_USER_BY_EMAIL = """-- name: get_user_by_email \\:one
 SELECT id, email, hashed_password, created_at, updated_at, display_name, face_embedding, deleted_at, blocked
 FROM users
@@ -121,6 +137,15 @@ class AsyncQuerier:
 
     async def delete_user(self, *, id: uuid.UUID) -> None:
         await self._conn.execute(sqlalchemy.text(DELETE_USER), {"p1": id})
+
+    async def find_closest_user_by_embedding(self, *, dollar_1: Any) -> Optional[FindClosestUserByEmbeddingRow]:
+        row = (await self._conn.execute(sqlalchemy.text(FIND_CLOSEST_USER_BY_EMBEDDING), {"p1": dollar_1})).first()
+        if row is None:
+            return None
+        return FindClosestUserByEmbeddingRow(
+            id=row[0],
+            distance=row[1],
+        )
 
     async def get_user_by_email(self, *, email: str) -> Optional[models.User]:
         row = (await self._conn.execute(sqlalchemy.text(GET_USER_BY_EMAIL), {"p1": email})).first()
