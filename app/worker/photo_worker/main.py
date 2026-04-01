@@ -67,12 +67,15 @@ class PhotoWorker:
 
         if not faces:
             logger.info("No faces detected in photo %s", event.photo_id)
+            await self._schedule_cleanup(event.image_ref)
             return
 
         if len(faces) == 1:
             await self._handle_single_face(event, faces[0])
         else:
             await self._handle_group_photo(event, faces)
+
+        await self._schedule_cleanup(event.image_ref)
 
    
 
@@ -159,6 +162,15 @@ class PhotoWorker:
                     approval.user_id, event.photo_id, exc,
                 )
 
+
+    @staticmethod
+    async def _schedule_cleanup(image_ref: str) -> None:
+        payload = json.dumps({"storage_keys": [image_ref]}).encode("utf-8")
+        try:
+            await NatsClient.publish(NatsSubjects.FINAL_BUCKET_CLEANUP, payload)
+            logger.info("Scheduled cleanup for %s", image_ref)
+        except Exception as exc:
+            logger.warning("Failed to schedule cleanup for %s: %s", image_ref, exc)
 
     @staticmethod
     def _parse_event(raw_data: bytes) -> PhotoProcessEvent | None:

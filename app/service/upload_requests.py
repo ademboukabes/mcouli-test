@@ -26,6 +26,7 @@ from db.generated import upload_request_groups as upload_request_group_queries
 from db.generated import upload_request_photos as upload_request_photo_queries
 from db.generated import upload_requests as upload_request_queries
 from db.generated.models import (
+    Photo,
     StaffRole,
     StaffUser,
     UploadRequest,
@@ -311,7 +312,7 @@ class UploadRequestsService:
         *,
         request_id: uuid.UUID,
         approved_by: StaffUser,
-    ) -> tuple[UploadRequest, list[UploadRequestPhoto], list[str]]:
+    ) -> tuple[UploadRequest, list[UploadRequestPhoto], list[str], list[Photo]]:
         existing = await self.upload_request_querier.get_upload_request_by_id(id=request_id)
         if existing is None:
             raise AppException.not_found("Upload request not found")
@@ -323,6 +324,7 @@ class UploadRequestsService:
             raise AppException.bad_request("No staged photos found for this upload request")
 
         finalized_storage_keys: list[str] = []
+        created_photos: list[Photo] = []
         try:
             for staged_photo in staged_photos:
                 final_storage_key = await self.staged_upload_storage.promote_to_final(
@@ -343,6 +345,7 @@ class UploadRequestsService:
                 )
                 if created_photo is None:
                     raise AppException.internal_error("Failed to finalize staged photo")
+                created_photos.append(created_photo)
                 updated_photo = await self.upload_request_photo_querier.update_upload_request_photo_approval(
                     id=staged_photo.id,
                     status="approved",
@@ -361,7 +364,7 @@ class UploadRequestsService:
             await self._cleanup_finalized_objects(finalized_storage_keys)
             raise
 
-        return upload_request, staged_photos, finalized_storage_keys
+        return upload_request, staged_photos, finalized_storage_keys, created_photos
 
     async def _reject_request_without_side_effects(
         self,
@@ -448,6 +451,19 @@ class UploadRequestsService:
             await NatsClient.publish(subject, json.dumps(payload).encode("utf-8"))
         except Exception as exc:
             logger.warning("Failed to publish upload request event %s: %s", subject.value, exc)
+
+    async def _publish_photo_process_events(self, photos: list[Photo]) -> None:
+        for photo in photos:
+            await self._publish_event(
+                subject=NatsSubjects.PHOTO_PROCESS,
+                payload={
+                    "photo_id": str(photo.id),
+                    "image_ref": photo.storage_key,
+                    "event_id": str(photo.event_id),
+                },
+            )
+        if photos:
+            logger.info("Published %d photo process events", len(photos))
 
     async def create_upload(
         self,
@@ -749,7 +765,7 @@ class UploadRequestsService:
         request_id: uuid.UUID,
         approved_by: StaffUser,
     ) -> UploadRequestDetails:
-        upload_request, staged_photos, finalized_storage_keys = (
+        upload_request, staged_photos, finalized_storage_keys, created_photos = (
             await self._approve_request_without_side_effects(
                 request_id=request_id,
                 approved_by=approved_by,
@@ -777,6 +793,7 @@ class UploadRequestsService:
                     "photo_count": upload_request.photo_count,
                 },
             )
+            await self._publish_photo_process_events(created_photos)
         except Exception:
             await self._cleanup_finalized_objects(finalized_storage_keys)
             raise
@@ -841,10 +858,11 @@ class UploadRequestsService:
 
         approved_requests: list[UploadRequest] = []
         all_staged_photos: list[UploadRequestPhoto] = []
+        all_created_photos: list[Photo] = []
         finalized_storage_keys: list[str] = []
         try:
             for request_details in pending_requests:
-                approved_request, staged_photos, request_storage_keys = (
+                approved_request, staged_photos, request_storage_keys, created_photos = (
                     await self._approve_request_without_side_effects(
                         request_id=request_details.request.id,
                         approved_by=approved_by,
@@ -852,6 +870,7 @@ class UploadRequestsService:
                 )
                 approved_requests.append(approved_request)
                 all_staged_photos.extend(staged_photos)
+                all_created_photos.extend(created_photos)
                 finalized_storage_keys.extend(request_storage_keys)
 
             upload_group = await self.upload_request_group_querier.approve_upload_request_group(
@@ -894,6 +913,7 @@ class UploadRequestsService:
                     "batch_count": upload_group.batch_count,
                 },
             )
+            await self._publish_photo_process_events(all_created_photos)
         except Exception:
             await self._cleanup_finalized_objects(finalized_storage_keys)
             raise
