@@ -60,15 +60,17 @@ class SingleFaceMatchService:
                     embedding_literal=embedding_literal,
                 )
                 if matched_user is None:
-                    logger.info("No user embeddings available for matching")
+                    logger.info("No user embeddings available for matching, auto-approving photo %s", job.photo_id)
+                    await self.photo_querier.update_photo_status(id=job.photo_id, status="approved")
                     return
 
                 from app.worker.photo_worker.settings import settings as worker_settings
                 if matched_user.distance > worker_settings.similarity_threshold:
                     logger.info(
-                        "Closest user distance %.4f exceeds threshold %.4f for photo %s; skipping",
+                        "Closest user distance %.4f exceeds threshold %.4f for photo %s; auto-approving",
                         matched_user.distance, worker_settings.similarity_threshold, job.photo_id,
                     )
+                    await self.photo_querier.update_photo_status(id=job.photo_id, status="approved")
                     return
 
                 params = photo_face_queries.PhotoFacesEnsureFaceMatchParams(

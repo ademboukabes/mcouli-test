@@ -7,6 +7,8 @@ from app.core.logger import logger
 from app.infra.google_drive import GoogleDriveClient
 from app.infra.minio import Bucket, IMAGES_BUCKET_NAME
 from app.service.staff_drive import StaffDriveService
+from db.generated import photo_approvals as photo_approval_queries
+from db.generated import photo_faces as photo_face_queries
 from db.generated import photos as photo_queries
 from db.generated.models import Photo
 from db.generated.photos import ListEventPhotosForUserParams, ListUserPhotosParams
@@ -17,9 +19,13 @@ class UserPhotoService:
         self,
         *,
         photo_querier: photo_queries.AsyncQuerier,
+        photo_face_querier: photo_face_queries.AsyncQuerier,
+        photo_approval_querier: photo_approval_queries.AsyncQuerier,
         staff_drive_service: StaffDriveService,
     ) -> None:
         self._photo_querier = photo_querier
+        self._photo_face_querier = photo_face_querier
+        self._photo_approval_querier = photo_approval_querier
         self._staff_drive_service = staff_drive_service
 
     async def list_photos(
@@ -66,6 +72,17 @@ class UserPhotoService:
             photos.append(photo)
         return photos
 
+    async def count_event_photos(
+        self,
+        *,
+        user_id: UUID,
+        event_id: UUID,
+    ) -> int:
+        count = await self._photo_querier.count_event_photos_for_user(
+            user_id=user_id, event_id=event_id,
+        )
+        return count or 0
+
     async def get_photo_bytes(
         self,
         *,
@@ -78,6 +95,11 @@ class UserPhotoService:
         photo = await self._photo_querier.get_photo_by_id(id=photo_id)
         if photo is None:
             raise AppException.not_found("Photo not found")
+
+        if photo.visibility != "public":
+            has_access = await self._user_has_access(user_id, photo_id)
+            if not has_access:
+                raise AppException.forbidden("You don't have access to this photo")
 
         # Try bucket first
         try:
@@ -102,6 +124,16 @@ class UserPhotoService:
             file_id=drive_file_id,
         )
         return download.content, download.metadata.name, download.metadata.mime_type
+
+    async def _user_has_access(self, user_id: UUID, photo_id: UUID) -> bool:
+        """Check if user has a face_match or photo_approval for this photo."""
+        async for approval in self._photo_approval_querier.get_photo_approvals_by_photo_id(photo_id=photo_id):
+            if approval.user_id == user_id:
+                return True
+        row = await self._photo_face_querier.photo_faces_match_exists_for_photo(photo_id=photo_id)
+        if row is not None:
+            return True
+        return False
 
     async def _get_any_drive_token(self) -> str:
         """Get a valid Drive access token from the staff drive service.

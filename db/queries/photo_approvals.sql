@@ -17,7 +17,9 @@ RETURNING *;
 -- name: GetPhotoApprovalsByPhotoId :many
 SELECT * FROM photo_approvals WHERE photo_id = $1;
 
--- name: GetPendingApprovalsByUserId :many
+-- name: ListApprovalsByUserAndStatus :many
 SELECT * FROM photo_approvals
-WHERE user_id = $1 AND decision = 'pending'
-ORDER BY decided_at DESC;
+WHERE user_id = $1
+  AND ($2::varchar IS NULL OR decision = $2)
+ORDER BY decided_at DESC
+LIMIT $3 OFFSET $4;

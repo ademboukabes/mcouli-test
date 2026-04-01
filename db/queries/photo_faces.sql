@@ -73,6 +73,13 @@ SELECT upserted_photo_face.id AS photo_face_id,
        inserted_match.id AS face_match_id
 FROM upserted_photo_face
 LEFT JOIN inserted_match ON TRUE;
+-- name: UserHasFaceMatchForPhoto :one
+SELECT 1
+FROM face_matches fm
+JOIN photo_faces pf ON pf.id = fm.photo_face_id
+WHERE pf.photo_id = $1 AND fm.user_id = $2
+LIMIT 1;
+
 -- name: InsertPhotoFaceWithApproval :one
 WITH matched_user AS (
     SELECT id AS user_id

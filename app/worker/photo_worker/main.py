@@ -23,6 +23,7 @@ from app.service.user_notification import UserNotificationService
 from app.worker.photo_worker.schema.event import PhotoProcessEvent
 from app.worker.photo_worker.settings import settings as worker_settings
 from db.generated import photo_faces as photo_face_queries
+from db.generated import photos as photo_queries
 from db.generated import processing_jobs as processing_job_queries
 from db.generated.photo_faces import InsertPhotoFaceWithApprovalParams
 
@@ -42,6 +43,7 @@ class PhotoWorker:
         single_face_service: SingleFaceMatchService,
         user_notification_service: UserNotificationService,
         photo_face_querier: photo_face_queries.AsyncQuerier,
+        photo_querier: photo_queries.AsyncQuerier,
         processing_job_querier: processing_job_queries.AsyncQuerier | None = None,
     ) -> None:
         self._conn = conn
@@ -49,6 +51,7 @@ class PhotoWorker:
         self._single_face_service = single_face_service
         self._notification_service = user_notification_service
         self._photo_face_querier = photo_face_querier
+        self._photo_querier = photo_querier
         self._pj_querier = processing_job_querier
 
     async def handle_message(self, data: bytes) -> None:
@@ -75,7 +78,9 @@ class PhotoWorker:
             return
 
         if not faces:
-            logger.info("No faces detected in photo %s", event.photo_id)
+            logger.info("No faces detected in photo %s, marking as public", event.photo_id)
+            await self._photo_querier.update_photo_status(id=event.photo_id, status="approved")
+            await self._photo_querier.update_photo_visibility(id=event.photo_id, visibility="public")
             await self._update_job(job, "completed")
             await self._schedule_cleanup(event.image_ref)
             return
@@ -290,6 +295,7 @@ async def run_worker() -> None:
             single_face_service=single_face_service,
             user_notification_service=container.user_notifications_service,
             photo_face_querier=container.photo_face_querier,
+            photo_querier=container.photo_querier,
             processing_job_querier=container.processing_job_querier,
         )
 

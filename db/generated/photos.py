@@ -13,6 +13,18 @@ import sqlalchemy.ext.asyncio
 from db.generated import models
 
 
+COUNT_EVENT_PHOTOS_FOR_USER = """-- name: count_event_photos_for_user \\:one
+SELECT COUNT(DISTINCT p.id)
+FROM photos p
+LEFT JOIN photo_faces pf ON pf.photo_id = p.id
+LEFT JOIN face_matches fm ON fm.photo_face_id = pf.id AND fm.user_id = :p1
+LEFT JOIN photo_approvals pa ON pa.photo_id = p.id AND pa.user_id = :p1
+WHERE p.event_id = :p2
+  AND p.status = 'approved'
+  AND (p.visibility = 'public' OR fm.user_id = :p1 OR pa.user_id = :p1)
+"""
+
+
 CREATE_PHOTO = """-- name: create_photo \\:one
 INSERT INTO photos (
     event_id,
@@ -106,9 +118,23 @@ RETURNING id, event_id, uploaded_by, storage_key, taken_at, day_number, visibili
 """
 
 
+UPDATE_PHOTO_VISIBILITY = """-- name: update_photo_visibility \\:one
+UPDATE photos
+SET visibility = :p2
+WHERE id = :p1
+RETURNING id, event_id, uploaded_by, storage_key, taken_at, day_number, visibility, status, created_at
+"""
+
+
 class AsyncQuerier:
     def __init__(self, conn: sqlalchemy.ext.asyncio.AsyncConnection):
         self._conn = conn
+
+    async def count_event_photos_for_user(self, *, user_id: uuid.UUID, event_id: uuid.UUID) -> Optional[int]:
+        row = (await self._conn.execute(sqlalchemy.text(COUNT_EVENT_PHOTOS_FOR_USER), {"p1": user_id, "p2": event_id})).first()
+        if row is None:
+            return None
+        return row[0]
 
     async def create_photo(self, arg: CreatePhotoParams) -> Optional[models.Photo]:
         row = (await self._conn.execute(sqlalchemy.text(CREATE_PHOTO), {
@@ -198,6 +224,22 @@ class AsyncQuerier:
 
     async def update_photo_status(self, *, id: uuid.UUID, status: Any) -> Optional[models.Photo]:
         row = (await self._conn.execute(sqlalchemy.text(UPDATE_PHOTO_STATUS), {"p1": id, "p2": status})).first()
+        if row is None:
+            return None
+        return models.Photo(
+            id=row[0],
+            event_id=row[1],
+            uploaded_by=row[2],
+            storage_key=row[3],
+            taken_at=row[4],
+            day_number=row[5],
+            visibility=row[6],
+            status=row[7],
+            created_at=row[8],
+        )
+
+    async def update_photo_visibility(self, *, id: uuid.UUID, visibility: str) -> Optional[models.Photo]:
+        row = (await self._conn.execute(sqlalchemy.text(UPDATE_PHOTO_VISIBILITY), {"p1": id, "p2": visibility})).first()
         if row is None:
             return None
         return models.Photo(

@@ -23,15 +23,17 @@ RETURNING id, photo_id, user_id, decision, decided_at
 """
 
 
-GET_PENDING_APPROVALS_BY_USER_ID = """-- name: get_pending_approvals_by_user_id \\:many
-SELECT id, photo_id, user_id, decision, decided_at FROM photo_approvals
-WHERE user_id = :p1 AND decision = 'pending'
-ORDER BY decided_at DESC
+GET_PHOTO_APPROVALS_BY_PHOTO_ID = """-- name: get_photo_approvals_by_photo_id \\:many
+SELECT id, photo_id, user_id, decision, decided_at FROM photo_approvals WHERE photo_id = :p1
 """
 
 
-GET_PHOTO_APPROVALS_BY_PHOTO_ID = """-- name: get_photo_approvals_by_photo_id \\:many
-SELECT id, photo_id, user_id, decision, decided_at FROM photo_approvals WHERE photo_id = :p1
+LIST_APPROVALS_BY_USER_AND_STATUS = """-- name: list_approvals_by_user_and_status \\:many
+SELECT id, photo_id, user_id, decision, decided_at FROM photo_approvals
+WHERE user_id = :p1
+  AND (:p2\\:\\:varchar IS NULL OR decision = :p2)
+ORDER BY decided_at DESC
+LIMIT :p3 OFFSET :p4
 """
 
 
@@ -59,8 +61,8 @@ class AsyncQuerier:
             decided_at=row[4],
         )
 
-    async def get_pending_approvals_by_user_id(self, *, user_id: uuid.UUID) -> AsyncIterator[models.PhotoApproval]:
-        result = await self._conn.stream(sqlalchemy.text(GET_PENDING_APPROVALS_BY_USER_ID), {"p1": user_id})
+    async def get_photo_approvals_by_photo_id(self, *, photo_id: uuid.UUID) -> AsyncIterator[models.PhotoApproval]:
+        result = await self._conn.stream(sqlalchemy.text(GET_PHOTO_APPROVALS_BY_PHOTO_ID), {"p1": photo_id})
         async for row in result:
             yield models.PhotoApproval(
                 id=row[0],
@@ -70,8 +72,13 @@ class AsyncQuerier:
                 decided_at=row[4],
             )
 
-    async def get_photo_approvals_by_photo_id(self, *, photo_id: uuid.UUID) -> AsyncIterator[models.PhotoApproval]:
-        result = await self._conn.stream(sqlalchemy.text(GET_PHOTO_APPROVALS_BY_PHOTO_ID), {"p1": photo_id})
+    async def list_approvals_by_user_and_status(self, *, user_id: uuid.UUID, dollar_2: str, limit: int, offset: int) -> AsyncIterator[models.PhotoApproval]:
+        result = await self._conn.stream(sqlalchemy.text(LIST_APPROVALS_BY_USER_AND_STATUS), {
+            "p1": user_id,
+            "p2": dollar_2,
+            "p3": limit,
+            "p4": offset,
+        })
         async for row in result:
             yield models.PhotoApproval(
                 id=row[0],

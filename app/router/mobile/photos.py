@@ -48,7 +48,7 @@ async def list_event_photos(
     offset: int = Query(default=0, ge=0),
     current_user: MobileUserSchema = Depends(get_current_mobile_user),
     container: Container = Depends(get_container),
-) -> list[dict[str, object]]:
+) -> dict[str, object]:
     photos = await container.user_photo_service.list_event_photos(
         user_id=current_user.user_id,
         event_id=event_id,
@@ -56,18 +56,25 @@ async def list_event_photos(
         limit=limit,
         offset=offset,
     )
-    return [
-        {
-            "id": str(p.id),
-            "event_id": str(p.event_id),
-            "visibility": p.visibility,
-            "status": str(p.status),
-            "taken_at": p.taken_at.isoformat() if p.taken_at else None,
-            "day_number": p.day_number,
-            "created_at": p.created_at.isoformat(),
-        }
-        for p in photos
-    ]
+    total = await container.user_photo_service.count_event_photos(
+        user_id=current_user.user_id,
+        event_id=event_id,
+    )
+    return {
+        "total": total,
+        "items": [
+            {
+                "id": str(p.id),
+                "event_id": str(p.event_id),
+                "visibility": p.visibility,
+                "status": str(p.status),
+                "taken_at": p.taken_at.isoformat() if p.taken_at else None,
+                "day_number": p.day_number,
+                "created_at": p.created_at.isoformat(),
+            }
+            for p in photos
+        ],
+    }
 
 
 @router.get("/{photo_id}/image")

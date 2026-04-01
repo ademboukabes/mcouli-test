@@ -162,6 +162,15 @@ RETURNING id, photo_id, face_index, embedding, bbox, created_at
 """
 
 
+USER_HAS_FACE_MATCH_FOR_PHOTO = """-- name: user_has_face_match_for_photo \\:one
+SELECT 1
+FROM face_matches fm
+JOIN photo_faces pf ON pf.id = fm.photo_face_id
+WHERE pf.photo_id = :p1 AND fm.user_id = :p2
+LIMIT 1
+"""
+
+
 class AsyncQuerier:
     def __init__(self, conn: sqlalchemy.ext.asyncio.AsyncConnection):
         self._conn = conn
@@ -245,3 +254,9 @@ class AsyncQuerier:
             bbox=row[4],
             created_at=row[5],
         )
+
+    async def user_has_face_match_for_photo(self, *, photo_id: uuid.UUID, user_id: uuid.UUID) -> Optional[int]:
+        row = (await self._conn.execute(sqlalchemy.text(USER_HAS_FACE_MATCH_FOR_PHOTO), {"p1": photo_id, "p2": user_id})).first()
+        if row is None:
+            return None
+        return row[0]
