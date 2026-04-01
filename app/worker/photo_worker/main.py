@@ -75,6 +75,7 @@ class PhotoWorker:
         else:
             await self._handle_group_photo(event, faces)
 
+        await self._publish_audit(event, len(faces))
         await self._schedule_cleanup(event.image_ref)
 
    
@@ -162,6 +163,18 @@ class PhotoWorker:
                     approval.user_id, event.photo_id, exc,
                 )
 
+
+    @staticmethod
+    async def _publish_audit(event: PhotoProcessEvent, faces_count: int) -> None:
+        from app.core.constant import AuditEventType
+        msg = AuditEventMessage(
+            event_type=AuditEventType.PHOTO_PROCESSED,
+            metadata={"photo_id": str(event.photo_id), "faces_count": faces_count},
+        )
+        try:
+            await NatsClient.publish(NatsSubjects.AUDIT_EVENT, msg.model_dump_json().encode("utf-8"))
+        except Exception as exc:
+            logger.warning("Failed to publish audit for photo %s: %s", event.photo_id, exc)
 
     @staticmethod
     async def _schedule_cleanup(image_ref: str) -> None:
