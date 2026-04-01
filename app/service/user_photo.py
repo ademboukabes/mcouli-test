@@ -127,12 +127,14 @@ class UserPhotoService:
 
     async def _user_has_access(self, user_id: UUID, photo_id: UUID) -> bool:
         """Check if user has a face_match or photo_approval for this photo."""
+        match = await self._photo_face_querier.user_has_face_match_for_photo(
+            photo_id=photo_id, user_id=user_id,
+        )
+        if match is not None:
+            return True
         async for approval in self._photo_approval_querier.get_photo_approvals_by_photo_id(photo_id=photo_id):
             if approval.user_id == user_id:
                 return True
-        row = await self._photo_face_querier.photo_faces_match_exists_for_photo(photo_id=photo_id)
-        if row is not None:
-            return True
         return False
 
     async def _get_any_drive_token(self) -> str:

@@ -145,6 +145,8 @@ class Container:
 
         self.user_photo_service = UserPhotoService(
             photo_querier=self.photo_querier,
+            photo_face_querier=self.photo_face_querier,
+            photo_approval_querier=self.photo_approval_querier,
             staff_drive_service=self.staff_drive_service,
         )
 

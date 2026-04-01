@@ -50,12 +50,22 @@ def photo_face_querier() -> AsyncMock:
 
 
 @pytest.fixture
+def photo_querier() -> AsyncMock:
+    from db.generated import photos as photo_queries_mod
+    q = create_autospec(photo_queries_mod.AsyncQuerier, instance=True)
+    q.update_photo_status = AsyncMock(return_value=None)
+    q.update_photo_visibility = AsyncMock(return_value=None)
+    return q
+
+
+@pytest.fixture
 def worker(
     conn: MagicMock,
     face_service: AsyncMock,
     single_face_service: AsyncMock,
     notification_service: AsyncMock,
     photo_face_querier: AsyncMock,
+    photo_querier: AsyncMock,
 ) -> PhotoWorker:
     return PhotoWorker(
         conn=conn,
@@ -63,6 +73,7 @@ def worker(
         single_face_service=single_face_service,
         user_notification_service=notification_service,
         photo_face_querier=photo_face_querier,
+        photo_querier=photo_querier,
     )
 
 
