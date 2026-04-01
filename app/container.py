@@ -112,6 +112,7 @@ class Container:
         self.user_notifications_service = UserNotificationService(
             notification_querier=self.notification_querier,
             notification_queue=notification_queue,
+            device_querier=self.device_querier,
         )
 
         self.audit_service = AuditService(

@@ -21,13 +21,9 @@ from app.service.face_embedding import DetectedFace, FaceEmbeddingService, FaceI
 from app.service.face_match import SingleFaceMatchService
 from app.service.user_notification import UserNotificationService
 from app.worker.photo_worker.schema.event import PhotoProcessEvent
+from app.worker.photo_worker.settings import settings as worker_settings
 from db.generated import photo_faces as photo_face_queries
 from db.generated.photo_faces import InsertPhotoFaceWithApprovalParams
-
-SIMILARITY_THRESHOLD = 0.5
-
-STREAM_NAME = "photo_processing"
-DURABLE_NAME = "photo_processing_worker"
 
 
 class PhotoApprovalDecision(str, Enum):
@@ -37,9 +33,7 @@ class PhotoApprovalDecision(str, Enum):
 
 
 class PhotoWorker:
-    """Unified worker that processes all photos: detects faces, then branches
-    on single-face (auto-match) vs multi-face (approval request) paths."""
-
+    
     def __init__(
         self,
         conn: AsyncConnection,
@@ -80,9 +74,7 @@ class PhotoWorker:
         else:
             await self._handle_group_photo(event, faces)
 
-    # ------------------------------------------------------------------
-    # Single-face path: auto-match via face_matches table
-    # ------------------------------------------------------------------
+   
 
     async def _handle_single_face(self, event: PhotoProcessEvent, face: DetectedFace) -> None:
         from app.schema.internal.single_face_match import SingleFaceMatchJob
@@ -107,9 +99,7 @@ class PhotoWorker:
         except Exception as exc:
             logger.exception("Single face match failed for photo %s: %s", event.photo_id, exc)
 
-    # ------------------------------------------------------------------
-    # Group-photo path: approval request per detected face
-    # ------------------------------------------------------------------
+   
 
     async def _handle_group_photo(self, event: PhotoProcessEvent, faces: list[DetectedFace]) -> None:
         logger.info("Processing group photo %s with %d faces", event.photo_id, len(faces))
@@ -130,7 +120,7 @@ class PhotoWorker:
                         photo_id=event.photo_id,
                         face_index=face_index,
                         column_3=embedding_literal,
-                        face_embedding=SIMILARITY_THRESHOLD,
+                        face_embedding=worker_settings.similarity_threshold,
                         bbox=bbox_json,
                         decision=PhotoApprovalDecision.PENDING.value,
                     )
@@ -169,9 +159,6 @@ class PhotoWorker:
                     approval.user_id, event.photo_id, exc,
                 )
 
-    # ------------------------------------------------------------------
-    # Helpers
-    # ------------------------------------------------------------------
 
     @staticmethod
     def _parse_event(raw_data: bytes) -> PhotoProcessEvent | None:
@@ -251,8 +238,8 @@ async def run_worker() -> None:
         await NatsClient.js_subscribe(
             subject=NatsSubjects.PHOTO_PROCESS,
             callback=worker.handle_message,
-            stream_name=STREAM_NAME,
-            durable_name=DURABLE_NAME,
+            stream_name=worker_settings.stream_name,
+            durable_name=worker_settings.durable_name,
         )
 
         logger.info("PhotoWorker subscribed on %s; waiting for jobs", NatsSubjects.PHOTO_PROCESS.value)

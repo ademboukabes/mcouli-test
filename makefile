@@ -61,7 +61,7 @@ run-workers:
 	@trap 'kill 0; exit' INT TERM; \
 	uv run python -m app.worker.audit.main & \
 	uv run python -m app.worker.notification.main & \
-	uv run python -m app.worker.single_face_match.main & \
+	uv run python -m app.worker.photo_worker.main & \
 	uv run python -m app.worker.storage_cleaner.main & \
 	wait
 

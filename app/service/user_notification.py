@@ -2,8 +2,10 @@ from typing import Any
 import uuid
 
 from app.core.exceptions import AppException
+from app.core.logger import logger
 from app.schema.internal.notification import UnifiedNotification
 from app.worker.notification.notification_queue import NotificationQueue
+from db.generated import devices as device_queries
 from db.generated import notifications as notification_queries
 from db.generated.models import Notification
 
@@ -13,9 +15,20 @@ class UserNotificationService:
         self,
         notification_querier: notification_queries.AsyncQuerier,
         notification_queue: NotificationQueue,
+        device_querier: device_queries.AsyncQuerier | None = None,
     ) -> None:
         self.notification_querier = notification_querier
         self._notification_queue = notification_queue
+        self._device_querier = device_querier
+
+    async def _resolve_tokens(self, user_id: uuid.UUID) -> list[str]:
+        if self._device_querier is None:
+            return []
+        tokens: list[str] = []
+        async for device in self._device_querier.list_user_devices(user_id=user_id):
+            if device.is_active and not device.is_invalid_token and device.push_token:
+                tokens.append(device.push_token)
+        return tokens
 
     async def create_notification(
         self,
@@ -34,6 +47,13 @@ class UserNotificationService:
             raise AppException.internal_error("Failed to create user notification")
 
         if notification is not None:
+            if not notification.tokens:
+                tokens = await self._resolve_tokens(user_id)
+                if tokens:
+                    notification = notification.model_copy(update={"tokens": tokens})
+                else:
+                    logger.info("No active push tokens for user %s, skipping push", user_id)
+                    return notification_record
             await self._notification_queue.enqueue_notification(notification)
 
         return notification_record

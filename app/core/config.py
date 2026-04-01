@@ -17,10 +17,6 @@ class Settings(BaseSettings):
     NATS_HOST: str
     NATS_PASSWORD: str
     NATS_USER: str
-    NATS_SINGLE_FACE_MATCH_STREAM: str = "single_face_matches"
-    NATS_SINGLE_FACE_MATCH_DURABLE: str = "single_face_match_worker"
-
-
     # MinIO
     MINIO_API_PORT: int
     MINIO_ROOT_USER: str
