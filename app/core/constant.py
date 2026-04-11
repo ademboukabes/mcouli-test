@@ -12,6 +12,9 @@ AUDIT_EVENT_SUBJECT = "audit.event"
 FINAL_BUCKET_CLEANUP_SUBJECT = "ai.final_bucket.completed"
 FINAL_BUCKET_CLEANUP_STREAM = "ai-final-bucket-cleanup"
 FINAL_BUCKET_CLEANUP_DURABLE_NAME = "ai-final-bucket-cleaner"
+UPLOAD_GROUP_IMPORT_SUBJECT = "staff.upload_group.import.requested"
+UPLOAD_GROUP_IMPORT_STREAM = "staff-upload-group-import"
+UPLOAD_GROUP_IMPORT_DURABLE_NAME = "staff-upload-group-import-worker"
 
 
 class AuditEventType(str, Enum):

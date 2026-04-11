@@ -39,6 +39,45 @@ WHERE requested_by = $1
   AND status = $2
 ORDER BY created_at DESC;
 
+-- name: StartUploadRequestGroupProcessing :one
+UPDATE upload_request_groups
+SET processing_status = 'running',
+    error_message = NULL
+WHERE id = $1
+  AND processing_status = 'pending'
+RETURNING *;
+
+-- name: UpdateUploadRequestGroupImportProgress :one
+UPDATE upload_request_groups
+SET total_photo_count = $2,
+    batch_count = $3,
+    processed_photo_count = $4,
+    failed_photo_count = $5
+WHERE id = $1
+RETURNING *;
+
+-- name: CompleteUploadRequestGroupProcessing :one
+UPDATE upload_request_groups
+SET processing_status = 'completed',
+    total_photo_count = $2,
+    batch_count = $3,
+    processed_photo_count = $4,
+    failed_photo_count = $5,
+    error_message = NULL
+WHERE id = $1
+RETURNING *;
+
+-- name: FailUploadRequestGroupProcessing :one
+UPDATE upload_request_groups
+SET processing_status = 'failed',
+    total_photo_count = $2,
+    batch_count = $3,
+    processed_photo_count = $4,
+    failed_photo_count = $5,
+    error_message = $6
+WHERE id = $1
+RETURNING *;
+
 -- name: ApproveUploadRequestGroup :one
 UPDATE upload_request_groups
 SET status = 'approved',

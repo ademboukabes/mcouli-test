@@ -169,6 +169,10 @@ class AsyncQuerier:
                 created_at=row[12],
             )
 
+    async def list_upload_request_photos_by_upload_request_ids(self, *, dollar_1: List[uuid.UUID]) -> AsyncIterator[models.UploadRequestPhoto]:
+        async for row in self.list_upload_request_photos_by_upload_request_i_ds(dollar_1=dollar_1):
+            yield row
+
     async def list_upload_request_photos_by_upload_request_id(self, *, upload_request_id: uuid.UUID) -> AsyncIterator[models.UploadRequestPhoto]:
         result = await self._conn.stream(sqlalchemy.text(LIST_UPLOAD_REQUEST_PHOTOS_BY_UPLOAD_REQUEST_ID), {"p1": upload_request_id})
         async for row in result:

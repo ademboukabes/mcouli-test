@@ -12,6 +12,7 @@ from app.core.constant import (
     AUDIT_EVENT_SUBJECT,
     FINAL_BUCKET_CLEANUP_SUBJECT,
     NOTIFICATION_EVENT_SUBJECT,
+    UPLOAD_GROUP_IMPORT_SUBJECT,
 )
 
 
@@ -25,6 +26,7 @@ class NatsSubjects(Enum):
     USER_LOGOUT = "user.logout"
     NOTIFICATION_EVENT = NOTIFICATION_EVENT_SUBJECT
     AUDIT_EVENT = AUDIT_EVENT_SUBJECT
+    STAFF_UPLOAD_GROUP_IMPORT_REQUESTED = UPLOAD_GROUP_IMPORT_SUBJECT
     STAFF_UPLOAD_GROUP_CREATED = "staff.upload_group.created"
     STAFF_UPLOAD_GROUP_APPROVED = "staff.upload_group.approved"
     STAFF_UPLOAD_GROUP_REJECTED = "staff.upload_group.rejected"

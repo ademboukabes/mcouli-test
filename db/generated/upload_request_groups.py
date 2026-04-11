@@ -12,7 +12,14 @@ import sqlalchemy.ext.asyncio
 from db.generated import models
 
 
-APPROVE_UPLOAD_REQUEST_GROUP = """-- name: approve_upload_request_group \\:one
+_RETURNING_COLUMNS = """
+RETURNING id, event_id, folder_id, requested_by, approved_by, status, processing_status,
+          total_photo_count, batch_count, processed_photo_count, failed_photo_count,
+          created_at, approved_at, rejection_reason, error_message
+"""
+
+
+APPROVE_UPLOAD_REQUEST_GROUP = f"""-- name: approve_upload_request_group \\:one
 UPDATE upload_request_groups
 SET status = 'approved',
     approved_by = :p2,
@@ -20,11 +27,33 @@ SET status = 'approved',
     rejection_reason = NULL
 WHERE id = :p1
   AND status = 'pending'
-RETURNING id, event_id, folder_id, requested_by, approved_by, status, total_photo_count, batch_count, created_at, approved_at, rejection_reason
+{_RETURNING_COLUMNS}
 """
 
 
-CREATE_UPLOAD_REQUEST_GROUP = """-- name: create_upload_request_group \\:one
+COMPLETE_UPLOAD_REQUEST_GROUP_PROCESSING = f"""-- name: complete_upload_request_group_processing \\:one
+UPDATE upload_request_groups
+SET processing_status = 'completed',
+    total_photo_count = :p2,
+    batch_count = :p3,
+    processed_photo_count = :p4,
+    failed_photo_count = :p5,
+    error_message = NULL
+WHERE id = :p1
+{_RETURNING_COLUMNS}
+"""
+
+
+@dataclasses.dataclass()
+class CompleteUploadRequestGroupProcessingParams:
+    id: uuid.UUID
+    total_photo_count: int
+    batch_count: int
+    processed_photo_count: int
+    failed_photo_count: int
+
+
+CREATE_UPLOAD_REQUEST_GROUP = f"""-- name: create_upload_request_group \\:one
 INSERT INTO upload_request_groups (
     event_id,
     folder_id,
@@ -34,7 +63,7 @@ INSERT INTO upload_request_groups (
 ) VALUES (
     :p1, :p2, :p3, :p4, :p5
 )
-RETURNING id, event_id, folder_id, requested_by, approved_by, status, total_photo_count, batch_count, created_at, approved_at, rejection_reason
+{_RETURNING_COLUMNS}
 """
 
 
@@ -53,22 +82,51 @@ WHERE id = :p1
 """
 
 
+FAIL_UPLOAD_REQUEST_GROUP_PROCESSING = f"""-- name: fail_upload_request_group_processing \\:one
+UPDATE upload_request_groups
+SET processing_status = 'failed',
+    total_photo_count = :p2,
+    batch_count = :p3,
+    processed_photo_count = :p4,
+    failed_photo_count = :p5,
+    error_message = :p6
+WHERE id = :p1
+{_RETURNING_COLUMNS}
+"""
+
+
+@dataclasses.dataclass()
+class FailUploadRequestGroupProcessingParams:
+    id: uuid.UUID
+    total_photo_count: int
+    batch_count: int
+    processed_photo_count: int
+    failed_photo_count: int
+    error_message: Optional[str]
+
+
 GET_UPLOAD_REQUEST_GROUP_BY_ID = """-- name: get_upload_request_group_by_id \\:one
-SELECT id, event_id, folder_id, requested_by, approved_by, status, total_photo_count, batch_count, created_at, approved_at, rejection_reason
+SELECT id, event_id, folder_id, requested_by, approved_by, status, processing_status,
+       total_photo_count, batch_count, processed_photo_count, failed_photo_count,
+       created_at, approved_at, rejection_reason, error_message
 FROM upload_request_groups
 WHERE id = :p1
 """
 
 
 LIST_UPLOAD_REQUEST_GROUPS = """-- name: list_upload_request_groups \\:many
-SELECT id, event_id, folder_id, requested_by, approved_by, status, total_photo_count, batch_count, created_at, approved_at, rejection_reason
+SELECT id, event_id, folder_id, requested_by, approved_by, status, processing_status,
+       total_photo_count, batch_count, processed_photo_count, failed_photo_count,
+       created_at, approved_at, rejection_reason, error_message
 FROM upload_request_groups
 ORDER BY created_at DESC
 """
 
 
 LIST_UPLOAD_REQUEST_GROUPS_BY_REQUESTER = """-- name: list_upload_request_groups_by_requester \\:many
-SELECT id, event_id, folder_id, requested_by, approved_by, status, total_photo_count, batch_count, created_at, approved_at, rejection_reason
+SELECT id, event_id, folder_id, requested_by, approved_by, status, processing_status,
+       total_photo_count, batch_count, processed_photo_count, failed_photo_count,
+       created_at, approved_at, rejection_reason, error_message
 FROM upload_request_groups
 WHERE requested_by = :p1
 ORDER BY created_at DESC
@@ -76,7 +134,9 @@ ORDER BY created_at DESC
 
 
 LIST_UPLOAD_REQUEST_GROUPS_BY_REQUESTER_AND_STATUS = """-- name: list_upload_request_groups_by_requester_and_status \\:many
-SELECT id, event_id, folder_id, requested_by, approved_by, status, total_photo_count, batch_count, created_at, approved_at, rejection_reason
+SELECT id, event_id, folder_id, requested_by, approved_by, status, processing_status,
+       total_photo_count, batch_count, processed_photo_count, failed_photo_count,
+       created_at, approved_at, rejection_reason, error_message
 FROM upload_request_groups
 WHERE requested_by = :p1
   AND status = :p2
@@ -85,14 +145,16 @@ ORDER BY created_at DESC
 
 
 LIST_UPLOAD_REQUEST_GROUPS_BY_STATUS = """-- name: list_upload_request_groups_by_status \\:many
-SELECT id, event_id, folder_id, requested_by, approved_by, status, total_photo_count, batch_count, created_at, approved_at, rejection_reason
+SELECT id, event_id, folder_id, requested_by, approved_by, status, processing_status,
+       total_photo_count, batch_count, processed_photo_count, failed_photo_count,
+       created_at, approved_at, rejection_reason, error_message
 FROM upload_request_groups
 WHERE status = :p1
 ORDER BY created_at DESC
 """
 
 
-REJECT_UPLOAD_REQUEST_GROUP = """-- name: reject_upload_request_group \\:one
+REJECT_UPLOAD_REQUEST_GROUP = f"""-- name: reject_upload_request_group \\:one
 UPDATE upload_request_groups
 SET status = 'rejected',
     approved_by = :p2,
@@ -100,159 +162,217 @@ SET status = 'rejected',
     rejection_reason = :p3
 WHERE id = :p1
   AND status = 'pending'
-RETURNING id, event_id, folder_id, requested_by, approved_by, status, total_photo_count, batch_count, created_at, approved_at, rejection_reason
+{_RETURNING_COLUMNS}
 """
+
+
+START_UPLOAD_REQUEST_GROUP_PROCESSING = f"""-- name: start_upload_request_group_processing \\:one
+UPDATE upload_request_groups
+SET processing_status = 'running',
+    error_message = NULL
+WHERE id = :p1
+  AND processing_status = 'pending'
+{_RETURNING_COLUMNS}
+"""
+
+
+UPDATE_UPLOAD_REQUEST_GROUP_IMPORT_PROGRESS = f"""-- name: update_upload_request_group_import_progress \\:one
+UPDATE upload_request_groups
+SET total_photo_count = :p2,
+    batch_count = :p3,
+    processed_photo_count = :p4,
+    failed_photo_count = :p5
+WHERE id = :p1
+{_RETURNING_COLUMNS}
+"""
+
+
+@dataclasses.dataclass()
+class UpdateUploadRequestGroupImportProgressParams:
+    id: uuid.UUID
+    total_photo_count: int
+    batch_count: int
+    processed_photo_count: int
+    failed_photo_count: int
+
+
+def _to_model(row: sqlalchemy.engine.Row[Any]) -> models.UploadRequestGroup:
+    return models.UploadRequestGroup(
+        id=row[0],
+        event_id=row[1],
+        folder_id=row[2],
+        requested_by=row[3],
+        approved_by=row[4],
+        status=row[5],
+        processing_status=row[6],
+        total_photo_count=row[7],
+        batch_count=row[8],
+        processed_photo_count=row[9],
+        failed_photo_count=row[10],
+        created_at=row[11],
+        approved_at=row[12],
+        rejection_reason=row[13],
+        error_message=row[14],
+    )
 
 
 class AsyncQuerier:
     def __init__(self, conn: sqlalchemy.ext.asyncio.AsyncConnection):
         self._conn = conn
 
-    async def approve_upload_request_group(self, *, id: uuid.UUID, approved_by: Optional[uuid.UUID]) -> Optional[models.UploadRequestGroup]:
-        row = (await self._conn.execute(sqlalchemy.text(APPROVE_UPLOAD_REQUEST_GROUP), {"p1": id, "p2": approved_by})).first()
-        if row is None:
-            return None
-        return models.UploadRequestGroup(
-            id=row[0],
-            event_id=row[1],
-            folder_id=row[2],
-            requested_by=row[3],
-            approved_by=row[4],
-            status=row[5],
-            total_photo_count=row[6],
-            batch_count=row[7],
-            created_at=row[8],
-            approved_at=row[9],
-            rejection_reason=row[10],
-        )
+    async def approve_upload_request_group(
+        self,
+        *,
+        id: uuid.UUID,
+        approved_by: Optional[uuid.UUID],
+    ) -> Optional[models.UploadRequestGroup]:
+        row = (await self._conn.execute(
+            sqlalchemy.text(APPROVE_UPLOAD_REQUEST_GROUP),
+            {"p1": id, "p2": approved_by},
+        )).first()
+        return _to_model(row) if row is not None else None
 
-    async def create_upload_request_group(self, arg: CreateUploadRequestGroupParams) -> Optional[models.UploadRequestGroup]:
-        row = (await self._conn.execute(sqlalchemy.text(CREATE_UPLOAD_REQUEST_GROUP), {
-            "p1": arg.event_id,
-            "p2": arg.folder_id,
-            "p3": arg.requested_by,
-            "p4": arg.total_photo_count,
-            "p5": arg.batch_count,
-        })).first()
-        if row is None:
-            return None
-        return models.UploadRequestGroup(
-            id=row[0],
-            event_id=row[1],
-            folder_id=row[2],
-            requested_by=row[3],
-            approved_by=row[4],
-            status=row[5],
-            total_photo_count=row[6],
-            batch_count=row[7],
-            created_at=row[8],
-            approved_at=row[9],
-            rejection_reason=row[10],
-        )
+    async def complete_upload_request_group_processing(
+        self,
+        arg: CompleteUploadRequestGroupProcessingParams,
+    ) -> Optional[models.UploadRequestGroup]:
+        row = (await self._conn.execute(
+            sqlalchemy.text(COMPLETE_UPLOAD_REQUEST_GROUP_PROCESSING),
+            {
+                "p1": arg.id,
+                "p2": arg.total_photo_count,
+                "p3": arg.batch_count,
+                "p4": arg.processed_photo_count,
+                "p5": arg.failed_photo_count,
+            },
+        )).first()
+        return _to_model(row) if row is not None else None
+
+    async def create_upload_request_group(
+        self,
+        arg: CreateUploadRequestGroupParams,
+    ) -> Optional[models.UploadRequestGroup]:
+        row = (await self._conn.execute(
+            sqlalchemy.text(CREATE_UPLOAD_REQUEST_GROUP),
+            {
+                "p1": arg.event_id,
+                "p2": arg.folder_id,
+                "p3": arg.requested_by,
+                "p4": arg.total_photo_count,
+                "p5": arg.batch_count,
+            },
+        )).first()
+        return _to_model(row) if row is not None else None
 
     async def delete_upload_request_group(self, *, id: uuid.UUID) -> None:
         await self._conn.execute(sqlalchemy.text(DELETE_UPLOAD_REQUEST_GROUP), {"p1": id})
 
-    async def get_upload_request_group_by_id(self, *, id: uuid.UUID) -> Optional[models.UploadRequestGroup]:
-        row = (await self._conn.execute(sqlalchemy.text(GET_UPLOAD_REQUEST_GROUP_BY_ID), {"p1": id})).first()
-        if row is None:
-            return None
-        return models.UploadRequestGroup(
-            id=row[0],
-            event_id=row[1],
-            folder_id=row[2],
-            requested_by=row[3],
-            approved_by=row[4],
-            status=row[5],
-            total_photo_count=row[6],
-            batch_count=row[7],
-            created_at=row[8],
-            approved_at=row[9],
-            rejection_reason=row[10],
-        )
+    async def fail_upload_request_group_processing(
+        self,
+        arg: FailUploadRequestGroupProcessingParams,
+    ) -> Optional[models.UploadRequestGroup]:
+        row = (await self._conn.execute(
+            sqlalchemy.text(FAIL_UPLOAD_REQUEST_GROUP_PROCESSING),
+            {
+                "p1": arg.id,
+                "p2": arg.total_photo_count,
+                "p3": arg.batch_count,
+                "p4": arg.processed_photo_count,
+                "p5": arg.failed_photo_count,
+                "p6": arg.error_message,
+            },
+        )).first()
+        return _to_model(row) if row is not None else None
+
+    async def get_upload_request_group_by_id(
+        self,
+        *,
+        id: uuid.UUID,
+    ) -> Optional[models.UploadRequestGroup]:
+        row = (await self._conn.execute(
+            sqlalchemy.text(GET_UPLOAD_REQUEST_GROUP_BY_ID),
+            {"p1": id},
+        )).first()
+        return _to_model(row) if row is not None else None
 
     async def list_upload_request_groups(self) -> AsyncIterator[models.UploadRequestGroup]:
         result = await self._conn.stream(sqlalchemy.text(LIST_UPLOAD_REQUEST_GROUPS))
         async for row in result:
-            yield models.UploadRequestGroup(
-                id=row[0],
-                event_id=row[1],
-                folder_id=row[2],
-                requested_by=row[3],
-                approved_by=row[4],
-                status=row[5],
-                total_photo_count=row[6],
-                batch_count=row[7],
-                created_at=row[8],
-                approved_at=row[9],
-                rejection_reason=row[10],
-            )
+            yield _to_model(row)
 
-    async def list_upload_request_groups_by_requester(self, *, requested_by: uuid.UUID) -> AsyncIterator[models.UploadRequestGroup]:
-        result = await self._conn.stream(sqlalchemy.text(LIST_UPLOAD_REQUEST_GROUPS_BY_REQUESTER), {"p1": requested_by})
-        async for row in result:
-            yield models.UploadRequestGroup(
-                id=row[0],
-                event_id=row[1],
-                folder_id=row[2],
-                requested_by=row[3],
-                approved_by=row[4],
-                status=row[5],
-                total_photo_count=row[6],
-                batch_count=row[7],
-                created_at=row[8],
-                approved_at=row[9],
-                rejection_reason=row[10],
-            )
-
-    async def list_upload_request_groups_by_requester_and_status(self, *, requested_by: uuid.UUID, status: Any) -> AsyncIterator[models.UploadRequestGroup]:
-        result = await self._conn.stream(sqlalchemy.text(LIST_UPLOAD_REQUEST_GROUPS_BY_REQUESTER_AND_STATUS), {"p1": requested_by, "p2": status})
-        async for row in result:
-            yield models.UploadRequestGroup(
-                id=row[0],
-                event_id=row[1],
-                folder_id=row[2],
-                requested_by=row[3],
-                approved_by=row[4],
-                status=row[5],
-                total_photo_count=row[6],
-                batch_count=row[7],
-                created_at=row[8],
-                approved_at=row[9],
-                rejection_reason=row[10],
-            )
-
-    async def list_upload_request_groups_by_status(self, *, status: Any) -> AsyncIterator[models.UploadRequestGroup]:
-        result = await self._conn.stream(sqlalchemy.text(LIST_UPLOAD_REQUEST_GROUPS_BY_STATUS), {"p1": status})
-        async for row in result:
-            yield models.UploadRequestGroup(
-                id=row[0],
-                event_id=row[1],
-                folder_id=row[2],
-                requested_by=row[3],
-                approved_by=row[4],
-                status=row[5],
-                total_photo_count=row[6],
-                batch_count=row[7],
-                created_at=row[8],
-                approved_at=row[9],
-                rejection_reason=row[10],
-            )
-
-    async def reject_upload_request_group(self, *, id: uuid.UUID, approved_by: Optional[uuid.UUID], rejection_reason: Optional[str]) -> Optional[models.UploadRequestGroup]:
-        row = (await self._conn.execute(sqlalchemy.text(REJECT_UPLOAD_REQUEST_GROUP), {"p1": id, "p2": approved_by, "p3": rejection_reason})).first()
-        if row is None:
-            return None
-        return models.UploadRequestGroup(
-            id=row[0],
-            event_id=row[1],
-            folder_id=row[2],
-            requested_by=row[3],
-            approved_by=row[4],
-            status=row[5],
-            total_photo_count=row[6],
-            batch_count=row[7],
-            created_at=row[8],
-            approved_at=row[9],
-            rejection_reason=row[10],
+    async def list_upload_request_groups_by_requester(
+        self,
+        *,
+        requested_by: uuid.UUID,
+    ) -> AsyncIterator[models.UploadRequestGroup]:
+        result = await self._conn.stream(
+            sqlalchemy.text(LIST_UPLOAD_REQUEST_GROUPS_BY_REQUESTER),
+            {"p1": requested_by},
         )
+        async for row in result:
+            yield _to_model(row)
+
+    async def list_upload_request_groups_by_requester_and_status(
+        self,
+        *,
+        requested_by: uuid.UUID,
+        status: Any,
+    ) -> AsyncIterator[models.UploadRequestGroup]:
+        result = await self._conn.stream(
+            sqlalchemy.text(LIST_UPLOAD_REQUEST_GROUPS_BY_REQUESTER_AND_STATUS),
+            {"p1": requested_by, "p2": status},
+        )
+        async for row in result:
+            yield _to_model(row)
+
+    async def list_upload_request_groups_by_status(
+        self,
+        *,
+        status: Any,
+    ) -> AsyncIterator[models.UploadRequestGroup]:
+        result = await self._conn.stream(
+            sqlalchemy.text(LIST_UPLOAD_REQUEST_GROUPS_BY_STATUS),
+            {"p1": status},
+        )
+        async for row in result:
+            yield _to_model(row)
+
+    async def reject_upload_request_group(
+        self,
+        *,
+        id: uuid.UUID,
+        approved_by: Optional[uuid.UUID],
+        rejection_reason: Optional[str],
+    ) -> Optional[models.UploadRequestGroup]:
+        row = (await self._conn.execute(
+            sqlalchemy.text(REJECT_UPLOAD_REQUEST_GROUP),
+            {"p1": id, "p2": approved_by, "p3": rejection_reason},
+        )).first()
+        return _to_model(row) if row is not None else None
+
+    async def start_upload_request_group_processing(
+        self,
+        *,
+        id: uuid.UUID,
+    ) -> Optional[models.UploadRequestGroup]:
+        row = (await self._conn.execute(
+            sqlalchemy.text(START_UPLOAD_REQUEST_GROUP_PROCESSING),
+            {"p1": id},
+        )).first()
+        return _to_model(row) if row is not None else None
+
+    async def update_upload_request_group_import_progress(
+        self,
+        arg: UpdateUploadRequestGroupImportProgressParams,
+    ) -> Optional[models.UploadRequestGroup]:
+        row = (await self._conn.execute(
+            sqlalchemy.text(UPDATE_UPLOAD_REQUEST_GROUP_IMPORT_PROGRESS),
+            {
+                "p1": arg.id,
+                "p2": arg.total_photo_count,
+                "p3": arg.batch_count,
+                "p4": arg.processed_photo_count,
+                "p5": arg.failed_photo_count,
+            },
+        )).first()
+        return _to_model(row) if row is not None else None

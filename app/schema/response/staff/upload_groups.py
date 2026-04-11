@@ -15,11 +15,15 @@ class UploadRequestGroupSchema(BaseModel):
     requested_by: UUID
     approved_by: UUID | None
     status: str
+    processing_status: str
     total_photo_count: int
     batch_count: int
+    processed_photo_count: int
+    failed_photo_count: int
     created_at: datetime
     approved_at: datetime | None
     rejection_reason: str | None
+    error_message: str | None
     requests: list[UploadRequestSchema]
 
     @classmethod
@@ -34,11 +38,15 @@ class UploadRequestGroupSchema(BaseModel):
             requested_by=details.group.requested_by,
             approved_by=details.group.approved_by,
             status=getattr(details.group.status, "value", str(details.group.status)),
+            processing_status=details.group.processing_status,
             total_photo_count=details.group.total_photo_count,
             batch_count=details.group.batch_count,
+            processed_photo_count=details.group.processed_photo_count,
+            failed_photo_count=details.group.failed_photo_count,
             created_at=details.group.created_at,
             approved_at=details.group.approved_at,
             rejection_reason=details.group.rejection_reason,
+            error_message=details.group.error_message,
             requests=[
                 UploadRequestSchema.from_models(request_details.request, request_details.photos)
                 for request_details in details.requests

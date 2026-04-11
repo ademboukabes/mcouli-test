@@ -1,13 +1,13 @@
 from collections import defaultdict
 from collections.abc import Sequence
 from dataclasses import dataclass
+from datetime import datetime, timezone
 import json
 from typing import Literal
 import uuid
 
 from sqlalchemy.exc import IntegrityError
 
-from app.schema.internal.uploads import UploadPhotoInput
 from app.core.constant import AuditEventType
 from app.core.exceptions import AppException
 from app.core.logger import logger
@@ -17,7 +17,7 @@ from app.infra.google_drive import (
     GoogleDriveFileMetadata,
 )
 from app.infra.nats import NatsClient, NatsSubjects
-from app.schema.request.staff.uploads import UploadPhotoInput
+from app.schema.internal.uploads import UploadPhotoInput
 from app.service.audit import AuditService
 from app.service.staged_upload_storage import PreviewObject, StagedUploadStorageService
 from app.service.staff_drive import StaffDriveService
@@ -34,6 +34,7 @@ from db.generated.models import (
     UploadRequestGroup,
     UploadRequestPhoto,
 )
+from app.worker.upload_group_worker.schema.event import UploadGroupImportRequestedEvent
 
 
 @dataclass
@@ -52,6 +53,7 @@ class UploadRequestsService:
     _allowed_mime_types = {"image/jpeg", "image/png", "image/webp"}
     _max_photo_size_bytes = 20 * 1024 * 1024
     _max_request_batch_size = 20
+    _import_finished_statuses = {"completed", "failed"}
 
     def __init__(
         self,
@@ -139,6 +141,7 @@ class UploadRequestsService:
         *,
         upload_group_id: uuid.UUID,
         created_requests: Sequence[UploadRequestDetails],
+        delete_group: bool = True,
     ) -> None:
         for request_details in reversed(created_requests):
             try:
@@ -149,6 +152,9 @@ class UploadRequestsService:
                     request_details.request.id,
                     exc,
                 )
+
+        if not delete_group:
+            return
 
         try:
             await self.upload_request_group_querier.delete_upload_request_group(id=upload_group_id)
@@ -192,7 +198,7 @@ class UploadRequestsService:
             return photos_by_request_id
 
         async for photo in self.upload_request_photo_querier.list_upload_request_photos_by_upload_request_ids(
-            upload_request_ids=list(request_ids)
+            dollar_1=list(request_ids)
         ):
             photos_by_request_id[photo.upload_request_id].append(photo)
 
@@ -221,16 +227,18 @@ class UploadRequestsService:
 
         try:
             created_photo = await self.upload_request_photo_querier.create_upload_request_photo(
-                upload_request_id=upload_request_id,
-                drive_file_id=photo.drive_file_id,
-                file_name=downloaded_photo.metadata.name,
-                mime_type=downloaded_photo.metadata.mime_type,
-                size_bytes=downloaded_photo.metadata.size_bytes,
-                staging_storage_key=stored_object.storage_key,
-                taken_at=photo.taken_at,
-                day_number=photo.day_number,
-                visibility=photo.visibility,
-                status="staged",
+                upload_request_photo_queries.CreateUploadRequestPhotoParams(
+                    upload_request_id=upload_request_id,
+                    drive_file_id=photo.drive_file_id,
+                    file_name=downloaded_photo.metadata.name,
+                    mime_type=downloaded_photo.metadata.mime_type,
+                    size_bytes=downloaded_photo.metadata.size_bytes,
+                    staging_storage_key=stored_object.storage_key,
+                    taken_at=photo.taken_at,
+                    day_number=photo.day_number,
+                    visibility=photo.visibility,
+                    status="staged",
+                )
             )
         except IntegrityError:
             try:
@@ -268,11 +276,13 @@ class UploadRequestsService:
         upload_request = None
         try:
             upload_request = await self.upload_request_querier.create_upload_request(
-                event_id=event_id,
-                group_id=group_id,
-                drive_file_id=None,
-                requested_by=requested_by.id,
-                photo_count=len(photos),
+                upload_request_queries.CreateUploadRequestParams(
+                    event_id=event_id,
+                    group_id=group_id,
+                    drive_file_id=None,
+                    requested_by=requested_by.id,
+                    photo_count=len(photos),
+                )
             )
         except IntegrityError as exc:
             self._raise_integrity_error(exc)
@@ -431,6 +441,13 @@ class UploadRequestsService:
         if self._status_value(group.status) != "pending":
             raise AppException.bad_request("Upload request group is not pending")
 
+    def _ensure_group_import_completed(
+        self,
+        group: UploadRequestGroup,
+    ) -> None:
+        if group.processing_status != "completed":
+            raise AppException.bad_request("Upload request group import is not completed")
+
     def _ensure_all_requests_are_pending(
         self,
         requests: Sequence[UploadRequestDetails],
@@ -474,6 +491,27 @@ class UploadRequestsService:
             )
         if photos:
             logger.info("Published %d photo process events", len(photos))
+
+    async def _mark_group_import_failed(
+        self,
+        *,
+        group_id: uuid.UUID,
+        total_photo_count: int,
+        batch_count: int,
+        processed_photo_count: int,
+        failed_photo_count: int,
+        error_message: str,
+    ) -> UploadRequestGroup | None:
+        return await self.upload_request_group_querier.fail_upload_request_group_processing(
+            upload_request_group_queries.FailUploadRequestGroupProcessingParams(
+                id=group_id,
+                total_photo_count=total_photo_count,
+                batch_count=batch_count,
+                processed_photo_count=processed_photo_count,
+                failed_photo_count=failed_photo_count,
+                error_message=error_message,
+            )
+        )
 
     async def create_upload(
         self,
@@ -525,58 +563,180 @@ class UploadRequestsService:
         day_number: int | None,
         requested_by: StaffUser,
     ) -> UploadRequestGroupDetails:
-        upload_group = None
-        access_token = await self.staff_drive_service.get_access_token_for_staff_user(
-            requested_by.id
-        )
-        folder_files = await GoogleDriveClient.list_folder_files(
-            access_token=access_token,
-            folder_id=folder_id,
-        )
-        folder_files = sorted(folder_files, key=lambda file: (file.name.lower(), file.id))
-        photo_inputs = [
-            UploadPhotoInput(
-                drive_file_id=file.id,
-                taken_at=None,
-                day_number=day_number,
-                visibility=visibility,
-            )
-            for file in folder_files
-            if self._is_supported_image(file)
-        ]
-        if not photo_inputs:
-            raise AppException.bad_request(
-                "Selected Google Drive folder does not contain valid images"
-            )
-
-        photo_batches = self._chunk_photo_inputs(photo_inputs, self._max_request_batch_size)
+        await self.staff_drive_service.get_access_token_for_staff_user(requested_by.id)
         try:
             upload_group = await self.upload_request_group_querier.create_upload_request_group(
-                event_id=event_id,
-                folder_id=folder_id,
-                requested_by=requested_by.id,
-                total_photo_count=len(photo_inputs),
-                batch_count=len(photo_batches),
+                upload_request_group_queries.CreateUploadRequestGroupParams(
+                    event_id=event_id,
+                    folder_id=folder_id,
+                    requested_by=requested_by.id,
+                    total_photo_count=0,
+                    batch_count=0,
+                )
             )
         except IntegrityError as exc:
             self._raise_integrity_error(exc)
         if upload_group is None:
             raise AppException.internal_error("Failed to create upload request group")
 
+        await self._publish_event(
+            subject=NatsSubjects.STAFF_UPLOAD_GROUP_IMPORT_REQUESTED,
+            payload=UploadGroupImportRequestedEvent(
+                group_id=upload_group.id,
+                event_id=event_id,
+                folder_id=folder_id,
+                requested_by=requested_by.id,
+                visibility=visibility,
+                day_number=day_number,
+                submitted_at=datetime.now(timezone.utc),
+            ).model_dump(mode="json"),
+        )
+        return UploadRequestGroupDetails(group=upload_group, requests=[])
+
+    async def process_group_import(
+        self,
+        *,
+        group_id: uuid.UUID,
+        visibility: str,
+        day_number: int | None,
+    ) -> UploadRequestGroupDetails | None:
+        upload_group = await self.upload_request_group_querier.start_upload_request_group_processing(
+            id=group_id
+        )
+        if upload_group is None:
+            existing_group = await self.upload_request_group_querier.get_upload_request_group_by_id(
+                id=group_id
+            )
+            if existing_group is None:
+                logger.warning("Upload request group %s not found for import", group_id)
+                return None
+            if existing_group.processing_status in self._import_finished_statuses:
+                return UploadRequestGroupDetails(group=existing_group, requests=[])
+            logger.info(
+                "Upload request group %s is already being processed with status %s",
+                group_id,
+                existing_group.processing_status,
+            )
+            return None
+
+        requested_by = await self.staff_drive_service.staff_user_querier.get_staff_user_by_id(
+            id=upload_group.requested_by
+        )
+        if requested_by is None:
+            await self._mark_group_import_failed(
+                group_id=group_id,
+                total_photo_count=0,
+                batch_count=0,
+                processed_photo_count=0,
+                failed_photo_count=0,
+                error_message="Staff user not found for upload group import",
+            )
+            return None
+
         created_requests: list[UploadRequestDetails] = []
+        photo_inputs: list[UploadPhotoInput] = []
         try:
+            access_token = await self.staff_drive_service.get_access_token_for_staff_user(
+                requested_by.id
+            )
+            folder_files = await GoogleDriveClient.list_folder_files(
+                access_token=access_token,
+                folder_id=upload_group.folder_id,
+            )
+            folder_files = sorted(folder_files, key=lambda file: (file.name.lower(), file.id))
+            photo_inputs = [
+                UploadPhotoInput(
+                    drive_file_id=file.id,
+                    taken_at=None,
+                    day_number=day_number,
+                    visibility=visibility,
+                )
+                for file in folder_files
+                if self._is_supported_image(file)
+            ]
+            if not photo_inputs:
+                await self._mark_group_import_failed(
+                    group_id=group_id,
+                    total_photo_count=0,
+                    batch_count=0,
+                    processed_photo_count=0,
+                    failed_photo_count=0,
+                    error_message="Selected Google Drive folder does not contain valid images",
+                )
+                return await self.get_group_details(
+                    group_id=group_id,
+                    current_staff_user=requested_by,
+                )
+
+            photo_batches = self._chunk_photo_inputs(photo_inputs, self._max_request_batch_size)
+            await self.upload_request_group_querier.update_upload_request_group_import_progress(
+                upload_request_group_queries.UpdateUploadRequestGroupImportProgressParams(
+                    id=group_id,
+                    total_photo_count=len(photo_inputs),
+                    batch_count=len(photo_batches),
+                    processed_photo_count=0,
+                    failed_photo_count=0,
+                )
+            )
+
+            processed_photo_count = 0
             for batch in photo_batches:
-                created_requests.append(
-                    await self._create_request_with_access_token(
-                        event_id=event_id,
-                        photos=batch,
-                        requested_by=requested_by,
-                        access_token=access_token,
-                        group_id=upload_group.id,
-                        publish_event=False,
+                request_details = await self._create_request_with_access_token(
+                    event_id=upload_group.event_id,
+                    photos=batch,
+                    requested_by=requested_by,
+                    access_token=access_token,
+                    group_id=upload_group.id,
+                    publish_event=False,
+                )
+                created_requests.append(request_details)
+                processed_photo_count += len(batch)
+                await self.upload_request_group_querier.update_upload_request_group_import_progress(
+                    upload_request_group_queries.UpdateUploadRequestGroupImportProgressParams(
+                        id=group_id,
+                        total_photo_count=len(photo_inputs),
+                        batch_count=len(photo_batches),
+                        processed_photo_count=processed_photo_count,
+                        failed_photo_count=0,
                     )
                 )
-        except Exception:
+
+            completed_group = await self.upload_request_group_querier.complete_upload_request_group_processing(
+                upload_request_group_queries.CompleteUploadRequestGroupProcessingParams(
+                    id=group_id,
+                    total_photo_count=len(photo_inputs),
+                    batch_count=len(photo_batches),
+                    processed_photo_count=processed_photo_count,
+                    failed_photo_count=0,
+                )
+            )
+            if completed_group is None:
+                raise AppException.internal_error("Failed to complete upload group import")
+
+            for request_details in created_requests:
+                await self._publish_event(
+                    subject=NatsSubjects.STAFF_UPLOAD_REQUEST_CREATED,
+                    payload={
+                        "upload_request_id": str(request_details.request.id),
+                        "event_id": str(request_details.request.event_id),
+                        "requested_by": str(requested_by.id),
+                        "photo_count": request_details.request.photo_count,
+                        "group_id": str(upload_group.id),
+                    },
+                )
+
+            await self._publish_event(
+                subject=NatsSubjects.STAFF_UPLOAD_GROUP_CREATED,
+                payload={
+                    "group_id": str(completed_group.id),
+                    "event_id": str(completed_group.event_id),
+                    "requested_by": str(requested_by.id),
+                    "total_photo_count": completed_group.total_photo_count,
+                    "batch_count": completed_group.batch_count,
+                },
+            )
+            return UploadRequestGroupDetails(group=completed_group, requests=created_requests)
+        except Exception as exc:
             created_photos = [
                 photo
                 for request_details in created_requests
@@ -584,34 +744,22 @@ class UploadRequestsService:
             ]
             await self._cleanup_created_photos(created_photos)
             await self._cleanup_created_group(
-                upload_group_id=upload_group.id,
+                upload_group_id=group_id,
                 created_requests=created_requests,
+                delete_group=False,
             )
-            raise
-
-        for request_details in created_requests:
-            await self._publish_event(
-                subject=NatsSubjects.STAFF_UPLOAD_REQUEST_CREATED,
-                payload={
-                    "upload_request_id": str(request_details.request.id),
-                    "event_id": str(request_details.request.event_id),
-                    "requested_by": str(requested_by.id),
-                    "photo_count": request_details.request.photo_count,
-                    "group_id": str(upload_group.id),
-                },
+            await self._mark_group_import_failed(
+                group_id=group_id,
+                total_photo_count=len(photo_inputs),
+                batch_count=len(self._chunk_photo_inputs(photo_inputs, self._max_request_batch_size))
+                if photo_inputs
+                else 0,
+                processed_photo_count=0,
+                failed_photo_count=len(photo_inputs),
+                error_message=str(exc),
             )
-
-        await self._publish_event(
-            subject=NatsSubjects.STAFF_UPLOAD_GROUP_CREATED,
-            payload={
-                "group_id": str(upload_group.id),
-                "event_id": str(upload_group.event_id),
-                "requested_by": str(requested_by.id),
-                "total_photo_count": upload_group.total_photo_count,
-                "batch_count": upload_group.batch_count,
-            },
-        )
-        return UploadRequestGroupDetails(group=upload_group, requests=created_requests)
+            logger.exception("Failed to import upload request group %s", group_id)
+            return None
 
     async def get_request_details(
         self,
@@ -663,10 +811,21 @@ class UploadRequestsService:
 
         requested_by = current_staff_user.id if scope == "my" else None
         request_rows: list[UploadRequest] = []
-        async for upload_request in self.upload_request_querier.list_upload_requests(
-            requested_by=requested_by,
-            status=status,
-        ):
+        if requested_by is not None and status is not None:
+            iterator = self.upload_request_querier.list_upload_requests_by_requester_and_status(
+                requested_by=requested_by,
+                status=status,
+            )
+        elif requested_by is not None:
+            iterator = self.upload_request_querier.list_upload_requests_by_requester(
+                requested_by=requested_by
+            )
+        elif status is not None:
+            iterator = self.upload_request_querier.list_upload_requests_by_status(status=status)
+        else:
+            iterator = self.upload_request_querier.list_upload_requests()
+
+        async for upload_request in iterator:
             request_rows.append(upload_request)
 
         photos_by_request_id = await self._list_request_photos_by_request_ids(
@@ -737,10 +896,23 @@ class UploadRequestsService:
 
         requested_by = current_staff_user.id if scope == "my" else None
         groups: list[UploadRequestGroup] = []
-        async for group in self.upload_request_group_querier.list_upload_request_groups(
-            requested_by=requested_by,
-            status=status,
-        ):
+        if requested_by is not None and status is not None:
+            iterator = self.upload_request_group_querier.list_upload_request_groups_by_requester_and_status(
+                requested_by=requested_by,
+                status=status,
+            )
+        elif requested_by is not None:
+            iterator = self.upload_request_group_querier.list_upload_request_groups_by_requester(
+                requested_by=requested_by
+            )
+        elif status is not None:
+            iterator = self.upload_request_group_querier.list_upload_request_groups_by_status(
+                status=status
+            )
+        else:
+            iterator = self.upload_request_group_querier.list_upload_request_groups()
+
+        async for group in iterator:
             groups.append(group)
 
         details: list[UploadRequestGroupDetails] = []
@@ -874,6 +1046,7 @@ class UploadRequestsService:
             current_staff_user=approved_by,
         )
         self._ensure_group_is_pending(group_details.group)
+        self._ensure_group_import_completed(group_details.group)
         pending_requests = group_details.requests
         self._ensure_all_requests_are_pending(pending_requests)
 
@@ -961,6 +1134,7 @@ class UploadRequestsService:
             current_staff_user=approved_by,
         )
         self._ensure_group_is_pending(group_details.group)
+        self._ensure_group_import_completed(group_details.group)
         pending_requests = group_details.requests
         self._ensure_all_requests_are_pending(pending_requests)
 

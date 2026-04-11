@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import ClassVar, Sequence
 
 from pydantic import Field
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from app.schema.internal.notification import NotificationPriority, PRIORITY_ORDER
 
@@ -26,8 +26,7 @@ class NotificationWorkerSettings(BaseSettings):
     RATE_LIMIT: ClassVar[int] = 50
     RATE_PERIOD: ClassVar[float] = 1.0
 
-    class Config:
-        env_prefix = "NOTIFICATIONS_"
+    model_config = SettingsConfigDict(env_prefix="NOTIFICATIONS_")
 
     def subject_for(self, priority: NotificationPriority) -> str:
         return f"{self.subject_prefix}.{priority.value}"
@@ -35,4 +34,4 @@ class NotificationWorkerSettings(BaseSettings):
     def priority_subjects(self) -> Sequence[str]:
         return [self.subject_for(priority) for priority in PRIORITY_ORDER]
 
-NotifSetting = NotificationWorkerSettings() # type: ignore
+NotifSetting = NotificationWorkerSettings()  # type: ignore
