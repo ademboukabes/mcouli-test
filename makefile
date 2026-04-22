@@ -16,7 +16,7 @@ ifneq ("$(wildcard .env)","")
     export
 endif
 
-.PHONY: migration-create m-up m-down gen get_db run-app run-workers lint
+.PHONY: migration-create m-up m-down gen get_db run-app run-workers lint staging-check-up staging-check-logs staging-check-down
 
 # Helper variable to call your new cleaning script
 CLEAN_SCHEMA = uv run python scripts/clean_schema.py db/schema.sql
@@ -71,3 +71,12 @@ lint:
 
 check_type:
 	uv run mypy .
+
+staging-check-up:
+	docker compose -f docker-compose.staging.yml -f docker-compose.staging.local.yml up --build -d
+
+staging-check-logs:
+	docker compose -f docker-compose.staging.yml -f docker-compose.staging.local.yml logs -f fastapi
+
+staging-check-down:
+	docker compose -f docker-compose.staging.yml -f docker-compose.staging.local.yml down

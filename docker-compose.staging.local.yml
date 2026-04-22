@@ -1,0 +1,18 @@
+services:
+  fastapi:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    pull_policy: never
+    volumes:
+      - ./:/app
+      - insightface_cache:/root/.insightface
+
+  migrate:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    pull_policy: never
+
+volumes:
+  insightface_cache:

@@ -4,7 +4,7 @@ FROM python:3.12-slim
 # Install PostgreSQL client libraries and build tools
 RUN apt-get update \
 	&& apt-get install -y --no-install-recommends libpq-dev build-essential \
-		libglib2.0-0 libgfortran5 \
+		libglib2.0-0 libgfortran5 libgl1 libxext6 libsm6 libxrender1 libxcb1 \
 	&& rm -rf /var/lib/apt/lists/*
 
 ENV PYTHONDONTWRITEBYTECODE=1
