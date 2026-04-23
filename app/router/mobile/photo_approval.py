@@ -18,19 +18,20 @@ async def list_my_approvals(
     current_user: MobileUserSchema = Depends(get_current_mobile_user),
     container: Container = Depends(get_container),
 ) -> list[dict[str, object]]:
-    approvals = []
+    approvals: list[dict[str, object]] = []
     async for a in container.photo_approval_querier.list_approvals_by_user_and_status(
         user_id=current_user.user_id,
-        dollar_2=status,
         limit=limit,
         offset=offset,
+        status=status,
     ):
-        approvals.append({
+        item: dict[str, object] = {
             "id": str(a.id),
             "photo_id": str(a.photo_id),
             "decision": a.decision,
             "decided_at": a.decided_at.isoformat() if a.decided_at else None,
-        })
+        }
+        approvals.append(item)
     return approvals
 
 

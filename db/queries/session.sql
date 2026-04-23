@@ -23,7 +23,7 @@ SELECT *
 FROM user_sessions
 WHERE device_id = $1;
 
--- name: GetSessionByID :one
+-- name: GetSessionById :one
 SELECT *
 FROM user_sessions
 WHERE id = $1;

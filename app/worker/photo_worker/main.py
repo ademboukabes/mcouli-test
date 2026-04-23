@@ -22,6 +22,7 @@ from app.service.face_match import SingleFaceMatchService
 from app.service.user_notification import UserNotificationService
 from app.worker.photo_worker.schema.event import PhotoProcessEvent
 from app.worker.photo_worker.settings import settings as worker_settings
+from db.generated import models
 from db.generated import photo_faces as photo_face_queries
 from db.generated import photos as photo_queries
 from db.generated import processing_jobs as processing_job_queries
@@ -35,7 +36,7 @@ class PhotoApprovalDecision(str, Enum):
 
 
 class PhotoWorker:
-    
+
     def __init__(
         self,
         conn: AsyncConnection,
@@ -94,7 +95,6 @@ class PhotoWorker:
         await self._publish_audit(event, len(faces))
         await self._schedule_cleanup(event.image_ref)
 
-   
 
     async def _handle_single_face(self, event: PhotoProcessEvent, face: DetectedFace) -> None:
         from app.schema.internal.single_face_match import SingleFaceMatchJob
@@ -119,7 +119,6 @@ class PhotoWorker:
         except Exception as exc:
             logger.exception("Single face match failed for photo %s: %s", event.photo_id, exc)
 
-   
 
     async def _handle_group_photo(self, event: PhotoProcessEvent, faces: list[DetectedFace]) -> None:
         logger.info("Processing group photo %s with %d faces", event.photo_id, len(faces))
@@ -180,7 +179,7 @@ class PhotoWorker:
                 )
 
 
-    async def _create_job(self, event: PhotoProcessEvent) -> object | None:
+    async def _create_job(self, event: PhotoProcessEvent) -> models.ProcessingJob | None:
         if self._pj_querier is None:
             return None
         try:
@@ -191,11 +190,11 @@ class PhotoWorker:
             logger.warning("Failed to create processing job for photo %s: %s", event.photo_id, exc)
             return None
 
-    async def _update_job(self, job: object | None, status: str) -> None:
+    async def _update_job(self, job: models.ProcessingJob | None, status: str) -> None:
         if job is None or self._pj_querier is None:
             return
         try:
-            await self._pj_querier.update_processing_job_status(id=job.id, status=status)  # type: ignore[union-attr]
+            await self._pj_querier.update_processing_job_status(id=job.id, status=status)
         except Exception as exc:
             logger.warning("Failed to update processing job: %s", exc)
 

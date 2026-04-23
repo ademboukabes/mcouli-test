@@ -86,7 +86,7 @@ class DeviceService:
         user_id: uuid.UUID,
     ) -> None:
         try:
-            device = await self.device_querier.get_device__by_id(id=device_id)
+            device = await self.device_querier.get_device_by_id(id=device_id)
             if device is None or device.user_id != user_id:
                 raise AppException.not_found("Device not found")
             await self.device_querier.deactivate_device(
@@ -112,7 +112,7 @@ class DeviceService:
         user_id: uuid.UUID,
     ) -> UserDevice:
         try :
-            device =  await self.device_querier.get_device__by_id(id=device_id)
+            device =  await self.device_querier.get_device_by_id(id=device_id)
             if device is None :
                 raise AppException.not_found("device not found ")
             return device
@@ -121,7 +121,7 @@ class DeviceService:
 
     async def count_devices(self: "DeviceService", user_id: uuid.UUID) -> int:
         try :
-            count =  await self.device_querier.count__user__devices(user_id=user_id)
+            count =  await self.device_querier.count_user_devices(user_id=user_id)
             if count is None :
                 raise AppException.internal_error("db failed to count ")
             return count

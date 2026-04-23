@@ -10,7 +10,7 @@ INSERT INTO upload_request_groups (
 )
 RETURNING *;
 
--- name: GetUploadRequestGroupByID :one
+-- name: GetUploadRequestGroupById :one
 SELECT *
 FROM upload_request_groups
 WHERE id = $1;

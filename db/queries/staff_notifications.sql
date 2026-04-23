@@ -8,7 +8,7 @@ INSERT INTO staff_notifications (
 )
 RETURNING *;
 
--- name: ListStaffNotificationsByStaffUserID :many
+-- name: ListStaffNotificationsByStaffUserId :many
 SELECT *
 FROM staff_notifications
 WHERE staff_user_id = $1

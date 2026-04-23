@@ -15,19 +15,19 @@ INSERT INTO upload_request_photos (
 )
 RETURNING *;
 
--- name: ListUploadRequestPhotosByUploadRequestID :many
+-- name: ListUploadRequestPhotosByUploadRequestId :many
 SELECT *
 FROM upload_request_photos
 WHERE upload_request_id = $1
 ORDER BY created_at ASC;
 
--- name: ListUploadRequestPhotosByUploadRequestIDs :many
+-- name: ListUploadRequestPhotosByUploadRequestIds :many
 SELECT *
 FROM upload_request_photos
 WHERE upload_request_id = ANY($1::uuid[])
 ORDER BY created_at ASC;
 
--- name: GetUploadRequestPhotoByID :one
+-- name: GetUploadRequestPhotoById :one
 SELECT *
 FROM upload_request_photos
 WHERE id = $1;
@@ -39,12 +39,12 @@ SET status = $2,
 WHERE id = $1
 RETURNING *;
 
--- name: UpdateUploadRequestPhotoStatusByUploadRequestID :many
+-- name: UpdateUploadRequestPhotoStatusByUploadRequestId :many
 UPDATE upload_request_photos
 SET status = $2
 WHERE upload_request_id = $1
 RETURNING *;
 
--- name: DeleteUploadRequestPhotosByUploadRequestID :exec
+-- name: DeleteUploadRequestPhotosByUploadRequestId :exec
 DELETE FROM upload_request_photos
 WHERE upload_request_id = $1;

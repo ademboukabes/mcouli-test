@@ -20,6 +20,6 @@ SELECT * FROM photo_approvals WHERE photo_id = $1;
 -- name: ListApprovalsByUserAndStatus :many
 SELECT * FROM photo_approvals
 WHERE user_id = $1
-  AND ($2::varchar IS NULL OR decision = $2)
+  AND (sqlc.narg('status')::varchar IS NULL OR decision = sqlc.narg('status'))
 ORDER BY decided_at DESC
-LIMIT $3 OFFSET $4;
+LIMIT $2 OFFSET $3;

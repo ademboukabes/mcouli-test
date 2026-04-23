@@ -59,18 +59,18 @@ WHERE id = :p1
 """
 
 
-LIST_UPLOAD_REQUEST_PHOTOS_BY_UPLOAD_REQUEST_I_DS = """-- name: list_upload_request_photos_by_upload_request_i_ds \\:many
-SELECT id, upload_request_id, drive_file_id, file_name, mime_type, size_bytes, staging_storage_key, final_storage_key, taken_at, day_number, visibility, status, created_at
-FROM upload_request_photos
-WHERE upload_request_id = ANY(:p1\\:\\:uuid[])
-ORDER BY created_at ASC
-"""
-
-
 LIST_UPLOAD_REQUEST_PHOTOS_BY_UPLOAD_REQUEST_ID = """-- name: list_upload_request_photos_by_upload_request_id \\:many
 SELECT id, upload_request_id, drive_file_id, file_name, mime_type, size_bytes, staging_storage_key, final_storage_key, taken_at, day_number, visibility, status, created_at
 FROM upload_request_photos
 WHERE upload_request_id = :p1
+ORDER BY created_at ASC
+"""
+
+
+LIST_UPLOAD_REQUEST_PHOTOS_BY_UPLOAD_REQUEST_IDS = """-- name: list_upload_request_photos_by_upload_request_ids \\:many
+SELECT id, upload_request_id, drive_file_id, file_name, mime_type, size_bytes, staging_storage_key, final_storage_key, taken_at, day_number, visibility, status, created_at
+FROM upload_request_photos
+WHERE upload_request_id = ANY(:p1\\:\\:uuid[])
 ORDER BY created_at ASC
 """
 
@@ -150,8 +150,8 @@ class AsyncQuerier:
             created_at=row[12],
         )
 
-    async def list_upload_request_photos_by_upload_request_i_ds(self, *, dollar_1: List[uuid.UUID]) -> AsyncIterator[models.UploadRequestPhoto]:
-        result = await self._conn.stream(sqlalchemy.text(LIST_UPLOAD_REQUEST_PHOTOS_BY_UPLOAD_REQUEST_I_DS), {"p1": dollar_1})
+    async def list_upload_request_photos_by_upload_request_id(self, *, upload_request_id: uuid.UUID) -> AsyncIterator[models.UploadRequestPhoto]:
+        result = await self._conn.stream(sqlalchemy.text(LIST_UPLOAD_REQUEST_PHOTOS_BY_UPLOAD_REQUEST_ID), {"p1": upload_request_id})
         async for row in result:
             yield models.UploadRequestPhoto(
                 id=row[0],
@@ -170,11 +170,7 @@ class AsyncQuerier:
             )
 
     async def list_upload_request_photos_by_upload_request_ids(self, *, dollar_1: List[uuid.UUID]) -> AsyncIterator[models.UploadRequestPhoto]:
-        async for row in self.list_upload_request_photos_by_upload_request_i_ds(dollar_1=dollar_1):
-            yield row
-
-    async def list_upload_request_photos_by_upload_request_id(self, *, upload_request_id: uuid.UUID) -> AsyncIterator[models.UploadRequestPhoto]:
-        result = await self._conn.stream(sqlalchemy.text(LIST_UPLOAD_REQUEST_PHOTOS_BY_UPLOAD_REQUEST_ID), {"p1": upload_request_id})
+        result = await self._conn.stream(sqlalchemy.text(LIST_UPLOAD_REQUEST_PHOTOS_BY_UPLOAD_REQUEST_IDS), {"p1": dollar_1})
         async for row in result:
             yield models.UploadRequestPhoto(
                 id=row[0],

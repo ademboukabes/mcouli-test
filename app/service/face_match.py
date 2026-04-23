@@ -59,19 +59,9 @@ class SingleFaceMatchService:
                 matched_user = await self.user_match_service.find_closest_user(
                     embedding_literal=embedding_literal,
                 )
-                if matched_user is None:
-                    logger.info("No user embeddings available for matching, auto-approving photo %s", job.photo_id)
-                    await self.photo_querier.update_photo_status(id=job.photo_id, status="approved")
+                if await self._autoapprove_if_unmatchable(job, matched_user):
                     return
-
-                from app.worker.photo_worker.settings import settings as worker_settings
-                if matched_user.distance > worker_settings.similarity_threshold:
-                    logger.info(
-                        "Closest user distance %.4f exceeds threshold %.4f for photo %s; auto-approving",
-                        matched_user.distance, worker_settings.similarity_threshold, job.photo_id,
-                    )
-                    await self.photo_querier.update_photo_status(id=job.photo_id, status="approved")
-                    return
+                assert matched_user is not None
 
                 params = photo_face_queries.PhotoFacesEnsureFaceMatchParams(
                     photo_id=job.photo_id,
@@ -103,6 +93,7 @@ class SingleFaceMatchService:
             return
 
         if created_face_match_id:
+            assert matched_user is not None
             await self.photo_querier.update_photo_status(
                 id=job.photo_id, status="approved",
             )
@@ -113,6 +104,27 @@ class SingleFaceMatchService:
                     "photo_id": str(job.photo_id),
                 },
             )
+
+    async def _autoapprove_if_unmatchable(
+        self,
+        job: SingleFaceMatchJob,
+        matched_user: ClosestUserMatch | None,
+    ) -> bool:
+        if matched_user is None:
+            logger.info("No user embeddings available for matching, auto-approving photo %s", job.photo_id)
+            await self.photo_querier.update_photo_status(id=job.photo_id, status="approved")
+            return True
+
+        from app.worker.photo_worker.settings import settings as worker_settings
+        if matched_user.distance > worker_settings.similarity_threshold:
+            logger.info(
+                "Closest user distance %.4f exceeds threshold %.4f for photo %s; auto-approving",
+                matched_user.distance, worker_settings.similarity_threshold, job.photo_id,
+            )
+            await self.photo_querier.update_photo_status(id=job.photo_id, status="approved")
+            return True
+
+        return False
 
     async def Check_photo_exists(self, photo_id: UUID) -> bool:
         row = await self.photo_face_querier.photo_faces_photo_exists(id=photo_id)

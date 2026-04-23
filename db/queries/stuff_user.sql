@@ -8,7 +8,7 @@ INSERT INTO staff_users (email, password, role)
 VALUES ($1, $2, $3)
 RETURNING *;
 
--- name: GetStaffUserByID :one
+-- name: GetStaffUserById :one
 SELECT *
 FROM staff_users
 WHERE id = $1;

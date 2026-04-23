@@ -15,6 +15,8 @@ class AuditEventType(str, enum.Enum):
     UPLOAD_REQUESTCREATED = "upload_request.created"
     UPLOAD_REQUESTAPPROVED = "upload_request.approved"
     UPLOAD_REQUESTREJECTED = "upload_request.rejected"
+    PHOTOPROCESSED = "photo.processed"
+    PHOTO_APPROVALDECIDED = "photo_approval.decided"
 
 
 class EventStatus(str, enum.Enum):
@@ -204,14 +206,14 @@ class UploadRequestGroup:
     requested_by: uuid.UUID
     approved_by: Optional[uuid.UUID]
     status: Any
-    processing_status: str
     total_photo_count: int
     batch_count: int
-    processed_photo_count: int
-    failed_photo_count: int
     created_at: datetime.datetime
     approved_at: Optional[datetime.datetime]
     rejection_reason: Optional[str]
+    processing_status: str
+    processed_photo_count: int
+    failed_photo_count: int
     error_message: Optional[str]
 
 

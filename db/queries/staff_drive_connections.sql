@@ -27,7 +27,7 @@ DO UPDATE SET
     updated_at = NOW()
 RETURNING *;
 
--- name: GetActiveStaffDriveConnectionByStaffUserID :one
+-- name: GetActiveStaffDriveConnectionByStaffUserId :one
 SELECT *
 FROM staff_drive_connections
 WHERE staff_user_id = $1
@@ -41,7 +41,7 @@ WHERE revoked_at IS NULL
 ORDER BY connected_at DESC
 LIMIT 1;
 
--- name: RevokeStaffDriveConnectionByStaffUserID :exec
+-- name: RevokeStaffDriveConnectionByStaffUserId :exec
 UPDATE staff_drive_connections
 SET revoked_at = NOW(),
     updated_at = NOW()

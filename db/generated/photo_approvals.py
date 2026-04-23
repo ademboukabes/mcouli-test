@@ -31,9 +31,9 @@ SELECT id, photo_id, user_id, decision, decided_at FROM photo_approvals WHERE ph
 LIST_APPROVALS_BY_USER_AND_STATUS = """-- name: list_approvals_by_user_and_status \\:many
 SELECT id, photo_id, user_id, decision, decided_at FROM photo_approvals
 WHERE user_id = :p1
-  AND (:p2\\:\\:varchar IS NULL OR decision = :p2)
+  AND (:p4\\:\\:varchar IS NULL OR decision = :p4)
 ORDER BY decided_at DESC
-LIMIT :p3 OFFSET :p4
+LIMIT :p2 OFFSET :p3
 """
 
 
@@ -72,12 +72,12 @@ class AsyncQuerier:
                 decided_at=row[4],
             )
 
-    async def list_approvals_by_user_and_status(self, *, user_id: uuid.UUID, dollar_2: str, limit: int, offset: int) -> AsyncIterator[models.PhotoApproval]:
+    async def list_approvals_by_user_and_status(self, *, user_id: uuid.UUID, limit: int, offset: int, status: Optional[str]) -> AsyncIterator[models.PhotoApproval]:
         result = await self._conn.stream(sqlalchemy.text(LIST_APPROVALS_BY_USER_AND_STATUS), {
             "p1": user_id,
-            "p2": dollar_2,
-            "p3": limit,
-            "p4": offset,
+            "p2": limit,
+            "p3": offset,
+            "p4": status,
         })
         async for row in result:
             yield models.PhotoApproval(

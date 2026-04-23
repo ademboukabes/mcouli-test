@@ -20,7 +20,7 @@ AND user_id = :p2
 """
 
 
-COUNT__USER__DEVICES = """-- name: count__user__devices \\:one
+COUNT_USER_DEVICES = """-- name: count_user_devices \\:one
 SELECT COUNT(*) 
 FROM user_devices
 WHERE user_id = :p1
@@ -67,7 +67,7 @@ AND is_2fa_enabled = FALSE
 """
 
 
-GET_DEVICE__BY_ID = """-- name: get_device__by_id \\:one
+GET_DEVICE_BY_ID = """-- name: get_device_by_id \\:one
 SELECT id, user_id, device_name, device_type, totp_secret, is_2fa_enabled, last_active, created_at, push_token, is_active, is_invalid_token from user_devices
 WHERE id =:p1
 """
@@ -123,8 +123,8 @@ class AsyncQuerier:
     async def activate_device(self, *, id: uuid.UUID, user_id: uuid.UUID) -> None:
         await self._conn.execute(sqlalchemy.text(ACTIVATE_DEVICE), {"p1": id, "p2": user_id})
 
-    async def count__user__devices(self, *, user_id: uuid.UUID) -> Optional[int]:
-        row = (await self._conn.execute(sqlalchemy.text(COUNT__USER__DEVICES), {"p1": user_id})).first()
+    async def count_user_devices(self, *, user_id: uuid.UUID) -> Optional[int]:
+        row = (await self._conn.execute(sqlalchemy.text(COUNT_USER_DEVICES), {"p1": user_id})).first()
         if row is None:
             return None
         return row[0]
@@ -159,8 +159,8 @@ class AsyncQuerier:
     async def enable_device2_fa(self, *, id: uuid.UUID, user_id: uuid.UUID) -> None:
         await self._conn.execute(sqlalchemy.text(ENABLE_DEVICE2_FA), {"p1": id, "p2": user_id})
 
-    async def get_device__by_id(self, *, id: uuid.UUID) -> Optional[models.UserDevice]:
-        row = (await self._conn.execute(sqlalchemy.text(GET_DEVICE__BY_ID), {"p1": id})).first()
+    async def get_device_by_id(self, *, id: uuid.UUID) -> Optional[models.UserDevice]:
+        row = (await self._conn.execute(sqlalchemy.text(GET_DEVICE_BY_ID), {"p1": id})).first()
         if row is None:
             return None
         return models.UserDevice(

@@ -8,7 +8,7 @@ INSERT INTO notifications (
 )
 RETURNING id, user_id, type, payload, read_at, created_at;
 
--- name: ListNotificationsByUserID :many
+-- name: ListNotificationsByUserId :many
 SELECT id, user_id, type, payload, read_at, created_at
 FROM notifications
 WHERE user_id = $1

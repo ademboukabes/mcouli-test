@@ -10,12 +10,12 @@ INSERT INTO upload_requests (
 )
 RETURNING *;
 
--- name: GetUploadRequestByID :one
+-- name: GetUploadRequestById :one
 SELECT *
 FROM upload_requests
 WHERE id = $1;
 
--- name: ListUploadRequestsByGroupID :many
+-- name: ListUploadRequestsByGroupId :many
 SELECT *
 FROM upload_requests
 WHERE group_id = $1
