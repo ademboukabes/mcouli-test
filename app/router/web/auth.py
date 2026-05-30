@@ -9,6 +9,7 @@ from app.schema.response.web.staff_user import StaffUserSchema
 from db.generated.models import StaffUser
 router = APIRouter(prefix="/auth")
 
+
 @router.post("/login", response_model=WebAuthResponse,description="so here both the dahbsoard will authneticate from this endpoitn ")
 async def admin_login(
     req: WebAuthRequest,
@@ -41,4 +42,17 @@ async def get_me_admin(
         role=user.role,
         updated_at=user.updated_at,
         email=user.email
+    )
+
+
+@router.post("/logout", status_code=204)
+async def admin_logout(
+    r: Response,
+    _: StaffUser = Depends(get_current_staff_user),
+) -> None:
+    r.delete_cookie(
+        key="access_token",
+        httponly=True,
+        secure=True,
+        samesite="strict",
     )
