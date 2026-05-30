@@ -23,6 +23,7 @@ from db.generated.models import User, UserDevice
 from app.core.logger import logger
 from app.service.face_embedding import FaceImagePayload, FaceEmbeddingService
 from app.schema.internal.single_face_match import ClosestUserMatch
+from app.service.session import SessionService
 
 
 class AuthService:
@@ -141,6 +142,17 @@ class AuthService:
         refresh_token = create_refresh_mobile_token(str(session.id))
         expiry = Get_expiry_time()
         logger.info("created session %s for user %s", session.id, user_id)
+
+        # Populate Redis auth cache for fast-path validation
+        await SessionService.cache_session_for_auth(
+            redis=redis,
+            session_id=session.id,
+            user_id=user_id,
+            email=user.email or "",
+            expires_at=session.expires_at,
+            blocked=user.blocked,
+            ttl=AuthService.REDIS_SESSION_TTL,
+        )
 
         return MobileAuthResponse(
             access_token=access_token,
@@ -325,6 +337,14 @@ class AuthService:
             session_key = constant.RedisKey.UserSessionByUser.value.format(
                 user_id=user_id
             )
+            # Best-effort: also invalidate the per-session MobileSessionCache.
+            raw_session_id = await redis.get(session_key)
+            if raw_session_id:
+                try:
+                    session_id = uuid.UUID(raw_session_id)
+                    await SessionService.delete_session_cache(redis=redis, session_id=session_id)
+                except (ValueError, Exception):
+                    pass
             await redis.delete(session_key)
             return existing
         except Exception as exc:
@@ -337,9 +357,16 @@ class AuthService:
             if not user:
                 raise AppException.not_found("User not found")
 
-            session_key = constant.RedisKey.UserSessionByUser.value.format(
-                user_id=user_id
-            )
+            session_key = constant.RedisKey.UserSessionByUser.value.format(user_id=user_id)
+            # Best-effort: retrieve the session_id from UserSessionByUser cache to also
+            # invalidate the per-session MobileSessionCache entry.
+            raw_session_id = await redis.get(session_key)
+            if raw_session_id:
+                try:
+                    session_id = uuid.UUID(raw_session_id)
+                    await SessionService.delete_session_cache(redis=redis, session_id=session_id)
+                except (ValueError, Exception):
+                    pass  # non-blocking: session cache will expire naturally
             await redis.delete(session_key)
 
             return user
