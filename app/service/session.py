@@ -3,21 +3,31 @@ from app.core.exceptions import AppException, DBExceptionImpl
 from db.generated import session as session_queries
 import uuid
 from db.generated.models import UserSession
-from datetime import datetime,timedelta,timezone
+from datetime import datetime, timedelta, timezone
 from app.infra.redis import RedisClient
 from app.core.constant import RedisKey
 from db.generated.session import UpsertSessionRow
 
-class SessionRedis(BaseModel):
-    session_id:uuid.UUID
-    user_id:uuid.UUID
-    device_id:uuid.UUID
-    last_active:datetime
-    expires_at:datetime
 
-class SessionService :
-    session_querier : session_queries.AsyncQuerier
-    redis : RedisClient
+class SessionRedis(BaseModel):
+    session_id: uuid.UUID
+    user_id: uuid.UUID
+    device_id: uuid.UUID
+    last_active: datetime
+    expires_at: datetime
+
+
+class MobileSessionCache(BaseModel):
+    session_id: uuid.UUID
+    user_id: uuid.UUID
+    email: str
+    expires_at: datetime
+    blocked: bool
+
+
+class SessionService:
+    session_querier: session_queries.AsyncQuerier
+    redis: RedisClient
 
     def init(self, session: session_queries.AsyncQuerier, redis: RedisClient) -> None:
         self.session_querier = session
@@ -26,14 +36,53 @@ class SessionService :
         SessionService.redis = redis
 
     @staticmethod
-    async def create_session(user_id:uuid.UUID,device_id:uuid.UUID)->UpsertSessionRow:
-        try :
+    async def cache_session_for_auth(
+        redis: RedisClient,
+        session_id: uuid.UUID,
+        user_id: uuid.UUID,
+        email: str,
+        expires_at: datetime,
+        blocked: bool,
+        ttl: int,
+    ) -> None:
+        key = RedisKey.MobileSessionCache.value.format(session_id=session_id)
+        payload = MobileSessionCache(
+            session_id=session_id,
+            user_id=user_id,
+            email=email,
+            expires_at=expires_at,
+            blocked=blocked,
+        )
+        await redis.set(key=key, value=payload.model_dump_json(), expire=ttl)
+
+    @staticmethod
+    async def get_cached_session(
+        redis: RedisClient,
+        session_id: uuid.UUID,
+    ) -> MobileSessionCache | None:
+        key = RedisKey.MobileSessionCache.value.format(session_id=session_id)
+        raw = await redis.get(key)
+        if raw is None:
+            return None
+        return MobileSessionCache.model_validate_json(raw)
+
+    @staticmethod
+    async def delete_session_cache(
+        redis: RedisClient,
+        session_id: uuid.UUID,
+    ) -> None:
+        key = RedisKey.MobileSessionCache.value.format(session_id=session_id)
+        await redis.delete(key)
+
+    @staticmethod
+    async def create_session(user_id: uuid.UUID, device_id: uuid.UUID) -> UpsertSessionRow:
+        try:
             session = await SessionService.session_querier.upsert_session(
                 user_id=user_id,
                 device_id=device_id,
                 expires_at=datetime.now(timezone.utc) + timedelta(days=7),
             )
-            if session is None :
+            if session is None:
                 raise AppException.internal_error("session creation failed ")
 
             result = await SessionService.redis.set(
@@ -45,33 +94,30 @@ class SessionService :
                     last_active=session.last_active,
                     expires_at=session.expires_at,
                 ).model_dump_json(),
-                expire=60*60*5,
-                nx=True
+                expire=60 * 60 * 5,
+                nx=True,
             )
             if not result:
                 AppException.forbidden("You already logged in in another device")
             return session
-        except Exception as e :
-             raise DBExceptionImpl.handle(e)
-
-
-
-    @staticmethod
-    async def get_session_by_id(session_id:uuid.UUID)->UserSession:
-        try :
-            session = await SessionService.session_querier.get_session_by_id(id=session_id)
-            if session is None :
-                raise AppException.not_found("session Not found ")
-            return session
-        except Exception as e :
+        except Exception as e:
             raise DBExceptionImpl.handle(e)
 
+    @staticmethod
+    async def get_session_by_id(session_id: uuid.UUID) -> UserSession:
+        try:
+            session = await SessionService.session_querier.get_session_by_id(id=session_id)
+            if session is None:
+                raise AppException.not_found("session Not found ")
+            return session
+        except Exception as e:
+            raise DBExceptionImpl.handle(e)
 
     @staticmethod
     async def check_session(
         session_id: uuid.UUID,
         user_id: uuid.UUID,
-        device_id: uuid.UUID
+        device_id: uuid.UUID,
     ) -> bool:
         try:
             session_in_redis = await SessionService.redis.get(
@@ -125,31 +171,31 @@ class SessionService :
         except Exception as e:
             raise DBExceptionImpl.handle(e)
 
-
     @staticmethod
     async def delete_session(
         session_id: uuid.UUID, user_id: uuid.UUID, device_id: uuid.UUID
     ) -> None:
-        try :
-            await SessionService.session_querier.delete_session_by_device(user_id=user_id,device_id=device_id)
-        except Exception as e :
+        try:
+            await SessionService.session_querier.delete_session_by_device(
+                user_id=user_id, device_id=device_id
+            )
+        except Exception as e:
             raise DBExceptionImpl.handle(e)
-
 
     @staticmethod
     async def delete_expired_sessions() -> None:
-        try :
+        try:
             await SessionService.session_querier.delete_expired_sessions()
-        except Exception as e :
+        except Exception as e:
             raise DBExceptionImpl.handle(e)
 
     @staticmethod
-    async def count_user_sessions(user_id:uuid.UUID)->int:
-        try :
-            count =  await SessionService.session_querier.count_user_sessions(user_id=user_id)
-            if count is None :
+    async def count_user_sessions(user_id: uuid.UUID) -> int:
+        try:
+            count = await SessionService.session_querier.count_user_sessions(user_id=user_id)
+            if count is None:
                 raise AppException.internal_error("failed to count ")
-            else :
+            else:
                 return count
-        except Exception as e :
-             raise DBExceptionImpl.handle(e)
+        except Exception as e:
+            raise DBExceptionImpl.handle(e)
