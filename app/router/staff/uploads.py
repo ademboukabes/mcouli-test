@@ -21,6 +21,7 @@ from app.schema.response.staff.upload_groups import (
 from app.schema.response.staff.uploads import (
     UploadRequestListResponse,
     UploadRequestPhotoListResponse,
+    UploadRequestPhotoSchema,
     UploadRequestSchema,
 )
 from app.service.upload_requests import UploadRequestGroupDetails
@@ -46,7 +47,7 @@ async def create_upload_request(
     )
     if isinstance(upload_result, UploadRequestGroupDetails):
         return UploadRequestGroupSchema.from_details(upload_result)
-    return UploadRequestSchema.from_models(upload_result.request, upload_result.photos)
+    return UploadRequestSchema.from_details(upload_result)
 
 
 @router.get("", response_model=UploadRequestListResponse)
@@ -61,8 +62,8 @@ async def list_upload_requests(
         scope=scope,
         status=status.value if status is not None else None,
     )
-    return UploadRequestListResponse.from_models(
-        [(item.request, item.photos) for item in requests]
+    return UploadRequestListResponse(
+        items=[UploadRequestSchema.from_details(item) for item in requests]
     )
 
 
@@ -145,7 +146,7 @@ async def get_upload_request(
         request_id=request_id,
         current_staff_user=current_staff_user,
     )
-    return UploadRequestSchema.from_models(upload_request.request, upload_request.photos)
+    return UploadRequestSchema.from_details(upload_request)
 
 
 @router.get("/{request_id}/photos", response_model=UploadRequestPhotoListResponse)
@@ -158,7 +159,9 @@ async def list_upload_request_photos(
         request_id=request_id,
         current_staff_user=current_staff_user,
     )
-    return UploadRequestPhotoListResponse.from_models(upload_request.photos)
+    return UploadRequestPhotoListResponse(
+        items=[UploadRequestPhotoSchema.model_validate(p) for p in upload_request.photos]
+    )
 
 
 @router.get("/{request_id}/photos/{photo_id}/preview")
@@ -187,7 +190,7 @@ async def approve_upload_request(
         request_id=request_id,
         approved_by=current_staff_user,
     )
-    return UploadRequestSchema.from_models(upload_request.request, upload_request.photos)
+    return UploadRequestSchema.from_details(upload_request)
 
 
 @router.post("/{request_id}/reject", response_model=UploadRequestSchema)
@@ -202,4 +205,4 @@ async def reject_upload_request(
         approved_by=current_staff_user,
         reason=req.reason,
     )
-    return UploadRequestSchema.from_models(upload_request.request, upload_request.photos)
+    return UploadRequestSchema.from_details(upload_request)
