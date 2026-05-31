@@ -36,6 +36,11 @@ class Settings(BaseSettings):
     MOBILE_SESSION_LIMIT: int = 3
     MOBILE_SESSION_TTL_SECONDS: int = 180
     MOBILE_SESSION_DAYS: int = 7
+    # Mobile auth validation defaults
+    MOBILE_AUTH_PASSWORD_MIN_LEN: int = 8
+    MOBILE_AUTH_PASSWORD_MAX_LEN: int = 128
+    MOBILE_AUTH_DEVICE_NAME_MAX_LEN: int = 64
+    MOBILE_AUTH_DEVICE_TYPE_MAX_LEN: int = 32
     # Admin list defaults
     ADMIN_USERS_DEFAULT_LIMIT: int = 20
     ADMIN_USERS_MAX_LIMIT: int = 100

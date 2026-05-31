@@ -73,3 +73,6 @@ dev = [
 [tool.pytest.ini_options]
 pythonpath = ["."]
 asyncio_mode = "auto"
+markers = [
+    "e2e: tests that require a running backend and infrastructure services",
+]
