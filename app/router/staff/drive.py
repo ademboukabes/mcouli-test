@@ -7,6 +7,7 @@ from app.container import Container, get_container
 from app.core.exceptions import AppException
 from app.deps.cookie_auth import get_current_staff_user
 from app.infra.google_drive import GoogleDriveClient
+from app.schema.request.staff.drive import GoogleDriveImportRequest
 from app.schema.response.staff.drive import (
     DriveBrowseResponse,
     DriveItemSchema,
@@ -14,7 +15,10 @@ from app.schema.response.staff.drive import (
     GoogleDriveConnectResponse,
     GoogleDriveConnectionStatusResponse,
     GoogleDriveDisconnectResponse,
+    GoogleDriveImportFileResult,
+    GoogleDriveImportResponse,
 )
+from app.service.staff_drive import SelectedDriveFile
 from db.generated.models import StaffUser
 
 
@@ -156,5 +160,33 @@ async def search_drive(
                 is_folder=f.mime_type == GoogleDriveClient._drive_folder_mime_type,
             )
             for f in files
+        ]
+    )
+
+
+@router.post("/files/import", response_model=GoogleDriveImportResponse)
+async def import_drive_files(
+    request: GoogleDriveImportRequest,
+    current_staff_user: StaffUser = Depends(get_current_staff_user),
+    container: Container = Depends(get_container),
+) -> GoogleDriveImportResponse:
+    selections = [
+        SelectedDriveFile(id=f.id, name=f.name, mime_type=f.mime_type)
+        for f in request.files
+    ]
+    results = await container.staff_drive_service.import_images_from_drive(
+        staff_user=current_staff_user,
+        selected_files=selections,
+    )
+    return GoogleDriveImportResponse(
+        files=[
+            GoogleDriveImportFileResult(
+                drive_file_id=r.drive_file_id,
+                original_file_name=r.original_file_name,
+                minio_bucket=r.minio_bucket,
+                minio_object_name=r.minio_object_name,
+                minio_object_path=r.minio_object_path,
+            )
+            for r in results
         ]
     )

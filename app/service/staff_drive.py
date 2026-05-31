@@ -4,17 +4,40 @@ import json
 import secrets
 import urllib.parse
 import uuid
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
 from cryptography.fernet import Fernet, InvalidToken
 
 from app.core.config import settings
+from app.core.constant import IMAGE_ALLOWED_TYPES
 from app.core.exceptions import AppException
 from app.infra.google_drive import GoogleDriveClient
+from app.infra.minio import ImageBucket
 from app.infra.redis import RedisClient
 from db.generated import staff_drive_connections as drive_queries
 from db.generated import stuff_user as staff_queries
 from db.generated.models import StaffDriveConnection, StaffUser
+
+
+DRIVE_BUCKET_PREFIX = "staff-drive"
+MAX_IMPORT_FILE_SIZE_BYTES = 20 * 1024 * 1024  # 20 MB
+
+
+@dataclass
+class SelectedDriveFile:
+    id: str
+    name: str
+    mime_type: str | None
+
+
+@dataclass
+class DriveImportResult:
+    drive_file_id: str
+    original_file_name: str
+    minio_bucket: str
+    minio_object_name: str
+    minio_object_path: str
 
 
 class StaffDriveService:
@@ -204,9 +227,64 @@ class StaffDriveService:
         except InvalidToken as exc:
             raise AppException.internal_error("Stored Google Drive token cannot be decrypted") from exc
 
+    async def import_images_from_drive(
+        self,
+        staff_user: StaffUser,
+        selected_files: list[SelectedDriveFile],
+    ) -> list[DriveImportResult]:
+        """Download selected Drive files and store them in MinIO (images bucket)."""
+        if not selected_files:
+            return []
+
+        access_token = await self.get_access_token_for_staff_user(staff_user.id)
+        bucket = ImageBucket(f"{DRIVE_BUCKET_PREFIX}/{staff_user.id}")
+        results: list[DriveImportResult] = []
+
+        for selected in selected_files:
+            if selected.mime_type and selected.mime_type not in IMAGE_ALLOWED_TYPES:
+                raise AppException.bad_request(
+                    f"File '{selected.name}' has unsupported type '{selected.mime_type}'. "
+                    f"Allowed: {', '.join(sorted(IMAGE_ALLOWED_TYPES))}"
+                )
+
+            download = await GoogleDriveClient.download_file(
+                access_token=access_token,
+                file_id=selected.id,
+            )
+
+            if len(download.content) > MAX_IMPORT_FILE_SIZE_BYTES:
+                raise AppException.bad_request(
+                    f"File '{selected.name}' exceeds the 20 MB size limit"
+                )
+
+            object_name = self._generate_object_name(selected.name)
+            content_type = selected.mime_type or download.metadata.mime_type
+
+            await bucket.put_bytes(
+                data=download.content,
+                object_name=object_name,
+                content_type=content_type,
+                filename=selected.name,
+            )
+
+            results.append(DriveImportResult(
+                drive_file_id=selected.id,
+                original_file_name=selected.name,
+                minio_bucket=bucket.bucket_name,
+                minio_object_name=object_name,
+                minio_object_path=f"{bucket.file_prefix}/{object_name}",
+            ))
+
+        return results
+
     def _fernet(self) -> Fernet:
         digest = hashlib.sha256(settings.encryption_key.encode("utf-8")).digest()
         return Fernet(base64.urlsafe_b64encode(digest))
+
+    @staticmethod
+    def _generate_object_name(filename: str) -> str:
+        suffix = filename[filename.rfind("."):] if "." in filename else ""
+        return f"{uuid.uuid4()}{suffix}"
 
     @staticmethod
     def _validate_redirect_url(redirect_url: str) -> str:
