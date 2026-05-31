@@ -89,6 +89,9 @@ app = FastAPI(
     description="Mobile and Web API for multAI",
     version="1.0.0",
     lifespan=lifespan,
+    docs_url="/docs" if settings.debug else None,
+    redoc_url="/redoc" if settings.debug else None,
+    openapi_url="/openapi.json" if settings.debug else None,
 )
 
 
