@@ -126,6 +126,8 @@ class PhotoWorker:
     async def _handle_group_photo(self, event: PhotoProcessEvent, faces: list[DetectedFace]) -> None:
         logger.info("Processing group photo %s with %d faces", event.photo_id, len(faces))
 
+        approvals_created = 0
+
         for face_index, face in enumerate(faces):
             bbox_json = json.dumps({
                 "x1": float(face.bbox[0]),
@@ -151,6 +153,8 @@ class PhotoWorker:
                 logger.info("No match for face %d in photo %s", face_index, event.photo_id)
                 continue
 
+            approvals_created += 1
+
             try:
                 await self._notification_service.create_notification(
                     user_id=approval.user_id,
@@ -173,6 +177,11 @@ class PhotoWorker:
                     "Failed to notify user %s for photo %s: %s",
                     approval.user_id, event.photo_id, exc,
                 )
+
+        if approvals_created == 0:
+            logger.info("No users matched in group photo %s, auto-approving as public", event.photo_id)
+            await self._photo_querier.update_photo_status(id=event.photo_id, status="approved")
+            await self._photo_querier.update_photo_visibility(id=event.photo_id, visibility="public")
 
 
     async def _create_job(self, event: PhotoProcessEvent) -> models.ProcessingJob | None:

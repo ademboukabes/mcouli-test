@@ -64,6 +64,14 @@ class PhotoApprovalService:
         await self._photo_querier.update_photo_status(id=photo_id, status="approved")
         return "approved"
 
+    async def expire_stale(self, timeout_days: int) -> int:
+        count = 0
+        async for _ in self._approval_querier.expire_stale_approvals(timeout_days=timeout_days):
+            count += 1
+        if count:
+            logger.info("Auto-expired %d stale pending photo(s)", count)
+        return count
+
     async def _delete_photo_storage(self, photo_id: UUID) -> None:
         photo = await self._photo_querier.get_photo_by_id(id=photo_id)
         if photo is None:

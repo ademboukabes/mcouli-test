@@ -8,6 +8,7 @@ from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from app.core.config import settings
+from app.infra.database import engine
 from app.infra.minio import init_minio_client
 from app.infra.nats import NatsClient
 from app.infra.redis import RedisClient
@@ -48,6 +49,18 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
 
 
 
+async def _approval_expiry_loop() -> None:
+    while True:
+        await asyncio.sleep(3600)
+        try:
+            async with engine.begin() as conn:
+                from app.container import Container
+                container = Container(conn)
+                await container.photo_approval_service.expire_stale(settings.PHOTO_APPROVAL_TIMEOUT_DAYS)
+        except Exception as exc:
+            logger.warning("Approval expiry task failed: %s", exc)
+
+
 MAX_RETRIES = 5
 RETRY_DELAY = 2  # seconds
 @asynccontextmanager
@@ -77,8 +90,11 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     await NatsClient.connect()
     get_face_embedding_service()
 
+    expiry_task = asyncio.create_task(_approval_expiry_loop())
+
     yield
 
+    expiry_task.cancel()
     await RedisClient.get_instance().close()
     await NatsClient.close()
 

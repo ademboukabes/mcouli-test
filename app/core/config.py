@@ -33,6 +33,8 @@ class Settings(BaseSettings):
     POSTGRES_HOST: str = "localhost"
     POSTGRES_PORT: int = 5432
 
+    PHOTO_APPROVAL_TIMEOUT_DAYS: int = 7
+
     # Mobile auth/session defaults
     MOBILE_SESSION_LIMIT: int = 3
     MOBILE_SESSION_TTL_SECONDS: int = 180

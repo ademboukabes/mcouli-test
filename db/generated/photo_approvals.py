@@ -11,6 +11,25 @@ import sqlalchemy.ext.asyncio
 from db.generated import models
 
 
+EXPIRE_STALE_APPROVALS = """-- name: expire_stale_approvals \\:many
+WITH stale_photos AS (
+    SELECT id FROM photos
+    WHERE status = 'pending'
+      AND created_at < now() - make_interval(days => :p1::int)
+),
+_update_approvals AS (
+    UPDATE photo_approvals
+    SET decision = 'approved', decided_at = now()
+    WHERE photo_id IN (SELECT id FROM stale_photos)
+      AND decision = 'pending'
+)
+UPDATE photos
+SET status = 'approved'
+WHERE id IN (SELECT id FROM stale_photos)
+RETURNING id
+"""
+
+
 CREATE_PHOTO_APPROVAL = """-- name: create_photo_approval \\:one
 INSERT INTO photo_approvals (
     photo_id,
@@ -48,6 +67,11 @@ RETURNING id, photo_id, user_id, decision, decided_at
 class AsyncQuerier:
     def __init__(self, conn: sqlalchemy.ext.asyncio.AsyncConnection):
         self._conn = conn
+
+    async def expire_stale_approvals(self, *, timeout_days: int) -> AsyncIterator[uuid.UUID]:
+        result = await self._conn.stream(sqlalchemy.text(EXPIRE_STALE_APPROVALS), {"p1": timeout_days})
+        async for row in result:
+            yield row[0]
 
     async def create_photo_approval(self, *, photo_id: uuid.UUID, user_id: uuid.UUID, decision: str) -> Optional[models.PhotoApproval]:
         row = (await self._conn.execute(sqlalchemy.text(CREATE_PHOTO_APPROVAL), {"p1": photo_id, "p2": user_id, "p3": decision})).first()
