@@ -7,7 +7,8 @@ from fastapi import APIRouter, Depends, Query
 
 from app.container import Container, get_container
 from app.core.constant import AuditEventType
-from app.deps.token_auth import MobileUserSchema, get_current_mobile_user
+from app.deps.cookie_auth import get_current_staff_user
+from db.generated.models import StaffUser
 from app.schema.response.web.audit import AuditEventListResponse, AuditEventSchema
 
 router = APIRouter(prefix="/audits", tags=["audits"])
@@ -22,7 +23,7 @@ async def list_audits(
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
     container: Container = Depends(get_container),
-    _: MobileUserSchema = Depends(get_current_mobile_user),
+    _: StaffUser = Depends(get_current_staff_user),
 ) -> AuditEventListResponse:
     events = await container.audit_service.list_audit_events(
         event_type=event_type,
