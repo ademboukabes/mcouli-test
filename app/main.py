@@ -2,7 +2,9 @@ import time
 from contextlib import asynccontextmanager
 import asyncio
 from typing import AsyncIterator
+import traceback
 from fastapi import FastAPI, Request, Response
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from app.core.config import settings
@@ -88,6 +90,16 @@ app = FastAPI(
     version="1.0.0",
     lifespan=lifespan,
 )
+
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+    logger.error("Uncaught exception on %s %s: %s", request.method, request.url.path, exc)
+    logger.error(traceback.format_exc())
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "Internal server error"},
+    )
 
 app.add_middleware(RequestLoggingMiddleware)
 
