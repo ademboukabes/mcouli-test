@@ -6,6 +6,7 @@ class Settings(BaseSettings):
     app_name: str = "multAI"
     environment: str = "dev"
     debug: bool = True
+    CORS_ORIGINS: list[str] = ["http://localhost:3000", "http://localhost:5173", "http://127.0.0.1:5173", "http://127.0.0.1:3000"]
 
     # Redis
     REDIS_PORT: int
