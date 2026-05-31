@@ -35,3 +35,15 @@ class DriveItemSchema(BaseModel):
 
 class DriveBrowseResponse(BaseModel):
     items: list[DriveItemSchema]
+
+
+class GoogleDriveImportFileResult(BaseModel):
+    drive_file_id: str
+    original_file_name: str
+    minio_bucket: str
+    minio_object_name: str
+    minio_object_path: str
+
+
+class GoogleDriveImportResponse(BaseModel):
+    files: list[GoogleDriveImportFileResult]
