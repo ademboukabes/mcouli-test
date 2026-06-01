@@ -26,11 +26,11 @@ LIMIT 1
 """
 
 
-UPDATE_PROCESSING_JOB_STATUS = """-- name: update_processing_job_status \\:one
+UPDATE_PROCESSING_JOB_STATUS = """-- name: update_processing_job_status \:one
 UPDATE processing_jobs
 SET status = :p2,
     attempts = attempts + 1,
-    completed_at = CASE WHEN :p2 IN ('completed', 'failed') THEN now() ELSE completed_at END
+    completed_at = CASE WHEN :p2 IN ('completed'::processing_job_status, 'failed'::processing_job_status) THEN now() ELSE completed_at END
 WHERE id = :p1
 RETURNING id, photo_id, job_type, status, attempts, created_at, completed_at
 """

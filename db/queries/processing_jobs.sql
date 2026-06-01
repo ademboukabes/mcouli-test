@@ -7,7 +7,7 @@ RETURNING *;
 UPDATE processing_jobs
 SET status = $2,
     attempts = attempts + 1,
-    completed_at = CASE WHEN $2 IN ('completed', 'failed') THEN now() ELSE completed_at END
+    completed_at = CASE WHEN $2 IN ('completed'::processing_job_status, 'failed'::processing_job_status) THEN now() ELSE completed_at END
 WHERE id = $1
 RETURNING *;
 
