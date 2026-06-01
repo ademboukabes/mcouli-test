@@ -1,15 +1,22 @@
 import asyncio
 import uuid
+from typing import Any
+
 import pytest
 from fastapi import HTTPException
 from app.service.users import AuthService
-from app.schema.request.mobile.auth import MobileLoginRequest, MobileRegisterRequest
+from app.schema.request.mobile.auth import MobileLoginRequest
+
+# Test doubles intentionally implement only the AuthService methods exercised here.
+# They do not subclass the generated queriers, so mypy would otherwise flag each
+# constructor injection as an arg-type mismatch.
+# mypy: disable-error-code=arg-type
 
 
 class MockRedis:
     def __init__(self) -> None:
-        self.data = {}
-        self.ttls = {}
+        self.data: dict[str, int] = {}
+        self.ttls: dict[str, int] = {}
 
     async def incr(self, key: str) -> int:
         self.data[key] = self.data.get(key, 0) + 1
@@ -57,7 +64,7 @@ def test_rate_limiting_triggered_after_max_attempts() -> None:
     )
 
     # Stub session creation to avoid database / redis dependencies
-    async def _dummy_create_session(*args: object, **kwargs: object) -> object:
+    async def _dummy_create_session(*args: object, **kwargs: object) -> Any:
         from app.schema.response.mobile.auth import MobileAuthResponse
         return MobileAuthResponse(
             access_token="access",

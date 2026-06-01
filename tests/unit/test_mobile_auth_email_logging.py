@@ -1,3 +1,10 @@
+from typing import Any
+
+# Test doubles intentionally implement only the AuthService methods exercised here.
+# They do not subclass the generated queriers, so mypy would otherwise flag each
+# constructor injection as an arg-type mismatch.
+# mypy: disable-error-code=arg-type
+
 import asyncio
 import logging
 import uuid
@@ -70,8 +77,8 @@ class FakeSessionQuerier:
 
 
 class FakeRedis:
-    def __init__(self):
-        self._store = {}
+    def __init__(self) -> None:
+        self._store: dict[str, int] = {}
 
     async def incr(self, key: str) -> int:
         self._store[key] = self._store.get(key, 0) + 1

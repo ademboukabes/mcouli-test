@@ -1,6 +1,6 @@
 import os
 import uuid
-import requests
+import requests  # type: ignore[import-untyped]
 import pytest
 
 
@@ -16,7 +16,7 @@ class TestMobileAuthEndpointsE2E:
     """
 
     @pytest.fixture(autouse=True)
-    def setup(self):
+    def setup(self) -> None:
         self.base_url = os.getenv("MULTAI_E2E_BASE_URL", "http://localhost:8000")
         self.headers = {
             "X-Forwarded-For": f"203.0.113.{uuid.uuid4().int % 250 + 1}",

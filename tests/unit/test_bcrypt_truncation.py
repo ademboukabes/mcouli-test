@@ -1,4 +1,3 @@
-from passlib.context import CryptContext
 from app.core.securite import hash_password, verify_password
 
 

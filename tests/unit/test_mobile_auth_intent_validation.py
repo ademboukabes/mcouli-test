@@ -1,3 +1,10 @@
+from typing import Any
+
+# Test doubles intentionally implement only the AuthService methods exercised here.
+# They do not subclass the generated queriers, so mypy would otherwise flag each
+# constructor injection as an arg-type mismatch.
+# mypy: disable-error-code=arg-type
+
 import asyncio
 import logging
 import uuid
@@ -36,7 +43,7 @@ class FakeSession:
 class FakeUserQuerier:
     def __init__(self, user: FakeUser) -> None:
         self._user = user
-        self._created_users = {}
+        self._created_users: dict[str, FakeUser] = {}
 
     async def get_user_by_email(self, email: str) -> FakeUser | None:
         if self._user.exists and self._user.email == email:
@@ -90,8 +97,8 @@ class FakeSessionQuerier:
 
 
 class FakeRedis:
-    def __init__(self):
-        self._store = {}
+    def __init__(self) -> None:
+        self._store: dict[str, int] = {}
 
     async def incr(self, key: str) -> int:
         self._store[key] = self._store.get(key, 0) + 1
@@ -350,7 +357,6 @@ def test_login_logs_correctly(
 
 def test_register_concurrent_signup_integrity_error() -> None:
     """Test that concurrent signup IntegrityError is caught and raised as 409."""
-    from typing import Any
     from sqlalchemy.exc import IntegrityError
 
     class FakeOrigException(Exception):
