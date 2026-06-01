@@ -4,11 +4,11 @@ import asyncio
 import json
 from enum import Enum
 
-from sqlalchemy.exc import DBAPIError, SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncConnection
 
 from app.container import Container
 from app.core.config import settings
+from app.deps.ai_deps import get_face_embedding_service
 from app.core.constant import MINIO_URL_PREFIX
 from app.core.logger import logger
 from app.infra.database import engine
@@ -60,44 +60,43 @@ class PhotoWorker:
         if event is None:
             return
 
-        # One transaction per message so every write below is committed (or rolled
-        # back) atomically. Messages are delivered one at a time, so the shared
-        # connection is never used by two handlers at once.
-        async with self._conn.begin():
-            job = await self._create_job(event)
+        # The transaction is owned by run_worker, which opens a fresh
+        # engine.begin() per message. DB errors are allowed to propagate so that
+        # transaction rolls back cleanly instead of being committed half-applied.
+        job = await self._create_job(event)
 
-            try:
-                payload = await self._load_image(event.image_ref)
-            except Exception as exc:
-                logger.warning("Failed to load image for photo %s: %s", event.photo_id, exc)
-                await self._update_job(job, "failed")
-                return
+        try:
+            payload = await self._load_image(event.image_ref)
+        except Exception as exc:
+            logger.warning("Failed to load image for photo %s: %s", event.photo_id, exc)
+            await self._update_job(job, "failed")
+            return
 
-            await self._update_job(job, "running")
+        await self._update_job(job, "running")
 
-            try:
-                faces = await self._face_service.detect_faces(payload)
-            except Exception as exc:
-                logger.warning("Face detection failed for photo %s: %s", event.photo_id, exc)
-                await self._update_job(job, "failed")
-                return
+        try:
+            faces = await self._face_service.detect_faces(payload)
+        except Exception as exc:
+            logger.warning("Face detection failed for photo %s: %s", event.photo_id, exc)
+            await self._update_job(job, "failed")
+            return
 
-            if not faces:
-                logger.info("No faces detected in photo %s, marking as public", event.photo_id)
-                await self._photo_querier.update_photo_status(id=event.photo_id, status="approved")
-                await self._photo_querier.update_photo_visibility(id=event.photo_id, visibility="public")
-                await self._update_job(job, "completed")
-                await self._schedule_cleanup(event.image_ref)
-                return
-
-            if len(faces) == 1:
-                await self._handle_single_face(event, faces[0])
-            else:
-                await self._handle_group_photo(event, faces)
-
+        if not faces:
+            logger.info("No faces detected in photo %s, marking as public", event.photo_id)
+            await self._photo_querier.update_photo_status(id=event.photo_id, status="approved")
+            await self._photo_querier.update_photo_visibility(id=event.photo_id, visibility="public")
             await self._update_job(job, "completed")
-            await self._publish_audit(event, len(faces))
             await self._schedule_cleanup(event.image_ref)
+            return
+
+        if len(faces) == 1:
+            await self._handle_single_face(event, faces[0])
+        else:
+            await self._handle_group_photo(event, faces)
+
+        await self._update_job(job, "completed")
+        await self._publish_audit(event, len(faces))
+        await self._schedule_cleanup(event.image_ref)
 
 
     async def _handle_single_face(self, event: PhotoProcessEvent, face: DetectedFace) -> None:
@@ -137,23 +136,16 @@ class PhotoWorker:
 
             embedding_literal = "[" + ", ".join(str(x) for x in face.embedding) + "]"
 
-            try:
-                approval = await self._photo_face_querier.insert_photo_face_with_approval(
-                    InsertPhotoFaceWithApprovalParams(
-                        photo_id=event.photo_id,
-                        face_index=face_index,
-                        column_3=embedding_literal,
-                        face_embedding=worker_settings.similarity_threshold,
-                        bbox=bbox_json,
-                        decision=PhotoApprovalDecision.PENDING.value,
-                    )
+            approval = await self._photo_face_querier.insert_photo_face_with_approval(
+                InsertPhotoFaceWithApprovalParams(
+                    photo_id=event.photo_id,
+                    face_index=face_index,
+                    column_3=embedding_literal,
+                    face_embedding=worker_settings.similarity_threshold,
+                    bbox=bbox_json,
+                    decision=PhotoApprovalDecision.PENDING.value,
                 )
-            except (DBAPIError, SQLAlchemyError) as exc:
-                logger.warning(
-                    "DB error inserting face %d for photo %s: %s",
-                    face_index, event.photo_id, exc,
-                )
-                continue
+            )
 
             if approval is None:
                 logger.info("No match for face %d in photo %s", face_index, event.photo_id)
@@ -186,21 +178,14 @@ class PhotoWorker:
     async def _create_job(self, event: PhotoProcessEvent) -> models.ProcessingJob | None:
         if self._pj_querier is None:
             return None
-        try:
-            return await self._pj_querier.create_processing_job(
-                photo_id=event.photo_id, job_type="face_detection",
-            )
-        except Exception as exc:
-            logger.warning("Failed to create processing job for photo %s: %s", event.photo_id, exc)
-            return None
+        return await self._pj_querier.create_processing_job(
+            photo_id=event.photo_id, job_type="face_detection",
+        )
 
     async def _update_job(self, job: models.ProcessingJob | None, status: str) -> None:
         if job is None or self._pj_querier is None:
             return
-        try:
-            await self._pj_querier.update_processing_job_status(id=job.id, status=status)
-        except Exception as exc:
-            logger.warning("Failed to update processing job: %s", exc)
+        await self._pj_querier.update_processing_job_status(id=job.id, status=status)
 
     @staticmethod
     async def _publish_audit(event: PhotoProcessEvent, faces_count: int) -> None:
@@ -281,40 +266,52 @@ async def run_worker() -> None:
         password=settings.REDIS_PASSWORD,
     )
 
-    async with engine.connect() as conn:
-        container = Container(conn)
+    # Load the embedding model once; it is a process-wide singleton.
+    get_face_embedding_service()
 
-        single_face_service = SingleFaceMatchService(
-            conn=conn,
-            photo_face_querier=container.photo_face_querier,
-            photo_querier=container.photo_querier,
-            user_match_service=container.auth_service,
-            user_notification_service=container.user_notifications_service,
-        )
-
-        worker = PhotoWorker(
-            conn=conn,
-            face_embedding_service=container.face_embedding_service,
-            single_face_service=single_face_service,
-            user_notification_service=container.user_notifications_service,
-            photo_face_querier=container.photo_face_querier,
-            photo_querier=container.photo_querier,
-            processing_job_querier=container.processing_job_querier,
-        )
-
-        await NatsClient.js_subscribe(
-            subject=NatsSubjects.PHOTO_PROCESS,
-            callback=worker.handle_message,
-            stream_name=worker_settings.stream_name,
-            durable_name=worker_settings.durable_name,
-        )
-
-        logger.info("PhotoWorker subscribed on %s; waiting for jobs", NatsSubjects.PHOTO_PROCESS.value)
+    async def handle(data: bytes) -> None:
+        # Fresh connection and transaction per message. engine.begin() commits on
+        # success and rolls back on any error, so a failed message can never leave
+        # a half-applied or aborted transaction behind for the next one. With
+        # pool_pre_ping the connection is also revalidated on checkout, so a
+        # Postgres restart is recovered automatically. Errors are logged here so a
+        # single bad message does not tear down the subscription.
         try:
-            await asyncio.Event().wait()
-        finally:
-            await _close_minio()
-            await NatsClient.close()
+            async with engine.begin() as conn:
+                container = Container(conn)
+                single_face_service = SingleFaceMatchService(
+                    conn=conn,
+                    photo_face_querier=container.photo_face_querier,
+                    photo_querier=container.photo_querier,
+                    user_match_service=container.auth_service,
+                    user_notification_service=container.user_notifications_service,
+                )
+                worker = PhotoWorker(
+                    conn=conn,
+                    face_embedding_service=container.face_embedding_service,
+                    single_face_service=single_face_service,
+                    user_notification_service=container.user_notifications_service,
+                    photo_face_querier=container.photo_face_querier,
+                    photo_querier=container.photo_querier,
+                    processing_job_querier=container.processing_job_querier,
+                )
+                await worker.handle_message(data)
+        except Exception:
+            logger.exception("Failed to process photo message")
+
+    await NatsClient.js_subscribe(
+        subject=NatsSubjects.PHOTO_PROCESS,
+        callback=handle,
+        stream_name=worker_settings.stream_name,
+        durable_name=worker_settings.durable_name,
+    )
+
+    logger.info("PhotoWorker subscribed on %s; waiting for jobs", NatsSubjects.PHOTO_PROCESS.value)
+    try:
+        await asyncio.Event().wait()
+    finally:
+        await _close_minio()
+        await NatsClient.close()
 
 
 async def _close_minio() -> None:
