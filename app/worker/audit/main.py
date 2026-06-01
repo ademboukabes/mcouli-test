@@ -1,7 +1,6 @@
 import asyncio
 import json
 from typing import Any
-import sqlalchemy.ext.asyncio
 from pydantic import ValidationError
 from app.core.constant import AUDIT_EVENT_SUBJECT
 from app.core.logger import logger
@@ -18,39 +17,20 @@ async def init_worker() -> None:
 
 
 class AuditDeliveryWorker:
-    def __init__(self) -> None:
-        self._conn: sqlalchemy.ext.asyncio.AsyncConnection | None = None
-        self._audit_service: AuditService | None = None
-
-    async def start(self) -> None:
-        if self._conn is not None:
-            return
-        self._conn = await engine.connect()
-        self._audit_service = AuditService(
-            audit_queries.AsyncQuerier(self._conn),
-            user_queries.AsyncQuerier(self._conn),
-        )
-
-    async def stop(self) -> None:
-        if self._conn is not None:
-            await self._conn.close()
-            self._conn = None
-            self._audit_service = None
-
     async def persist(self, payload: AuditEventMessage) -> None:
-        if self._audit_service is None or self._conn is None:
-            logger.warning("Audit service is unavailable for %s", payload.event_type)
-            return
-        try:
-            await self._audit_service.record_event(
+        # Fresh connection and transaction per event. engine.begin() commits on
+        # success and rolls back on error, with pool_pre_ping revalidating the
+        # connection on checkout so a Postgres restart recovers automatically.
+        async with engine.begin() as conn:
+            service = AuditService(
+                audit_queries.AsyncQuerier(conn),
+                user_queries.AsyncQuerier(conn),
+            )
+            await service.record_event(
                 event_type=payload.event_type,
                 user_id=payload.user_id,
                 metadata=payload.metadata,
             )
-            await self._conn.commit()
-        except Exception:
-            await self._conn.rollback()
-            raise
         logger.info("Persisted audit %s for %s", payload.event_type, payload.user_id)
 
 
@@ -92,13 +72,11 @@ async def listen_nats_event(worker: AuditDeliveryWorker) -> None:
 async def main() -> None:
     await init_worker()
     worker = AuditDeliveryWorker()
-    await worker.start()
     await NatsClient.connect()
     try:
         await listen_nats_event(worker)
         await asyncio.Event().wait()
     finally:
-        await worker.stop()
         await NatsClient.close()
 
 
