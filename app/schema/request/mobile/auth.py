@@ -3,7 +3,7 @@ from uuid import UUID
 from app.core.config import settings
 
 
-class MobileAuthRequest(BaseModel):
+class MobileAuthBaseRequest(BaseModel):
     email: EmailStr
     password: str = Field(
         ...,
@@ -42,6 +42,14 @@ class MobileAuthRequest(BaseModel):
         if info.field_name == "device_type":
             return stripped.lower()
         return stripped
+
+
+class MobileRegisterRequest(MobileAuthBaseRequest):
+    pass
+
+
+class MobileLoginRequest(MobileAuthBaseRequest):
+    pass
 
 
 

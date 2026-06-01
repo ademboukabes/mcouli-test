@@ -15,7 +15,8 @@ pytestmark = [
 
 
 BASE_URL = os.getenv("MULTAI_E2E_BASE_URL", "http://localhost:8000").rstrip("/")
-REGISTER_LOGIN_URL = f"{BASE_URL}/user/auth/register-login"
+REGISTER_URL = f"{BASE_URL}/user/auth/register"
+LOGIN_URL = f"{BASE_URL}/user/auth/login"
 
 
 def _valid_payload() -> dict[str, object]:
@@ -30,22 +31,25 @@ def _valid_payload() -> dict[str, object]:
 
 @pytest.mark.parametrize("field", ["password", "device_name", "device_type"])
 @pytest.mark.parametrize("value", ["", "   "])
+@pytest.mark.parametrize("url", [REGISTER_URL, LOGIN_URL])
 def test_live_register_login_rejects_empty_required_text_fields(
     field: str,
     value: str,
+    url: str,
 ) -> None:
     payload = _valid_payload()
     payload[field] = value
 
-    response = httpx.post(REGISTER_LOGIN_URL, json=payload, timeout=10.0)
+    response = httpx.post(url, json=payload, timeout=10.0)
 
     assert response.status_code == 422
 
 
-def test_live_register_login_rejects_padded_short_password() -> None:
+@pytest.mark.parametrize("url", [REGISTER_URL, LOGIN_URL])
+def test_live_register_login_rejects_padded_short_password(url: str) -> None:
     payload = _valid_payload()
     payload["password"] = "       a"
 
-    response = httpx.post(REGISTER_LOGIN_URL, json=payload, timeout=10.0)
+    response = httpx.post(url, json=payload, timeout=10.0)
 
     assert response.status_code == 422

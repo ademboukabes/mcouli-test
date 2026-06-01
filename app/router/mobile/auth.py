@@ -8,7 +8,8 @@ from app.core.constant import AuditEventType
 from app.deps.token_auth import MobileUserSchema, get_current_mobile_user
 
 from app.schema.request.mobile.auth import (
-    MobileAuthRequest,
+    MobileLoginRequest,
+    MobileRegisterRequest,
     RefreshTokenRequest,
     UpdateDeviceTokenRequest,
     InactivateDeviceRequest,
@@ -18,17 +19,30 @@ from app.schema.response.mobile.auth import MeResponse, DeviceSchema, MobileAuth
 router = APIRouter(prefix="/auth")
 
 
-@router.post("/register-login", response_model=MobileAuthResponse)
-async def mobile_register_login(
-    req: MobileAuthRequest,
+@router.post("/register", response_model=MobileAuthResponse)
+async def mobile_register(
+    req: MobileRegisterRequest,
     container: Container = Depends(get_container),
 ) -> MobileAuthResponse:
-    result = await container.auth_service.mobile_register_login(container.redis, req)
-    event_type = AuditEventType.USER_SIGNUP if result.is_new_user else AuditEventType.USER_LOGIN
+    result = await container.auth_service.mobile_register(container.redis, req)
     await container.audit_service.create_record(
-        event_type=event_type,
+        event_type=AuditEventType.USER_SIGNUP,
         user_id=result.user_id,
-        metadata={"email": req.email},
+        metadata={"endpoint": "register"},
+    )
+    return result
+
+
+@router.post("/login", response_model=MobileAuthResponse)
+async def mobile_login(
+    req: MobileLoginRequest,
+    container: Container = Depends(get_container),
+) -> MobileAuthResponse:
+    result = await container.auth_service.mobile_login(container.redis, req)
+    await container.audit_service.create_record(
+        event_type=AuditEventType.USER_LOGIN,
+        user_id=result.user_id,
+        metadata={"endpoint": "login"},
     )
     return result
 

@@ -7,20 +7,21 @@ from fastapi.testclient import TestClient
 
 from app.container import get_container
 from app.main import app
-from app.schema.request.mobile.auth import MobileAuthRequest
+from app.schema.request.mobile.auth import MobileLoginRequest, MobileRegisterRequest
 from app.schema.response.mobile.auth import MobileAuthResponse
 
 
 class FakeAuthService:
     def __init__(self) -> None:
-        self.received_request: MobileAuthRequest | None = None
+        self.register_request: MobileRegisterRequest | None = None
+        self.login_request: MobileLoginRequest | None = None
 
-    async def mobile_register_login(
+    async def mobile_register(
         self,
         redis: object,
-        req: MobileAuthRequest,
+        req: MobileRegisterRequest,
     ) -> MobileAuthResponse:
-        self.received_request = req
+        self.register_request = req
         return MobileAuthResponse(
             access_token="access",
             refresh_token="refresh",
@@ -28,6 +29,21 @@ class FakeAuthService:
             expires_in=3600,
             user_id=uuid.uuid4(),
             is_new_user=True,
+        )
+
+    async def mobile_login(
+        self,
+        redis: object,
+        req: MobileLoginRequest,
+    ) -> MobileAuthResponse:
+        self.login_request = req
+        return MobileAuthResponse(
+            access_token="access",
+            refresh_token="refresh",
+            session_id=str(uuid.uuid4()),
+            expires_in=3600,
+            user_id=uuid.uuid4(),
+            is_new_user=False,
         )
 
 
@@ -75,46 +91,58 @@ def test_register_login_rejects_empty_required_text_fields(
     field: str,
     value: str,
 ) -> None:
-    payload = _valid_payload()
-    payload[field] = value
+    for endpoint, attr in (
+        ("/user/auth/register", "register_request"),
+        ("/user/auth/login", "login_request"),
+    ):
+        payload = _valid_payload()
+        payload[field] = value
 
-    response = client.post("/user/auth/register-login", json=payload)
+        response = client.post(endpoint, json=payload)
 
-    assert response.status_code == 422
-    assert fake_container.auth_service.received_request is None
+        assert response.status_code == 422
+        assert getattr(fake_container.auth_service, attr) is None
 
 
 def test_register_login_passes_normalized_input_to_service(
     client: TestClient,
     fake_container: FakeContainer,
 ) -> None:
-    payload = _valid_payload()
-    payload.update(
-        {
-            "email": " USER@Example.COM ",
-            "device_name": " Pixel 8 ",
-            "device_type": " ANDROID ",
-        }
-    )
+    for endpoint, attr in (
+        ("/user/auth/register", "register_request"),
+        ("/user/auth/login", "login_request"),
+    ):
+        payload = _valid_payload()
+        payload.update(
+            {
+                "email": " USER@Example.COM ",
+                "device_name": " Pixel 8 ",
+                "device_type": " ANDROID ",
+            }
+        )
 
-    response = client.post("/user/auth/register-login", json=payload)
+        response = client.post(endpoint, json=payload)
 
-    assert response.status_code == 200
-    req = fake_container.auth_service.received_request
-    assert req is not None
-    assert req.email == "user@example.com"
-    assert req.device_name == "Pixel 8"
-    assert req.device_type == "android"
+        assert response.status_code == 200
+        req = getattr(fake_container.auth_service, attr)
+        assert req is not None
+        assert req.email == "user@example.com"
+        assert req.device_name == "Pixel 8"
+        assert req.device_type == "android"
 
 
 def test_register_login_password_length_is_checked_after_trimming(
     client: TestClient,
     fake_container: FakeContainer,
 ) -> None:
-    payload = _valid_payload()
-    payload["password"] = "       a"
+    for endpoint, attr in (
+        ("/user/auth/register", "register_request"),
+        ("/user/auth/login", "login_request"),
+    ):
+        payload = _valid_payload()
+        payload["password"] = "       a"
 
-    response = client.post("/user/auth/register-login", json=payload)
+        response = client.post(endpoint, json=payload)
 
-    assert response.status_code == 422
-    assert fake_container.auth_service.received_request is None
+        assert response.status_code == 422
+        assert getattr(fake_container.auth_service, attr) is None
