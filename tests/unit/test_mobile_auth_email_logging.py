@@ -1,4 +1,3 @@
-from typing import Any
 
 # Test doubles intentionally implement only the AuthService methods exercised here.
 # They do not subclass the generated queriers, so mypy would otherwise flag each
