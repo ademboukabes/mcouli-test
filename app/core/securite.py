@@ -1,3 +1,5 @@
+import base64
+import hashlib
 from datetime import datetime, timedelta, timezone
 from typing import Any, Literal
 import jwt
@@ -18,14 +20,16 @@ def _normalize_password(password: str) -> bytes:
 
 
 def hash_password(password: str) -> str:
-    normalized = _normalize_password(password)
-    logger.debug("hashing password (normalized %s bytes)", len(normalized))
-    return pwd_context.hash(normalized)
+    # Use SHA-256 pre-hashing to overcome bcrypt's 72-byte limit
+    pre_hashed = base64.b64encode(hashlib.sha256(password.encode("utf-8")).digest())
+    logger.debug("hashing password (pre-hashed %s bytes)", len(pre_hashed))
+    return pwd_context.hash(pre_hashed)
 
 
 def verify_password(password: str, hashed: str) -> bool:
-    normalized = _normalize_password(password)
-    result = pwd_context.verify(normalized, hashed)
+    # Verify using the SHA-256 pre-hashed format
+    pre_hashed = base64.b64encode(hashlib.sha256(password.encode("utf-8")).digest())
+    result = pwd_context.verify(pre_hashed, hashed)
     logger.debug("password verification result: %s", result)
     return result
 
