@@ -46,45 +46,45 @@ class SingleFaceMatchService:
         created_face_match_id: UUID | None = None
         matched_user: ClosestUserMatch | None = None
 
+        # Writes run inside the caller's transaction; the worker owns commit/rollback.
         try:
-            async with self.conn.begin():
-                if not await self.Check_photo_exists(job.photo_id):
-                    logger.warning("Photo not found: %s", job.photo_id)
-                    return
+            if not await self.Check_photo_exists(job.photo_id):
+                logger.warning("Photo not found: %s", job.photo_id)
+                return
 
-                if await self._match_exists_for_photo(job.photo_id):
-                    logger.info("Photo %s already matched; skipping", job.photo_id)
-                    return
+            if await self._match_exists_for_photo(job.photo_id):
+                logger.info("Photo %s already matched; skipping", job.photo_id)
+                return
 
-                matched_user = await self.user_match_service.find_closest_user(
-                    embedding_literal=embedding_literal,
+            matched_user = await self.user_match_service.find_closest_user(
+                embedding_literal=embedding_literal,
+            )
+            if await self._autoapprove_if_unmatchable(job, matched_user):
+                return
+            assert matched_user is not None
+
+            params = photo_face_queries.PhotoFacesEnsureFaceMatchParams(
+                photo_id=job.photo_id,
+                face_index=job.face_index,
+                column_3=embedding_literal,
+                bbox=bbox_payload,
+                user_id=matched_user.user_id,
+                confidence=matched_user.distance,
+            )
+            result = await self.photo_face_querier.photo_faces_ensure_face_match(params)
+            if result is None:
+                logger.warning("Failed to ensure face match for photo %s", job.photo_id)
+                return
+
+            if result.face_match_id is None:
+                logger.info("Match already exists for photo %s; skipping", job.photo_id)
+            else:
+                created_face_match_id = result.face_match_id
+                logger.info(
+                    "Inserted face match %s for photo %s",
+                    created_face_match_id,
+                    job.photo_id,
                 )
-                if await self._autoapprove_if_unmatchable(job, matched_user):
-                    return
-                assert matched_user is not None
-
-                params = photo_face_queries.PhotoFacesEnsureFaceMatchParams(
-                    photo_id=job.photo_id,
-                    face_index=job.face_index,
-                    column_3=embedding_literal,
-                    bbox=bbox_payload,
-                    user_id=matched_user.user_id,
-                    confidence=matched_user.distance,
-                )
-                result = await self.photo_face_querier.photo_faces_ensure_face_match(params)
-                if result is None:
-                    logger.warning("Failed to ensure face match for photo %s", job.photo_id)
-                    return
-
-                if result.face_match_id is None:
-                    logger.info("Match already exists for photo %s; skipping", job.photo_id)
-                else:
-                    created_face_match_id = result.face_match_id
-                    logger.info(
-                        "Inserted face match %s for photo %s",
-                        created_face_match_id,
-                        job.photo_id,
-                    )
         except (DBAPIError, SQLAlchemyError) as exc:
             logger.warning("DB write failed for photo %s: %s", job.photo_id, exc)
             return

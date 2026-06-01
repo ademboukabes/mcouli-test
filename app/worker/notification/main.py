@@ -3,8 +3,6 @@ from __future__ import annotations
 import asyncio
 from typing import Sequence
 
-from db.generated import devices as device_queries
-
 from app.core.logger import logger
 from app.worker.notification.firebase import (
     NotificationDeliveryError,
@@ -18,7 +16,6 @@ from app.worker.notification.invalid_tokens import (
 from app.worker.notification.notification_queue import NotificationQueue, NotificationQueueEntry
 from app.worker.notification.rate_limiter import RateLimiter
 from app.worker.notification.settings import NotifSetting
-from app.infra.database import engine
 from app.infra.redis import RedisClient
 from app.infra.nats import NatsClient
 
@@ -141,16 +138,13 @@ async def main() -> None:
 
     queue = NotificationQueue(settings=NotifSetting)
     invalid_tokens = InvalidTokenStore(redis)
-    db_conn = await engine.connect()
-    device_querier = device_queries.AsyncQuerier(db_conn)
-    invalid_devices = DeviceInvalidationStore(device_querier)
+    invalid_devices = DeviceInvalidationStore()
 
     try:
         await run_worker(queue, invalid_tokens, invalid_devices)
 
     finally:
         await redis.close()
-        await db_conn.close()
         logger.info("Worker shutdown")
 
 

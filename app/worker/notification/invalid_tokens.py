@@ -6,6 +6,7 @@ from db.generated import devices as device_queries
 
 from app.core.constant import RedisKey
 from app.core.logger import logger
+from app.infra.database import engine
 from app.infra.redis import RedisClient
 from app.worker.notification.settings import NotifSetting
 
@@ -43,19 +44,22 @@ class InvalidTokenStore:
 
 
 class DeviceInvalidationStore:
-    def __init__(self, device_querier: device_queries.AsyncQuerier) -> None:
-        self._device_querier = device_querier
-
     async def mark_invalid(self, tokens: Iterable[str]) -> None:
         normalized: list[str] = [t for t in tokens if t]
 
         if not normalized:
             return
 
+        # One transaction per token. Handlers run concurrently, so each write
+        # gets its own connection rather than sharing one, and a failure on one
+        # token does not abort the rest.
         failed: list[str] = []
         for token in normalized:
             try:
-                await self._device_querier.mark_device_token_invalid(push_token=token)
+                async with engine.begin() as conn:
+                    await device_queries.AsyncQuerier(conn).mark_device_token_invalid(
+                        push_token=token
+                    )
             except Exception:
                 failed.append(token)
                 logger.exception("Failed to flag device for invalid token %s", token)
