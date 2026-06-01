@@ -60,40 +60,44 @@ class PhotoWorker:
         if event is None:
             return
 
-        job = await self._create_job(event)
+        # One transaction per message so every write below is committed (or rolled
+        # back) atomically. Messages are delivered one at a time, so the shared
+        # connection is never used by two handlers at once.
+        async with self._conn.begin():
+            job = await self._create_job(event)
 
-        try:
-            payload = await self._load_image(event.image_ref)
-        except Exception as exc:
-            logger.warning("Failed to load image for photo %s: %s", event.photo_id, exc)
-            await self._update_job(job, "failed")
-            return
+            try:
+                payload = await self._load_image(event.image_ref)
+            except Exception as exc:
+                logger.warning("Failed to load image for photo %s: %s", event.photo_id, exc)
+                await self._update_job(job, "failed")
+                return
 
-        await self._update_job(job, "running")
+            await self._update_job(job, "running")
 
-        try:
-            faces = await self._face_service.detect_faces(payload)
-        except Exception as exc:
-            logger.warning("Face detection failed for photo %s: %s", event.photo_id, exc)
-            await self._update_job(job, "failed")
-            return
+            try:
+                faces = await self._face_service.detect_faces(payload)
+            except Exception as exc:
+                logger.warning("Face detection failed for photo %s: %s", event.photo_id, exc)
+                await self._update_job(job, "failed")
+                return
 
-        if not faces:
-            logger.info("No faces detected in photo %s, marking as public", event.photo_id)
-            await self._photo_querier.update_photo_status(id=event.photo_id, status="approved")
-            await self._photo_querier.update_photo_visibility(id=event.photo_id, visibility="public")
+            if not faces:
+                logger.info("No faces detected in photo %s, marking as public", event.photo_id)
+                await self._photo_querier.update_photo_status(id=event.photo_id, status="approved")
+                await self._photo_querier.update_photo_visibility(id=event.photo_id, visibility="public")
+                await self._update_job(job, "completed")
+                await self._schedule_cleanup(event.image_ref)
+                return
+
+            if len(faces) == 1:
+                await self._handle_single_face(event, faces[0])
+            else:
+                await self._handle_group_photo(event, faces)
+
             await self._update_job(job, "completed")
+            await self._publish_audit(event, len(faces))
             await self._schedule_cleanup(event.image_ref)
-            return
-
-        if len(faces) == 1:
-            await self._handle_single_face(event, faces[0])
-        else:
-            await self._handle_group_photo(event, faces)
-
-        await self._update_job(job, "completed")
-        await self._publish_audit(event, len(faces))
-        await self._schedule_cleanup(event.image_ref)
 
 
     async def _handle_single_face(self, event: PhotoProcessEvent, face: DetectedFace) -> None:
