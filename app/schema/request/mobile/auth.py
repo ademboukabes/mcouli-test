@@ -4,7 +4,7 @@ from app.core.config import settings
 
 
 class MobileAuthBaseRequest(BaseModel):
-    email: EmailStr
+    email: EmailStr = Field(..., max_length=255)
     password: str = Field(
         ...,
         min_length=settings.MOBILE_AUTH_PASSWORD_MIN_LEN,

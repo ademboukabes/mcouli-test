@@ -146,3 +146,23 @@ def test_register_login_password_length_is_checked_after_trimming(
 
         assert response.status_code == 422
         assert getattr(fake_container.auth_service, attr) is None
+
+
+def test_register_login_rejects_oversized_email(
+    client: TestClient,
+    fake_container: FakeContainer,
+) -> None:
+    for endpoint, attr in (
+        ("/user/auth/register", "register_request"),
+        ("/user/auth/login", "login_request"),
+    ):
+        payload = _valid_payload()
+        # Create an email address with a length > 255 chars
+        # username part is 250 'a's, domain is "@example.com"
+        payload["email"] = "a" * 250 + "@example.com"
+
+        response = client.post(endpoint, json=payload)
+
+        assert response.status_code == 422
+        assert getattr(fake_container.auth_service, attr) is None
+
