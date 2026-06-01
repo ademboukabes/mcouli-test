@@ -70,9 +70,21 @@ class FakeSessionQuerier:
 
 
 class FakeRedis:
+    def __init__(self):
+        self._store = {}
+
+    async def incr(self, key: str) -> int:
+        self._store[key] = self._store.get(key, 0) + 1
+        return self._store[key]
+
+    async def expire(self, key: str, seconds: int) -> None:
+        pass
+
+    async def ttl(self, key: str) -> int:
+        return -1
+
     async def set(self, key: str, value: str, expire: int) -> None:
         return None
-
 
 class FakeFaceEmbeddingService:
     pass

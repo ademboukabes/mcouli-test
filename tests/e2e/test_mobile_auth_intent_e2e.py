@@ -18,6 +18,9 @@ class TestMobileAuthEndpointsE2E:
     @pytest.fixture(autouse=True)
     def setup(self):
         self.base_url = os.getenv("MULTAI_E2E_BASE_URL", "http://localhost:8000")
+        self.headers = {
+            "X-Forwarded-For": f"203.0.113.{uuid.uuid4().int % 250 + 1}",
+        }
 
     def test_login_with_unknown_email_fails(self) -> None:
         """Test that login with unknown email returns 401."""
@@ -28,7 +31,11 @@ class TestMobileAuthEndpointsE2E:
             "device_type": "android",
             "device_id": str(uuid.uuid4()),
         }
-        response = requests.post(f"{self.base_url}/user/auth/login", json=payload)
+        response = requests.post(
+            f"{self.base_url}/user/auth/login",
+            json=payload,
+            headers=self.headers,
+        )
         assert response.status_code == 401
         assert "not found" in response.json()["detail"].lower()
 
@@ -40,24 +47,32 @@ class TestMobileAuthEndpointsE2E:
         # First registration succeeds
         register_payload = {
             "email": email,
-            "password": "validpass123",
+            "password": "ValidPass@123",
             "device_name": "TestDevice",
             "device_type": "android",
             "device_id": device_id,
         }
-        response1 = requests.post(f"{self.base_url}/user/auth/register", json=register_payload)
+        response1 = requests.post(
+            f"{self.base_url}/user/auth/register",
+            json=register_payload,
+            headers=self.headers,
+        )
         assert response1.status_code == 200
         assert response1.json()["is_new_user"] is True
 
         # Second registration with same email fails
-        response2 = requests.post(f"{self.base_url}/user/auth/register", json=register_payload)
+        response2 = requests.post(
+            f"{self.base_url}/user/auth/register",
+            json=register_payload,
+            headers=self.headers,
+        )
         assert response2.status_code == 409
         assert "already" in response2.json()["detail"].lower()
 
     def test_register_then_login_succeeds(self) -> None:
         """Test full flow: register then login."""
         email = f"user_{uuid.uuid4()}@example.com"
-        password = "validpass123"
+        password = "ValidPass@123"
         device_id = str(uuid.uuid4())
 
         # Register
@@ -68,7 +83,11 @@ class TestMobileAuthEndpointsE2E:
             "device_type": "android",
             "device_id": device_id,
         }
-        register_response = requests.post(f"{self.base_url}/user/auth/register", json=register_payload)
+        register_response = requests.post(
+            f"{self.base_url}/user/auth/register",
+            json=register_payload,
+            headers=self.headers,
+        )
         assert register_response.status_code == 200
         assert register_response.json()["is_new_user"] is True
         register_token = register_response.json()["access_token"]
@@ -81,7 +100,11 @@ class TestMobileAuthEndpointsE2E:
             "device_type": "android",
             "device_id": device_id,
         }
-        login_response = requests.post(f"{self.base_url}/user/auth/login", json=login_payload)
+        login_response = requests.post(
+            f"{self.base_url}/user/auth/login",
+            json=login_payload,
+            headers=self.headers,
+        )
         assert login_response.status_code == 200
         assert login_response.json()["is_new_user"] is False
         login_token = login_response.json()["access_token"]
@@ -93,7 +116,7 @@ class TestMobileAuthEndpointsE2E:
     def test_login_with_wrong_password_fails(self) -> None:
         """Test that login with wrong password returns 401."""
         email = f"user_{uuid.uuid4()}@example.com"
-        password = "correctpass123"
+        password = "CorrectPass@123"
         device_id = str(uuid.uuid4())
 
         # Register first
@@ -104,17 +127,26 @@ class TestMobileAuthEndpointsE2E:
             "device_type": "android",
             "device_id": device_id,
         }
-        requests.post(f"{self.base_url}/user/auth/register", json=register_payload)
+        register_response = requests.post(
+            f"{self.base_url}/user/auth/register",
+            json=register_payload,
+            headers=self.headers,
+        )
+        assert register_response.status_code == 200
 
         # Try to login with wrong password
         login_payload = {
             "email": email,
-            "password": "wrongpassword",
+            "password": "WrongPass@123",
             "device_name": "TestDevice",
             "device_type": "android",
             "device_id": device_id,
         }
-        response = requests.post(f"{self.base_url}/user/auth/login", json=login_payload)
+        response = requests.post(
+            f"{self.base_url}/user/auth/login",
+            json=login_payload,
+            headers=self.headers,
+        )
         assert response.status_code == 401
         assert "invalid" in response.json()["detail"].lower()
 
@@ -127,17 +159,25 @@ class TestMobileAuthEndpointsE2E:
             "device_id": str(uuid.uuid4()),
             # Missing password
         }
-        response = requests.post(f"{self.base_url}/user/auth/register", json=payload)
+        response = requests.post(
+            f"{self.base_url}/user/auth/register",
+            json=payload,
+            headers=self.headers,
+        )
         assert response.status_code == 422
 
     def test_login_requires_device_type(self) -> None:
         """Test that login requires device_type."""
         payload = {
             "email": "user@example.com",
-            "password": "validpass123",
+            "password": "ValidPass@123",
             "device_name": "TestDevice",
             "device_id": str(uuid.uuid4()),
             # Missing device_type
         }
-        response = requests.post(f"{self.base_url}/user/auth/login", json=payload)
+        response = requests.post(
+            f"{self.base_url}/user/auth/login",
+            json=payload,
+            headers=self.headers,
+        )
         assert response.status_code == 422

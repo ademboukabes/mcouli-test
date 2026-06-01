@@ -4,19 +4,13 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Literal
 import jwt
 from passlib.context import CryptContext
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 import pyotp
 from app.core.config import settings
 from app.core.exceptions import AppException
 from app.core.logger import logger
 
-
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-_BCRYPT_MAX_LEN = 72
-
-
-def _normalize_password(password: str) -> bytes:
-    return password.encode("utf-8")[:_BCRYPT_MAX_LEN]
 
 
 def hash_password(password: str) -> str:
@@ -132,14 +126,12 @@ def generate_Acces_token_stuff(user_id: str, role: str) -> str:
 
 
 class StaffJWTPayload(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
     sub: str
     role: str
     type: Literal["access", "refresh"]
     exp: int
-
-    class Config:
-        frozen = True
-        # immutable class
 
 
 def create_access_staff_token(staff_id: str, role: str) -> str:

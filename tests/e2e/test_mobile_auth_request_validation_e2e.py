@@ -22,7 +22,7 @@ LOGIN_URL = f"{BASE_URL}/user/auth/login"
 def _valid_payload() -> dict[str, object]:
     return {
         "email": f"e2e-{uuid.uuid4()}@example.com",
-        "password": "validpass123",
+        "password": "ValidPass@123",
         "device_name": "Pixel 8",
         "device_type": "android",
         "device_id": str(uuid.uuid4()),

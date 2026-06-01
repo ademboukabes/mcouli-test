@@ -1,5 +1,8 @@
 from datetime import datetime, timedelta, timezone
 import uuid
+from typing import Optional
+
+from sqlalchemy.exc import SQLAlchemyError
 
 from app.core.exceptions import AppException, DBException
 from app.core.securite import (
@@ -84,8 +87,26 @@ class AuthService:
         self,
         redis: RedisClient,
         req: MobileLoginRequest,
+        client_ip: Optional[str] = None,
     ) -> MobileAuthResponse:
         logger.info("mobile_login attempt")
+        max_attempts = settings.RATE_LIMIT_LOGIN_MAX_ATTEMPTS
+        window = settings.RATE_LIMIT_LOGIN_WINDOW_SECONDS
+
+        if client_ip:
+            await self.check_rate_limit(
+                redis,
+                f"rate:ip:{client_ip}",
+                max_attempts,
+                window,
+            )
+        await self.check_rate_limit(
+            redis,
+            f"rate:email:{req.email}",
+            max_attempts,
+            window,
+        )
+
         existing_user = await self.user_querier.get_user_by_email(email=req.email)
         if existing_user is None:
             logger.warning("login attempt: user_not_found")
@@ -108,8 +129,26 @@ class AuthService:
         self,
         redis: RedisClient,
         req: MobileRegisterRequest,
+        client_ip: Optional[str] = None,
     ) -> MobileAuthResponse:
         logger.info("mobile_register attempt")
+        max_attempts = settings.RATE_LIMIT_LOGIN_MAX_ATTEMPTS
+        window = settings.RATE_LIMIT_LOGIN_WINDOW_SECONDS
+
+        if client_ip:
+            await self.check_rate_limit(
+                redis,
+                f"rate:ip:{client_ip}",
+                max_attempts,
+                window,
+            )
+        await self.check_rate_limit(
+            redis,
+            f"rate:email:{req.email}",
+            max_attempts,
+            window,
+        )
+
         existing_user = await self.user_querier.get_user_by_email(email=req.email)
         if existing_user is not None:
             logger.warning("register attempt: email_already_in_use")
@@ -120,7 +159,7 @@ class AuthService:
             user = await self.user_querier.create_user(email=req.email, hashed_password=hashed)
             if not user:
                 raise AppException.internal_error("Failed to create user")
-        except Exception as exc:
+        except SQLAlchemyError as exc:
             logger.error("Failed to create user: %s", exc)
             raise DBException.handle(exc)
         logger.info("register success user_id=%s", user.id)
@@ -425,3 +464,26 @@ class AuthService:
         if row is None or row.distance is None:
             return None
         return ClosestUserMatch(user_id=row.id, distance=float(row.distance))
+
+    async def check_rate_limit(
+        self,
+        redis: RedisClient,
+        key: str,
+        max_requests: int,
+        window_seconds: int,
+    ) -> None:
+        """Enforce rate limiting using Redis INCR + EXPIRE.
+
+        Increments a counter for ``key``.  On the first increment the key
+        is given a TTL of ``window_seconds`` so the window resets
+        automatically.  If the counter exceeds ``max_requests`` a 429
+        response is raised with a ``Retry-After`` header.
+        """
+        current_count = await redis.incr(key)
+        if current_count == 1:
+            await redis.expire(key, window_seconds)
+        if current_count > max_requests:
+            raise AppException.too_many_requests(
+                "Too many requests. Please try again later.",
+                retry_after=window_seconds,
+            )

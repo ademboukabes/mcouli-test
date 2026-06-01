@@ -1,12 +1,10 @@
 from __future__ import annotations
 
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class AuditWorkerSettings(BaseSettings):
-
-    class Config:
-        env_prefix = "AUDIT_"
+    model_config = SettingsConfigDict(env_prefix="AUDIT_")
 
 
 settings = AuditWorkerSettings() # type: ignore

@@ -15,13 +15,17 @@ class FakeAuthService:
     def __init__(self) -> None:
         self.register_request: MobileRegisterRequest | None = None
         self.login_request: MobileLoginRequest | None = None
+        self.register_client_ip: object = None
+        self.login_client_ip: object = None
 
     async def mobile_register(
         self,
         redis: object,
         req: MobileRegisterRequest,
+        client_ip: object = None,
     ) -> MobileAuthResponse:
         self.register_request = req
+        self.register_client_ip = client_ip
         return MobileAuthResponse(
             access_token="access",
             refresh_token="refresh",
@@ -35,8 +39,10 @@ class FakeAuthService:
         self,
         redis: object,
         req: MobileLoginRequest,
+        client_ip: object = None,
     ) -> MobileAuthResponse:
         self.login_request = req
+        self.login_client_ip = client_ip
         return MobileAuthResponse(
             access_token="access",
             refresh_token="refresh",
@@ -204,5 +210,21 @@ def test_login_does_not_enforce_password_complexity(
     response = client.post("/user/auth/login", json=payload)
     assert response.status_code == 200
     assert fake_container.auth_service.login_request is not None
+
+
+def test_mobile_auth_uses_forwarded_ip_for_rate_limit_identity(
+    client: TestClient,
+    fake_container: FakeContainer,
+) -> None:
+    payload = _valid_payload()
+
+    response = client.post(
+        "/user/auth/login",
+        json=payload,
+        headers={"X-Forwarded-For": "203.0.113.10, 10.0.0.1"},
+    )
+
+    assert response.status_code == 200
+    assert fake_container.auth_service.login_client_ip == "203.0.113.10"
 
 

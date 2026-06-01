@@ -6,7 +6,7 @@ Fixed in `app/schema/request/mobile/auth.py` and covered by endpoint and e2e tes
 
 ## Problem
 
-`POST /user/auth/register-login` accepted weak request payloads because `MobileAuthRequest` used plain `str` fields for `password`, `device_name`, and `device_type`.
+`POST /user/auth/register` and `POST /user/auth/login` accepted weak request payloads because the shared mobile auth request model used plain `str` fields for `password`, `device_name`, and `device_type`.
 
 The risky payloads were:
 
@@ -27,7 +27,7 @@ The request model did not put validation at the boundary where the API payload e
 Before the fix, the schema shape was effectively:
 
 ```python
-class MobileAuthRequest(BaseModel):
+class MobileAuthBaseRequest(BaseModel):
     email: EmailStr
     password: str
     device_name: str
@@ -35,7 +35,7 @@ class MobileAuthRequest(BaseModel):
     device_id: UUID
 ```
 
-Plain `str` accepts `""`, `"   "`, and arbitrarily large values. Since `app/service/users.py` trusts `MobileAuthRequest`, bad values could flow directly into password hashing, user creation, and device creation.
+Plain `str` accepts `""`, `"   "`, and arbitrarily large values. Since `app/service/users.py` trusts `MobileRegisterRequest` and `MobileLoginRequest`, bad values could flow directly into password hashing, user creation, and device creation.
 
 ## Fix Location
 
@@ -105,38 +105,46 @@ def test_register_login_rejects_empty_required_text_fields(
     field,
     value,
 ):
-    payload = _valid_payload()
-    payload[field] = value
+    for endpoint, attr in (
+        ("/user/auth/register", "register_request"),
+        ("/user/auth/login", "login_request"),
+    ):
+        payload = _valid_payload()
+        payload[field] = value
 
-    response = client.post("/user/auth/register-login", json=payload)
+        response = client.post(endpoint, json=payload)
 
-    assert response.status_code == 422
-    assert fake_container.auth_service.received_request is None
+        assert response.status_code == 422
+        assert getattr(fake_container.auth_service, attr) is None
 ```
 
-Before the fix, those payloads were accepted by the endpoint because the fields were plain `str`. The second assertion makes the test real at the route boundary: invalid payloads must fail before they can reach `AuthService.mobile_register_login()`.
+Before the fix, those payloads were accepted by the endpoint because the fields were plain `str`. The second assertion makes the test real at the route boundary: invalid payloads must fail before they can reach `AuthService.mobile_register()` or `AuthService.mobile_login()`.
 
-The request body is still written in the test because the test has to define the scenario. What makes this a real endpoint simulation is that the payload goes through FastAPI HTTP request handling, dependency solving, request-body parsing, Pydantic validation, and the actual route path instead of directly calling `MobileAuthRequest(...)`.
+The request body is still written in the test because the test has to define the scenario. What makes this a real endpoint simulation is that the payload goes through FastAPI HTTP request handling, dependency solving, request-body parsing, Pydantic validation, and the actual route path instead of directly calling `MobileRegisterRequest(...)` or `MobileLoginRequest(...)`.
 
 ```python
 def test_register_login_passes_normalized_input_to_service(client, fake_container):
-    payload = _valid_payload()
-    payload.update(
-        {
-            "email": " USER@Example.COM ",
-            "device_name": " Pixel 8 ",
-            "device_type": " ANDROID ",
-        }
-    )
+    for endpoint, attr in (
+        ("/user/auth/register", "register_request"),
+        ("/user/auth/login", "login_request"),
+    ):
+        payload = _valid_payload()
+        payload.update(
+            {
+                "email": " USER@Example.COM ",
+                "device_name": " Pixel 8 ",
+                "device_type": " ANDROID ",
+            }
+        )
 
-    response = client.post("/user/auth/register-login", json=payload)
+        response = client.post(endpoint, json=payload)
 
-    assert response.status_code == 200
-    req = fake_container.auth_service.received_request
-    assert req is not None
-    assert req.email == "user@example.com"
-    assert req.device_name == "Pixel 8"
-    assert req.device_type == "android"
+        assert response.status_code == 200
+        req = getattr(fake_container.auth_service, attr)
+        assert req is not None
+        assert req.email == "user@example.com"
+        assert req.device_name == "Pixel 8"
+        assert req.device_type == "android"
 ```
 
 Before the fix, device fields kept surrounding whitespace and mixed casing.
@@ -146,13 +154,17 @@ def test_register_login_password_length_is_checked_after_trimming(
     client,
     fake_container,
 ):
-    payload = _valid_payload()
-    payload["password"] = "       a"
+    for endpoint, attr in (
+        ("/user/auth/register", "register_request"),
+        ("/user/auth/login", "login_request"),
+    ):
+        payload = _valid_payload()
+        payload["password"] = "       a"
 
-    response = client.post("/user/auth/register-login", json=payload)
+        response = client.post(endpoint, json=payload)
 
-    assert response.status_code == 422
-    assert fake_container.auth_service.received_request is None
+        assert response.status_code == 422
+        assert getattr(fake_container.auth_service, attr) is None
 ```
 
 This protects the password minimum-length rule from being bypassed by padding a one-character password with spaces.
