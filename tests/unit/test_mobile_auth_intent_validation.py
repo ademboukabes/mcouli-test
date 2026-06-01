@@ -14,7 +14,7 @@ from app.service.users import AuthService
 
 
 class FakeUser:
-    def __init__(self, email: str, exists: bool = True, password: str = "password123") -> None:
+    def __init__(self, email: str, exists: bool = True, password: str = "ValidPass@123") -> None:
         self.id = uuid.uuid4()
         self.email = email
         self.blocked = False
@@ -111,7 +111,7 @@ def test_login_with_unknown_email_is_rejected() -> None:
 
     req = MobileLoginRequest(
         email="unknown@example.com",
-        password="validpass123",
+        password="ValidPass@123",
         device_name="Pixel 8",
         device_type="android",
         device_id=uuid.uuid4(),
@@ -136,7 +136,7 @@ def test_register_with_existing_email_is_rejected() -> None:
 
     req = MobileRegisterRequest(
         email="user@example.com",
-        password="validpass123",
+        password="ValidPass@123",
         device_name="Pixel 8",
         device_type="android",
         device_id=uuid.uuid4(),
@@ -163,7 +163,7 @@ def test_login_with_correct_credentials_succeeds(
 
     req = MobileLoginRequest(
         email="user@example.com",
-        password="password123",
+        password="ValidPass@123",
         device_name="Pixel 8",
         device_type="android",
         device_id=uuid.uuid4(),
@@ -198,7 +198,7 @@ def test_register_with_new_email_succeeds(
 
     req = MobileRegisterRequest(
         email="newuser@example.com",
-        password="validpass123",
+        password="ValidPass@123",
         device_name="Pixel 8",
         device_type="android",
         device_id=uuid.uuid4(),
@@ -240,7 +240,7 @@ def test_register_then_login_same_device_succeeds(
     monkeypatch.setattr(users_module, "Get_expiry_time", lambda: 3600)
 
     device_id = uuid.uuid4()
-    password = "validpass123"
+    password = "ValidPass@123"
 
     # Register
     register_req = MobileRegisterRequest(
@@ -313,7 +313,7 @@ def test_login_logs_correctly(
 
     req = MobileLoginRequest(
         email="USER@Example.COM",
-        password="password123",
+        password="ValidPass@123",
         device_name="Pixel 8",
         device_type="android",
         device_id=uuid.uuid4(),
@@ -367,7 +367,7 @@ def test_register_concurrent_signup_integrity_error() -> None:
 
     req = MobileRegisterRequest(
         email="newuser@example.com",
-        password="validpass123",
+        password="ValidPass@123",
         device_name="Pixel 8",
         device_type="android",
         device_id=uuid.uuid4(),

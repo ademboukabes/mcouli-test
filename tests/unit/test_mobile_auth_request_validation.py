@@ -76,7 +76,7 @@ def client(fake_container: FakeContainer) -> Iterator[TestClient]:
 def _valid_payload() -> dict[str, object]:
     return {
         "email": "USER@Example.COM",
-        "password": "validpass123",
+        "password": "ValidPass@123",
         "device_name": "Pixel 8",
         "device_type": "android",
         "device_id": str(uuid.uuid4()),
@@ -165,4 +165,44 @@ def test_register_login_rejects_oversized_email(
 
         assert response.status_code == 422
         assert getattr(fake_container.auth_service, attr) is None
+
+
+def test_register_enforces_password_complexity(
+    client: TestClient,
+    fake_container: FakeContainer,
+) -> None:
+    # Valid complex password
+    payload = _valid_payload()
+    payload["password"] = "P@ssword123"
+    response = client.post("/user/auth/register", json=payload)
+    assert response.status_code == 200
+    assert fake_container.auth_service.register_request is not None
+
+    # Invalid passwords lacking different criteria
+    invalid_passwords = [
+        "p@ssword123",  # missing uppercase
+        "P@SSWORD123",  # missing lowercase
+        "P@sswordabc",  # missing digit
+        "Password123",  # missing special char
+    ]
+    for pw in invalid_passwords:
+        fake_container.auth_service.register_request = None
+        payload = _valid_payload()
+        payload["password"] = pw
+        response = client.post("/user/auth/register", json=payload)
+        assert response.status_code == 422
+        assert fake_container.auth_service.register_request is None
+
+
+def test_login_does_not_enforce_password_complexity(
+    client: TestClient,
+    fake_container: FakeContainer,
+) -> None:
+    # Simple password should still be allowed to attempt log in
+    payload = _valid_payload()
+    payload["password"] = "Password123"  # missing special character
+    response = client.post("/user/auth/login", json=payload)
+    assert response.status_code == 200
+    assert fake_container.auth_service.login_request is not None
+
 
