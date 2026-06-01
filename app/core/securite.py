@@ -1,31 +1,29 @@
+import base64
+import hashlib
 from datetime import datetime, timedelta, timezone
 from typing import Any, Literal
 import jwt
 from passlib.context import CryptContext
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 import pyotp
 from app.core.config import settings
 from app.core.exceptions import AppException
 from app.core.logger import logger
 
-
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-_BCRYPT_MAX_LEN = 72
-
-
-def _normalize_password(password: str) -> bytes:
-    return password.encode("utf-8")[:_BCRYPT_MAX_LEN]
 
 
 def hash_password(password: str) -> str:
-    normalized = _normalize_password(password)
-    logger.debug("hashing password (normalized %s bytes)", len(normalized))
-    return pwd_context.hash(normalized)
+    # Use SHA-256 pre-hashing to overcome bcrypt's 72-byte limit
+    pre_hashed = base64.b64encode(hashlib.sha256(password.encode("utf-8")).digest())
+    logger.debug("hashing password (pre-hashed %s bytes)", len(pre_hashed))
+    return pwd_context.hash(pre_hashed)
 
 
 def verify_password(password: str, hashed: str) -> bool:
-    normalized = _normalize_password(password)
-    result = pwd_context.verify(normalized, hashed)
+    # Verify using the SHA-256 pre-hashed format
+    pre_hashed = base64.b64encode(hashlib.sha256(password.encode("utf-8")).digest())
+    result = pwd_context.verify(pre_hashed, hashed)
     logger.debug("password verification result: %s", result)
     return result
 
@@ -128,14 +126,12 @@ def generate_Acces_token_stuff(user_id: str, role: str) -> str:
 
 
 class StaffJWTPayload(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
     sub: str
     role: str
     type: Literal["access", "refresh"]
     exp: int
-
-    class Config:
-        frozen = True
-        # immutable class
 
 
 def create_access_staff_token(staff_id: str, role: str) -> str:

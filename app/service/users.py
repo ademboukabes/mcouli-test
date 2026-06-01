@@ -1,5 +1,8 @@
 from datetime import datetime, timedelta, timezone
 import uuid
+from typing import Optional
+
+from sqlalchemy.exc import SQLAlchemyError
 
 from app.core.exceptions import AppException, DBException
 from app.core.securite import (
@@ -14,7 +17,11 @@ from app.core import constant
 from app.core.config import settings
 from app.infra.redis import RedisClient
 
-from app.schema.request.mobile.auth import MobileAuthRequest
+from app.schema.request.mobile.auth import (
+    MobileAuthBaseRequest,
+    MobileLoginRequest,
+    MobileRegisterRequest,
+)
 from app.schema.response.mobile.auth import MobileAuthResponse
 from db.generated import user as user_queries
 from db.generated import devices as device_queries
@@ -48,7 +55,7 @@ class AuthService:
     async def _ensure_device_for_login(
         self,
         user_id: uuid.UUID,
-        req: MobileAuthRequest,
+        req: MobileAuthBaseRequest,
     ) -> UserDevice:
         existing_device = await self.device_querier.get_device_by_id(id=req.device_id)
 
@@ -76,35 +83,101 @@ class AuthService:
             raise AppException.internal_error("Failed to create device")
         return device
 
-    async def mobile_register_login(
+    async def mobile_login(
         self,
         redis: RedisClient,
-        req: MobileAuthRequest,
+        req: MobileLoginRequest,
+        client_ip: Optional[str] = None,
     ) -> MobileAuthResponse:
-        logger.info("mobile register/login attempt for %s", req.email)
-        existing_user = await self.user_querier.get_user_by_email(email=req.email)
-        user: User | None = None
+        logger.info("mobile_login attempt")
+        max_attempts = settings.RATE_LIMIT_LOGIN_MAX_ATTEMPTS
+        window = settings.RATE_LIMIT_LOGIN_WINDOW_SECONDS
 
-        is_new_user = False
-        if existing_user is not None:
-            if existing_user.blocked:
-                raise AppException.forbidden("User is blocked")
-            if not verify_password(req.password, existing_user.hashed_password or ""):
-                raise AppException.unauthorized("Invalid credentials")
-            user = existing_user
-            logger.info("existing user login: %s", req.email)
-        else:
-            is_new_user = True
-            hashed = hash_password(req.password)
-            logger.info("creating new user for %s", req.email)
-            user = await self.user_querier.create_user(
-                email=req.email, hashed_password=hashed
+        if client_ip:
+            await self.check_rate_limit(
+                redis,
+                f"rate:ip:{client_ip}",
+                max_attempts,
+                window,
             )
+        await self.check_rate_limit(
+            redis,
+            f"rate:email:{req.email}",
+            max_attempts,
+            window,
+        )
+
+        existing_user = await self.user_querier.get_user_by_email(email=req.email)
+        if existing_user is None:
+            logger.warning("login attempt: user_not_found")
+            raise AppException.unauthorized("User not found; consider registering instead")
+        if existing_user.blocked:
+            logger.warning("login attempt: user_blocked user_id=%s", existing_user.id)
+            raise AppException.forbidden("User is blocked")
+        if not verify_password(req.password, existing_user.hashed_password or ""):
+            logger.warning("login attempt: invalid_credentials user_id=%s", existing_user.id)
+            raise AppException.unauthorized("Invalid credentials")
+        logger.info("login success user_id=%s", existing_user.id)
+        return await self._create_mobile_session(
+            redis=redis,
+            user=existing_user,
+            req=req,
+            is_new_user=False,
+        )
+
+    async def mobile_register(
+        self,
+        redis: RedisClient,
+        req: MobileRegisterRequest,
+        client_ip: Optional[str] = None,
+    ) -> MobileAuthResponse:
+        logger.info("mobile_register attempt")
+        max_attempts = settings.RATE_LIMIT_LOGIN_MAX_ATTEMPTS
+        window = settings.RATE_LIMIT_LOGIN_WINDOW_SECONDS
+
+        if client_ip:
+            await self.check_rate_limit(
+                redis,
+                f"rate:ip:{client_ip}",
+                max_attempts,
+                window,
+            )
+        await self.check_rate_limit(
+            redis,
+            f"rate:email:{req.email}",
+            max_attempts,
+            window,
+        )
+
+        existing_user = await self.user_querier.get_user_by_email(email=req.email)
+        if existing_user is not None:
+            logger.warning("register attempt: email_already_in_use")
+            raise AppException.conflict("Email already in use; please login instead")
+        hashed = hash_password(req.password)
+        logger.info("register attempt: creating_new_user")
+        try:
+            user = await self.user_querier.create_user(email=req.email, hashed_password=hashed)
             if not user:
                 raise AppException.internal_error("Failed to create user")
+        except SQLAlchemyError as exc:
+            logger.error("Failed to create user: %s", exc)
+            raise DBException.handle(exc)
+        logger.info("register success user_id=%s", user.id)
+        return await self._create_mobile_session(
+            redis=redis,
+            user=user,
+            req=req,
+            is_new_user=True,
+        )
 
-        assert user is not None
-
+    async def _create_mobile_session(
+        self,
+        *,
+        redis: RedisClient,
+        user: User,
+        req: MobileAuthBaseRequest,
+        is_new_user: bool,
+    ) -> MobileAuthResponse:
         user_id: uuid.UUID = user.id
 
         session_key = constant.RedisKey.UserSessionByUser.value.format(user_id=user_id)
@@ -112,8 +185,8 @@ class AuthService:
         session_count = await self.session_querier.count_user_sessions(user_id=user_id)
         if session_count and session_count >= AuthService.SESSION_LIMIT:
             logger.warning(
-                "user %s reached session limit %s",
-                req.email,
+                "session_limit_reached user_id=%s limit=%s",
+                user_id,
                 AuthService.SESSION_LIMIT,
             )
             raise AppException.forbidden("Maximum session limit reached")
@@ -141,7 +214,7 @@ class AuthService:
         access_token = create_acces_mobile_token(str(session.id))
         refresh_token = create_refresh_mobile_token(str(session.id))
         expiry = Get_expiry_time()
-        logger.info("created session %s for user %s", session.id, user_id)
+        logger.info("session_created session_id=%s user_id=%s", session.id, user_id)
 
         # Populate Redis auth cache for fast-path validation
         await SessionService.cache_session_for_auth(
@@ -391,3 +464,26 @@ class AuthService:
         if row is None or row.distance is None:
             return None
         return ClosestUserMatch(user_id=row.id, distance=float(row.distance))
+
+    async def check_rate_limit(
+        self,
+        redis: RedisClient,
+        key: str,
+        max_requests: int,
+        window_seconds: int,
+    ) -> None:
+        """Enforce rate limiting using Redis INCR + EXPIRE.
+
+        Increments a counter for ``key``.  On the first increment the key
+        is given a TTL of ``window_seconds`` so the window resets
+        automatically.  If the counter exceeds ``max_requests`` a 429
+        response is raised with a ``Retry-After`` header.
+        """
+        current_count = await redis.incr(key)
+        if current_count == 1:
+            await redis.expire(key, window_seconds)
+        if current_count > max_requests:
+            raise AppException.too_many_requests(
+                "Too many requests. Please try again later.",
+                retry_after=window_seconds,
+            )

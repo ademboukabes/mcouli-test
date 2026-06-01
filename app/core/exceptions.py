@@ -35,6 +35,14 @@ class AppException:
         return HTTPException(status_code=409, detail=detail)
 
     @staticmethod
+    def too_many_requests(
+        detail: str = "Too many requests. Please try again later.",
+        retry_after: int | None = None,
+    ) -> HTTPException:
+        headers = {"Retry-After": str(retry_after)} if retry_after is not None else None
+        return HTTPException(status_code=429, detail=detail, headers=headers)
+
+    @staticmethod
     def storage_error(detail: str = "Storage operation failed") -> HTTPException:
         return HTTPException(status_code=500, detail=detail)
 
@@ -104,10 +112,16 @@ class DBExceptionImpl(DBException):
     @staticmethod
     def handle_unique_violation(exc: Exception) -> HTTPException:
         constraint = getattr(exc, "constraint_name", None)
-        if constraint == "staff_users_email_key":
+        err_msg = str(exc).lower()
+        if constraint == "staff_users_email_key" or "staff_users_email_key" in err_msg:
             return HTTPException(
                 status_code=409,
                 detail="Staff user with this email already exists"
+            )
+        if constraint in ("users_email_key", "idx_users_email") or "idx_users_email" in err_msg or "users_email_key" in err_msg:
+            return HTTPException(
+                status_code=409,
+                detail="Email already in use; please login instead"
             )
         return HTTPException(status_code=409, detail="Resource already exists")
 
