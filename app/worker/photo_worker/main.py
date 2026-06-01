@@ -260,7 +260,7 @@ async def run_worker() -> None:
         minio_root_user=settings.MINIO_ROOT_USER,
         minio_root_password=settings.MINIO_ROOT_PASSWORD,
     )
-    RedisClient(
+    RedisClient.init(
         host=settings.REDIS_HOST,
         port=settings.REDIS_PORT,
         password=settings.REDIS_PASSWORD,
