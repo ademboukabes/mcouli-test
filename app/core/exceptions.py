@@ -104,10 +104,16 @@ class DBExceptionImpl(DBException):
     @staticmethod
     def handle_unique_violation(exc: Exception) -> HTTPException:
         constraint = getattr(exc, "constraint_name", None)
-        if constraint == "staff_users_email_key":
+        err_msg = str(exc).lower()
+        if constraint == "staff_users_email_key" or "staff_users_email_key" in err_msg:
             return HTTPException(
                 status_code=409,
                 detail="Staff user with this email already exists"
+            )
+        if constraint in ("users_email_key", "idx_users_email") or "idx_users_email" in err_msg or "users_email_key" in err_msg:
+            return HTTPException(
+                status_code=409,
+                detail="Email already in use; please login instead"
             )
         return HTTPException(status_code=409, detail="Resource already exists")
 

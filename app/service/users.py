@@ -116,9 +116,13 @@ class AuthService:
             raise AppException.conflict("Email already in use; please login instead")
         hashed = hash_password(req.password)
         logger.info("register attempt: creating_new_user")
-        user = await self.user_querier.create_user(email=req.email, hashed_password=hashed)
-        if not user:
-            raise AppException.internal_error("Failed to create user")
+        try:
+            user = await self.user_querier.create_user(email=req.email, hashed_password=hashed)
+            if not user:
+                raise AppException.internal_error("Failed to create user")
+        except Exception as exc:
+            logger.error("Failed to create user: %s", exc)
+            raise DBException.handle(exc)
         logger.info("register success user_id=%s", user.id)
         return await self._create_mobile_session(
             redis=redis,

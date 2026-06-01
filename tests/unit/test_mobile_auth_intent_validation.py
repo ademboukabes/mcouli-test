@@ -333,3 +333,49 @@ def test_login_logs_correctly(
     assert "login success user_id=" in caplog.text
     assert "session_id=" in caplog.text
     assert "user@example.com" not in caplog.text
+
+
+def test_register_concurrent_signup_integrity_error() -> None:
+    """Test that concurrent signup IntegrityError is caught and raised as 409."""
+    from typing import Any
+    from sqlalchemy.exc import IntegrityError
+
+    class FakeOrigException(Exception):
+        sqlstate = "23505"
+        constraint_name = "idx_users_email"
+
+    user = FakeUser(email="user@example.com", exists=False)
+    session = FakeSession()
+
+    async def _raise_integrity_error(*args: Any, **kwargs: Any) -> Any:
+        raise IntegrityError(
+            statement="INSERT INTO users",
+            params={},
+            orig=FakeOrigException("duplicate key value violates unique constraint idx_users_email")
+        )
+
+    user_querier = FakeUserQuerier(user)
+    # Stub create_user to raise IntegrityError
+    user_querier.create_user = _raise_integrity_error  # type: ignore
+
+    service = AuthService(
+        user_querier=user_querier,
+        device_querier=FakeDeviceQuerier(),
+        session_querier=FakeSessionQuerier(session),
+        face_embedding_service=FakeFaceEmbeddingService(),
+    )
+
+    req = MobileRegisterRequest(
+        email="newuser@example.com",
+        password="validpass123",
+        device_name="Pixel 8",
+        device_type="android",
+        device_id=uuid.uuid4(),
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        asyncio.run(service.mobile_register(FakeRedis(), req))
+
+    assert exc_info.value.status_code == 409
+    assert "already in use" in exc_info.value.detail.lower()
+
