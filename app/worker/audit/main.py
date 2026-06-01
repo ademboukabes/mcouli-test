@@ -38,14 +38,19 @@ class AuditDeliveryWorker:
             self._audit_service = None
 
     async def persist(self, payload: AuditEventMessage) -> None:
-        if self._audit_service is None:
+        if self._audit_service is None or self._conn is None:
             logger.warning("Audit service is unavailable for %s", payload.event_type)
             return
-        await self._audit_service.record_event(
-            event_type=payload.event_type,
-            user_id=payload.user_id,
-            metadata=payload.metadata,
-        )
+        try:
+            await self._audit_service.record_event(
+                event_type=payload.event_type,
+                user_id=payload.user_id,
+                metadata=payload.metadata,
+            )
+            await self._conn.commit()
+        except Exception:
+            await self._conn.rollback()
+            raise
         logger.info("Persisted audit %s for %s", payload.event_type, payload.user_id)
 
 
