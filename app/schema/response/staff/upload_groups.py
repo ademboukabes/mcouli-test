@@ -1,14 +1,21 @@
+import dataclasses
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, field_validator
 
-from app.schema.response.staff.uploads import UploadRequestPhotoListResponse, UploadRequestSchema
+from app.schema.response.staff.uploads import (
+    UploadRequestPhotoListResponse,
+    UploadRequestPhotoSchema,
+    UploadRequestSchema,
+)
 from app.service.upload_requests import UploadRequestGroupDetails
 from db.generated.models import UploadRequestPhoto
 
 
 class UploadRequestGroupSchema(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: UUID
     event_id: UUID
     folder_id: str
@@ -26,32 +33,18 @@ class UploadRequestGroupSchema(BaseModel):
     error_message: str | None
     requests: list[UploadRequestSchema]
 
+    @field_validator("status", mode="before")
     @classmethod
-    def from_details(
-        cls,
-        details: UploadRequestGroupDetails,
-    ) -> "UploadRequestGroupSchema":
-        return cls(
-            id=details.group.id,
-            event_id=details.group.event_id,
-            folder_id=details.group.folder_id,
-            requested_by=details.group.requested_by,
-            approved_by=details.group.approved_by,
-            status=getattr(details.group.status, "value", str(details.group.status)),
-            processing_status=details.group.processing_status,
-            total_photo_count=details.group.total_photo_count,
-            batch_count=details.group.batch_count,
-            processed_photo_count=details.group.processed_photo_count,
-            failed_photo_count=details.group.failed_photo_count,
-            created_at=details.group.created_at,
-            approved_at=details.group.approved_at,
-            rejection_reason=details.group.rejection_reason,
-            error_message=details.group.error_message,
-            requests=[
-                UploadRequestSchema.from_models(request_details.request, request_details.photos)
-                for request_details in details.requests
-            ],
-        )
+    def coerce_status(cls, v: object) -> str:
+        return getattr(v, "value", str(v))
+
+    @classmethod
+    def from_details(cls, details: UploadRequestGroupDetails) -> "UploadRequestGroupSchema":
+        data = dataclasses.asdict(details.group)
+        data["requests"] = [
+            UploadRequestSchema.from_details(req) for req in details.requests
+        ]
+        return cls.model_validate(data)
 
 
 class UploadRequestGroupListResponse(BaseModel):
@@ -62,7 +55,7 @@ class UploadRequestGroupListResponse(BaseModel):
         cls,
         details_list: list[UploadRequestGroupDetails],
     ) -> "UploadRequestGroupListResponse":
-        return cls(items=[UploadRequestGroupSchema.from_details(details) for details in details_list])
+        return cls(items=[UploadRequestGroupSchema.from_details(d) for d in details_list])
 
 
 class UploadRequestGroupPhotoListResponse(UploadRequestPhotoListResponse):
@@ -71,5 +64,6 @@ class UploadRequestGroupPhotoListResponse(UploadRequestPhotoListResponse):
         cls,
         photos: list[UploadRequestPhoto],
     ) -> "UploadRequestGroupPhotoListResponse":
-        base_response = UploadRequestPhotoListResponse.from_models(photos)
-        return cls(items=base_response.items)
+        return cls(
+            items=[UploadRequestPhotoSchema.model_validate(p) for p in photos]
+        )

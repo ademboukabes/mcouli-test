@@ -6,6 +6,7 @@ class Settings(BaseSettings):
     app_name: str = "multAI"
     environment: str = "dev"
     debug: bool = True
+    CORS_ORIGINS: list[str] = ["http://localhost:3000", "http://localhost:5173", "http://127.0.0.1:5173", "http://127.0.0.1:3000"]
 
     # Redis
     REDIS_PORT: int
@@ -61,7 +62,7 @@ class Settings(BaseSettings):
     )
 
     FACE_ENCRYPTION_KEY: str
-    FIREBASE_CREDENTIALS_PATH: str = "multiai-c9380-firebase-adminsdk-fbsvc-cb6e5ce41b.json"
+    FIREBASE_CREDENTIALS_PATH: str
 
     model_config = SettingsConfigDict(
         env_file=".env",
