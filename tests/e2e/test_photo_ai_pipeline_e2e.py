@@ -36,6 +36,9 @@ async def setup_infra():
     yield
     # Cleanup NATS (close connection if any)
     await NatsClient.close()
+    NatsClient._nc = None
+    from app.infra.database import engine
+    await engine.dispose()
 
 
 async def test_photo_ai_pipeline_detects_single_face():

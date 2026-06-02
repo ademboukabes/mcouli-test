@@ -1,3 +1,4 @@
+import json
 from typing import Any
 import uuid
 
@@ -41,7 +42,7 @@ class UserNotificationService:
         notification_record = await self.notification_querier.create_notification(
             user_id=user_id,
             type=type,
-            payload=payload,
+            payload=json.dumps(payload),
         )
         if notification_record is None:
             raise AppException.internal_error("Failed to create user notification")

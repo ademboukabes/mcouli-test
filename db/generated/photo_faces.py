@@ -79,6 +79,7 @@ existing_match AS (
 inserted_match AS (
     INSERT INTO face_matches (photo_face_id, user_id, confidence)
     SELECT upserted_photo_face.id, :p5, :p6
+    FROM upserted_photo_face
     WHERE NOT EXISTS (SELECT 1 FROM existing_match)
     RETURNING id
 )

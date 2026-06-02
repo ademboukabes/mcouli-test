@@ -59,8 +59,8 @@ class Settings(BaseSettings):
 
     # Face embedding model
     FACE_EMBEDDING_MODEL_NAME: str = "buffalo_l"
-    FACE_EMBEDDING_PROVIDERS: str = "CPUExecutionProvider"
-    FACE_EMBEDDING_CTX_ID: int = -1
+    FACE_EMBEDDING_PROVIDERS: str = "CUDAExecutionProvider,CPUExecutionProvider"
+    FACE_EMBEDDING_CTX_ID: int = 0
     FACE_EMBEDDING_DET_WIDTH: int = 640
     FACE_EMBEDDING_DET_HEIGHT: int = 640
 
