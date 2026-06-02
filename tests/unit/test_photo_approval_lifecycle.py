@@ -70,7 +70,7 @@ async def test_group_photo_auto_approve_no_users(
 
     photo_id = uuid.uuid4()
     event = PhotoProcessEvent(photo_id=photo_id, image_ref="test.jpg")
-    
+
     # 2 faces detected
     faces = [
         DetectedFace(bbox=np.array([0, 0, 10, 10]), embedding=np.array([0.1, 0.2])),
@@ -115,7 +115,7 @@ async def test_group_photo_pending_with_enrolled_users(
 
     photo_id = uuid.uuid4()
     event = PhotoProcessEvent(photo_id=photo_id, image_ref="test.jpg")
-    
+
     faces = [
         DetectedFace(bbox=np.array([0, 0, 10, 10]), embedding=np.array([0.1, 0.2])),
     ]
@@ -161,6 +161,6 @@ async def test_expire_stale_marks_photos_approved(
     mock_photo_approval_querier.expire_stale_approvals = MagicMock(side_effect=mock_generator)
 
     count = await service.expire_stale(timeout_days=7)
-    
+
     assert count == 2
     mock_photo_approval_querier.expire_stale_approvals.assert_called_once_with(timeout_days=7)
