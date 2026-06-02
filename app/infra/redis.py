@@ -58,6 +58,10 @@ class RedisClient:
         result = await self._client.expire(key, seconds)
         return int(cast(int, result)) == 1
 
+    async def incr(self, key: RedisKey | str) -> int:
+        result = await self._client.incr(key)
+        return int(cast(int, result))
+
 
     async def sadd(self, key: RedisKey | str, *values: str) -> int:
         result =  self._client.sadd(key, *values)

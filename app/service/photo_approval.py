@@ -51,15 +51,15 @@ class PhotoApprovalService:
         async for a in self._approval_querier.get_photo_approvals_by_photo_id(photo_id=photo_id):
             approvals.append(a)
 
-        pending = [a for a in approvals if a.decision == "pending"]
-        if pending:
-            return "pending"
-
         rejected = [a for a in approvals if a.decision == "rejected"]
         if rejected:
             await self._photo_querier.update_photo_status(id=photo_id, status="rejected")
             await self._delete_photo_storage(photo_id)
             return "rejected"
+
+        pending = [a for a in approvals if a.decision == "pending"]
+        if pending:
+            return "pending"
 
         await self._photo_querier.update_photo_status(id=photo_id, status="approved")
         return "approved"

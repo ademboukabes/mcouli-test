@@ -1,14 +1,16 @@
 from typing import Optional
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from uuid import UUID
 
 from app.container import get_container, Container
+from app.core.config import settings
 from app.core.constant import AuditEventType
 from app.deps.token_auth import MobileUserSchema, get_current_mobile_user
 
 from app.schema.request.mobile.auth import (
-    MobileAuthRequest,
+    MobileLoginRequest,
+    MobileRegisterRequest,
     RefreshTokenRequest,
     UpdateDeviceTokenRequest,
     InactivateDeviceRequest,
@@ -18,17 +20,47 @@ from app.schema.response.mobile.auth import MeResponse, DeviceSchema, MobileAuth
 router = APIRouter(prefix="/auth")
 
 
-@router.post("/register-login", response_model=MobileAuthResponse)
-async def mobile_register_login(
-    req: MobileAuthRequest,
+def _get_client_ip(request: Request) -> str | None:
+    if settings.TRUST_PROXY_HEADERS:
+        forwarded_for = request.headers.get("x-forwarded-for")
+        if forwarded_for:
+            return forwarded_for.split(",", maxsplit=1)[0].strip() or None
+
+        real_ip = request.headers.get("x-real-ip")
+        if real_ip:
+            return real_ip.strip() or None
+
+    return request.client.host if request.client else None
+
+
+@router.post("/register", response_model=MobileAuthResponse)
+async def mobile_register(
+    req: MobileRegisterRequest,
+    request: Request,
     container: Container = Depends(get_container),
 ) -> MobileAuthResponse:
-    result = await container.auth_service.mobile_register_login(container.redis, req)
-    event_type = AuditEventType.USER_SIGNUP if result.is_new_user else AuditEventType.USER_LOGIN
+    client_ip = _get_client_ip(request)
+    result = await container.auth_service.mobile_register(container.redis, req, client_ip=client_ip)
     await container.audit_service.create_record(
-        event_type=event_type,
+        event_type=AuditEventType.USER_SIGNUP,
         user_id=result.user_id,
-        metadata={"email": req.email},
+        metadata={"endpoint": "register"},
+    )
+    return result
+
+
+@router.post("/login", response_model=MobileAuthResponse)
+async def mobile_login(
+    req: MobileLoginRequest,
+    request: Request,
+    container: Container = Depends(get_container),
+) -> MobileAuthResponse:
+    client_ip = _get_client_ip(request)
+    result = await container.auth_service.mobile_login(container.redis, req, client_ip=client_ip)
+    await container.audit_service.create_record(
+        event_type=AuditEventType.USER_LOGIN,
+        user_id=result.user_id,
+        metadata={"endpoint": "login"},
     )
     return result
 
@@ -64,6 +96,17 @@ async def revoke_device(
     container: Container = Depends(get_container),
     current_user: MobileUserSchema = Depends(get_current_mobile_user),
 ) -> dict[str, str]:
+    from app.core.constant import RedisKey
+
+    session = await container.session_service.session_querier.get_session_by_device(
+        device_id=device_id
+    )
+    if session:
+        await container.session_service.delete_session_cache(container.redis, session.id)
+
+    user_session_key = RedisKey.UserSessionByUser.value.format(user_id=current_user.user_id)
+    await container.redis.delete(user_session_key)
+
     await container.device_service.revoke_device(
         device_id=device_id,
         user_id=current_user.user_id,
