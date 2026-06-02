@@ -6,55 +6,54 @@ from app.worker.photo_worker.main import PhotoWorker
 from app.worker.photo_worker.schema.event import PhotoProcessEvent
 from app.service.face_embedding import DetectedFace
 from app.service.photo_approval import PhotoApprovalService
-import numpy as np
 
 @pytest.fixture
-def mock_conn():
+def mock_conn() -> AsyncMock:
     return AsyncMock()
 
 @pytest.fixture
-def mock_face_embedding_service():
+def mock_face_embedding_service() -> AsyncMock:
     return AsyncMock()
 
 @pytest.fixture
-def mock_single_face_service():
+def mock_single_face_service() -> AsyncMock:
     return AsyncMock()
 
 @pytest.fixture
-def mock_notification_service():
+def mock_notification_service() -> AsyncMock:
     return AsyncMock()
 
 @pytest.fixture
-def mock_photo_face_querier():
+def mock_photo_face_querier() -> AsyncMock:
     return AsyncMock()
 
 @pytest.fixture
-def mock_photo_querier():
+def mock_photo_querier() -> AsyncMock:
     return AsyncMock()
 
 @pytest.fixture
-def mock_photo_approval_querier():
+def mock_photo_approval_querier() -> AsyncMock:
     return AsyncMock()
 
 @pytest.fixture
-def mock_processing_job_querier():
+def mock_processing_job_querier() -> AsyncMock:
     return AsyncMock()
 
 @pytest.fixture
-def mock_staged_upload_storage_service():
+def mock_staged_upload_storage_service() -> AsyncMock:
     return AsyncMock()
 
 
 @pytest.mark.asyncio
 async def test_group_photo_auto_approve_no_users(
-    mock_conn,
-    mock_face_embedding_service,
-    mock_single_face_service,
-    mock_notification_service,
-    mock_photo_face_querier,
-    mock_photo_querier,
-    mock_processing_job_querier,
-):
+    mock_conn: AsyncMock,
+    mock_face_embedding_service: AsyncMock,
+    mock_single_face_service: AsyncMock,
+    mock_notification_service: AsyncMock,
+    mock_photo_face_querier: AsyncMock,
+    mock_photo_querier: AsyncMock,
+    mock_processing_job_querier: AsyncMock,
+) -> None:
     """
     Test: Group photo with no enrolled users -> photo becomes approved + public.
     """
@@ -73,8 +72,8 @@ async def test_group_photo_auto_approve_no_users(
 
     # 2 faces detected
     faces = [
-        DetectedFace(bbox=np.array([0, 0, 10, 10]), embedding=np.array([0.1, 0.2])),
-        DetectedFace(bbox=np.array([10, 10, 20, 20]), embedding=np.array([0.3, 0.4])),
+        DetectedFace(bbox=(0.0, 0.0, 10.0, 10.0), embedding=[0.1, 0.2]),
+        DetectedFace(bbox=(10.0, 10.0, 20.0, 20.0), embedding=[0.3, 0.4]),
     ]
 
     # No face matches any user -> insert_photo_face_with_approval returns None
@@ -92,14 +91,14 @@ async def test_group_photo_auto_approve_no_users(
 
 @pytest.mark.asyncio
 async def test_group_photo_pending_with_enrolled_users(
-    mock_conn,
-    mock_face_embedding_service,
-    mock_single_face_service,
-    mock_notification_service,
-    mock_photo_face_querier,
-    mock_photo_querier,
-    mock_processing_job_querier,
-):
+    mock_conn: AsyncMock,
+    mock_face_embedding_service: AsyncMock,
+    mock_single_face_service: AsyncMock,
+    mock_notification_service: AsyncMock,
+    mock_photo_face_querier: AsyncMock,
+    mock_photo_querier: AsyncMock,
+    mock_processing_job_querier: AsyncMock,
+) -> None:
     """
     Test: Group photo with at least one enrolled user -> approval records created, notifications sent, photo stays pending.
     """
@@ -117,7 +116,7 @@ async def test_group_photo_pending_with_enrolled_users(
     event = PhotoProcessEvent(photo_id=photo_id, image_ref="test.jpg")
 
     faces = [
-        DetectedFace(bbox=np.array([0, 0, 10, 10]), embedding=np.array([0.1, 0.2])),
+        DetectedFace(bbox=(0.0, 0.0, 10.0, 10.0), embedding=[0.1, 0.2]),
     ]
 
     # Mock DB returning an approval record
@@ -140,10 +139,10 @@ async def test_group_photo_pending_with_enrolled_users(
 
 @pytest.mark.asyncio
 async def test_expire_stale_marks_photos_approved(
-    mock_photo_approval_querier,
-    mock_photo_querier,
-    mock_staged_upload_storage_service,
-):
+    mock_photo_approval_querier: AsyncMock,
+    mock_photo_querier: AsyncMock,
+    mock_staged_upload_storage_service: AsyncMock,
+) -> None:
     """
     Test: After PHOTO_APPROVAL_TIMEOUT_DAYS days, expire_stale marks photos approved
     """
@@ -153,8 +152,9 @@ async def test_expire_stale_marks_photos_approved(
         storage_service=mock_staged_upload_storage_service,
     )
 
+    from typing import Any, AsyncIterator
     # Mock the generator for expire_stale_approvals
-    async def mock_generator(*args, **kwargs):
+    async def mock_generator(*args: Any, **kwargs: Any) -> AsyncIterator[uuid.UUID]:
         yield uuid.uuid4()
         yield uuid.uuid4()
 
