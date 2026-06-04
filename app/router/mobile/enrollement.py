@@ -61,20 +61,13 @@ def _validate_dimensions(contents: bytes) -> None:
 async def enroll_face(
    files: Annotated[
         List[UploadFile],
-        File(
-            description="Upload one or more face images",
-            openapi_examples={
-                "single_file": {
-                    "summary": "One file example",
-                    "description": "Example of uploading one file",
-                    "value": "example.jpg"
-                },
-                "multiple_files": {
-                    "summary": "Multiple files example",
-                    "description": "Example of uploading multiple files",
-                    "value": ["face1.png", "face2.png"]
-                },
-            },
+      File(
+            description=(
+                f"Between {MIN_ENROLL_IMAGES} and {MAX_ENROLL_IMAGES} face images "
+                f"(JPEG, PNG, HEIC, or HEIF). "
+                f"Each file must be under {MAX_IMAGE_SIZE // (1024 * 1024)} MB "
+                f"and at least {MIN_IMAGE_DIM}x{MIN_IMAGE_DIM} px."
+            ),
         ),
     ],
     container: Container = Depends(get_container),
