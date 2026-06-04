@@ -50,5 +50,7 @@ GOOGLE_USERINFO_URL = "https://www.googleapis.com/oauth2/v2/userinfo"
 GOOGLE_DRIVE_FILES_URL = "https://www.googleapis.com/drive/v3/files/{file_id}"
 
 MAX_IMAGE_SIZE = 5 * 1024 * 1024
+MIN_IMAGE_DIM = 64
+MAX_IMAGE_DIM = 4096
 MIN_ENROLL_IMAGES = 3
 MAX_ENROLL_IMAGES = 5

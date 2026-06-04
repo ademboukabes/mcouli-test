@@ -1,3 +1,5 @@
+import re
+import uuid
 from typing import Annotated, List
 import filetype
 from fastapi import APIRouter, File, UploadFile,  Depends
@@ -6,7 +8,6 @@ from app.container import Container, get_container
 from app.deps.token_auth import MobileUserSchema, get_current_mobile_user
 from app.core.exceptions import AppException
 from app.core.constant import (
-    DEFAULT_CONTENT_TYPE,
     IMAGE_ALLOWED_TYPES,
     MAX_ENROLL_IMAGES,
     MAX_IMAGE_SIZE,
@@ -17,6 +18,13 @@ from db.generated.models import User
 
 router = APIRouter()
 
+def _sanitise_filename(raw: str | None, extension: str) -> str:
+    prefix = str(uuid.uuid4())
+    if not raw:
+        return f"{prefix}.{extension}"
+    name = re.sub(r'[\\/:*?"<>|\x00-\x1f]', "_", raw)
+    name = name.lstrip(".")[:128]
+    return f"{prefix}_{name}"
 
 @router.post("/enroll")
 async def enroll_face(
@@ -55,17 +63,12 @@ async def enroll_face(
         kind = filetype.guess(contents)
         if kind is None or kind.mime not in IMAGE_ALLOWED_TYPES:
             raise AppException.image_format_error(
-                f"File {file.filename} is not a valid image. Allowed types: {', '.join(IMAGE_ALLOWED_TYPES)}"
-            )
-        
-        if len(contents) > MAX_IMAGE_SIZE:
-            raise AppException.bad_request(
-                f"File {file.filename} exceeds maximum size of {MAX_IMAGE_SIZE} bytes"
+                f"Unsupported format. Allowed types: {', '.join(IMAGE_ALLOWED_TYPES)}"
             )
 
         payload: FaceImagePayload = FaceImagePayload(
-            filename=file.filename or "unknown",
-            content_type=file.content_type or DEFAULT_CONTENT_TYPE,
+            filename=_sanitise_filename(file.filename, kind.extension),
+            content_type=kind.mime,
             bytes=contents,
         )
 
@@ -85,7 +88,7 @@ async def read_limited(file: UploadFile, limit: int) -> bytes:
             break
         total += len(chunk)
         if total > limit:
-            raise AppException.bad_request(
+            raise AppException.image_size_error(
                 f"File exceeds maximum size of {limit} bytes"
             )
         chunks.append(chunk)
