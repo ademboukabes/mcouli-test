@@ -50,7 +50,7 @@ async def enroll_face(
 
     image_payloads: list[FaceImagePayload] = []
     for file in files:
-        contents = await file.read()
+        contents = await read_limited(file, MAX_IMAGE_SIZE)
 
         kind = filetype.guess(contents)
         if kind is None or kind.mime not in IMAGE_ALLOWED_TYPES:
@@ -75,3 +75,18 @@ async def enroll_face(
         user.user_id,
         image_payloads,
     )
+
+async def read_limited(file: UploadFile, limit: int) -> bytes:
+    chunks = []
+    total = 0
+    while True:
+        chunk = await file.read(65536)  
+        if not chunk:
+            break
+        total += len(chunk)
+        if total > limit:
+            raise AppException.bad_request(
+                f"File exceeds maximum size of {limit} bytes"
+            )
+        chunks.append(chunk)
+    return b"".join(chunks)
