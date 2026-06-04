@@ -1,34 +1,45 @@
 import re
 import uuid
-from PIL import Image
 from io import BytesIO
 from typing import Annotated, List
-import filetype
-from fastapi import APIRouter, File, UploadFile,  Depends
+
+import filetype  # type: ignore[import-untyped]
+import pillow_heif # type: ignore[import-untyped]
+from fastapi import APIRouter, Depends, File, UploadFile
+from fastapi.concurrency import run_in_threadpool
+from PIL import Image
 from pydantic import BaseModel
+
 from app.container import Container, get_container
-from app.deps.token_auth import MobileUserSchema, get_current_mobile_user
-from app.core.exceptions import AppException
 from app.core.constant import (
+    ENROLL_RATE_LIMIT_MAX,
+    ENROLL_RATE_LIMIT_WINDOW,
     IMAGE_ALLOWED_TYPES,
     MAX_ENROLL_IMAGES,
     MAX_IMAGE_SIZE,
+    MAX_IMAGE_DIM,
     MIN_ENROLL_IMAGES,
     MIN_IMAGE_DIM,
-    MAX_IMAGE_DIM,
-    ENROLL_RATE_LIMIT_MAX,
-    ENROLL_RATE_LIMIT_WINDOW,
 )
+from app.core.exceptions import AppException
+from app.deps.token_auth import MobileUserSchema, get_current_mobile_user
 from app.service.face_embedding import FaceImagePayload
+
+
+pillow_heif.register_heif_opener()
+
+
+Image.MAX_IMAGE_PIXELS = MAX_IMAGE_DIM * MAX_IMAGE_DIM
 
 
 class EnrollmentResponse(BaseModel):
     id: uuid.UUID
-    
-    class Config:
-        from_attributes = True
+
+    model_config = {"from_attributes": True}
+
 
 router = APIRouter()
+
 
 def _sanitise_filename(raw: str | None, extension: str) -> str:
     prefix = str(uuid.uuid4())
@@ -38,15 +49,31 @@ def _sanitise_filename(raw: str | None, extension: str) -> str:
     name = name.lstrip(".")[:128]
     return f"{prefix}_{name}"
 
+
 def _validate_dimensions(contents: bytes) -> None:
+
     try:
         img = Image.open(BytesIO(contents))
-        img.verify()
         w, h = img.size
-    except Exception:
+    except Exception as e:
         raise AppException.image_format_error(
             "File could not be decoded as a valid image"
+        ) from e
+
+    max_pixels = Image.MAX_IMAGE_PIXELS
+
+    if max_pixels is not None and w * h > max_pixels:
+        raise AppException.bad_request(
+            f"Image exceeds maximum allowed resolution of {max_pixels} total pixels."
         )
+
+    try:
+        img.load()
+    except Exception as e:
+        raise AppException.image_format_error(
+            "File contains corrupted or incomplete pixel data"
+        ) from e
+
     if w < MIN_IMAGE_DIM or h < MIN_IMAGE_DIM:
         raise AppException.bad_request(
             f"Image too small — minimum {MIN_IMAGE_DIM}x{MIN_IMAGE_DIM} px"
@@ -55,13 +82,31 @@ def _validate_dimensions(contents: bytes) -> None:
         raise AppException.bad_request(
             f"Image too large — maximum {MAX_IMAGE_DIM}x{MAX_IMAGE_DIM} px"
         )
-    
-@router.post("/enroll", response_model=EnrollmentResponse)
 
+
+async def read_limited(file: UploadFile, limit: int) -> bytes:
+    chunks: list[bytes] = []
+    total = 0
+    while True:
+        chunk = await file.read(65536)
+        if not chunk:
+            break
+        total += len(chunk)
+        if total > limit:
+            raise AppException.bad_request(
+                f"File exceeds maximum allowed size of {limit} bytes"
+            )
+        chunks.append(chunk)
+
+    await file.seek(0)
+    return b"".join(chunks)
+
+
+@router.post("/enroll", response_model=EnrollmentResponse)
 async def enroll_face(
-   files: Annotated[
+    files: Annotated[
         List[UploadFile],
-      File(
+        File(
             description=(
                 f"Between {MIN_ENROLL_IMAGES} and {MAX_ENROLL_IMAGES} face images "
                 f"(JPEG, PNG, HEIC, or HEIF). "
@@ -73,8 +118,7 @@ async def enroll_face(
     container: Container = Depends(get_container),
     user: MobileUserSchema = Depends(get_current_mobile_user),
 ) -> EnrollmentResponse:
-    
-    await container.auth_service.check_rate_limit(  
+    await container.auth_service.check_rate_limit(
         redis=container.redis,
         key=f"rate:enroll:{user.user_id}",
         max_requests=ENROLL_RATE_LIMIT_MAX,
@@ -86,8 +130,8 @@ async def enroll_face(
             f"You must upload between {MIN_ENROLL_IMAGES} and {MAX_ENROLL_IMAGES} images for enrollment."
         )
 
-
     image_payloads: list[FaceImagePayload] = []
+
     for file in files:
         contents = await read_limited(file, MAX_IMAGE_SIZE)
 
@@ -96,41 +140,24 @@ async def enroll_face(
             raise AppException.image_format_error(
                 f"Unsupported format. Allowed types: {', '.join(IMAGE_ALLOWED_TYPES)}"
             )
-        
-        _validate_dimensions(contents)
 
-        payload: FaceImagePayload = FaceImagePayload(
-            filename=_sanitise_filename(file.filename, kind.extension),
-            content_type=kind.mime,
-            bytes=contents,
+        await run_in_threadpool(_validate_dimensions, contents)
+
+        image_payloads.append(
+            FaceImagePayload(
+                filename=_sanitise_filename(file.filename, kind.extension),
+                content_type=kind.mime,
+                bytes=contents,
+            )
         )
 
-        image_payloads.append(payload)
-
-        try:
-            updated_user = await container.auth_service.add_embbed_user(
-                user.user_id,
-                image_payloads,
-            )
-            return EnrollmentResponse.model_validate(updated_user)
-        except AppException:
-            raise
-        except Exception:
-            raise AppException.internal_error(
-                "Enrollment failed due to an internal error"
-            )
-
-async def read_limited(file: UploadFile, limit: int) -> bytes:
-    chunks = []
-    total = 0
-    while True:
-        chunk = await file.read(65536)  
-        if not chunk:
-            break
-        total += len(chunk)
-        if total > limit:
-            raise AppException.image_size_error(
-                f"File exceeds maximum size of {limit} bytes"
-            )
-        chunks.append(chunk)
-    return b"".join(chunks)
+    try:
+        updated_user = await container.auth_service.add_embbed_user(
+            user.user_id,
+            image_payloads,
+        )
+        return EnrollmentResponse.model_validate(updated_user)
+    except Exception as e:
+        raise AppException.internal_error(
+            "Enrollment failed due to an internal error"
+        ) from e

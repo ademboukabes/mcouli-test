@@ -216,7 +216,6 @@ class AuthService:
         expiry = Get_expiry_time()
         logger.info("session_created session_id=%s user_id=%s", session.id, user_id)
 
-        # Populate Redis auth cache for fast-path validation
         await SessionService.cache_session_for_auth(
             redis=redis,
             session_id=session.id,
@@ -289,6 +288,15 @@ class AuthService:
         image_payloads: list[FaceImagePayload],
     ) -> User:
         logger.info("Generating face embeddings for user %s", user_id)
+
+        existing = await self.user_querier.get_user_by_id(id=user_id)
+        if not existing:
+            raise AppException.not_found("User not found")
+        if existing.face_embedding is not None:
+            raise AppException.conflict(
+                "User already has an active face enrollment. "
+                "Delete the existing enrollment before re-enrolling."
+            )
 
         averaging = await self.face_embedding_service.compute_average_embedding(
             image_payloads
@@ -410,7 +418,6 @@ class AuthService:
             session_key = constant.RedisKey.UserSessionByUser.value.format(
                 user_id=user_id
             )
-            # Best-effort: also invalidate the per-session MobileSessionCache.
             raw_session_id = await redis.get(session_key)
             if raw_session_id:
                 try:
@@ -431,15 +438,13 @@ class AuthService:
                 raise AppException.not_found("User not found")
 
             session_key = constant.RedisKey.UserSessionByUser.value.format(user_id=user_id)
-            # Best-effort: retrieve the session_id from UserSessionByUser cache to also
-            # invalidate the per-session MobileSessionCache entry.
             raw_session_id = await redis.get(session_key)
             if raw_session_id:
                 try:
                     session_id = uuid.UUID(raw_session_id)
                     await SessionService.delete_session_cache(redis=redis, session_id=session_id)
                 except (ValueError, Exception):
-                    pass  # non-blocking: session cache will expire naturally
+                    pass
             await redis.delete(session_key)
 
             return user
@@ -474,9 +479,9 @@ class AuthService:
     ) -> None:
         """Enforce rate limiting using Redis INCR + EXPIRE.
 
-        Increments a counter for ``key``.  On the first increment the key
+        Increments a counter for ``key``. On the first increment the key
         is given a TTL of ``window_seconds`` so the window resets
-        automatically.  If the counter exceeds ``max_requests`` a 429
+        automatically. If the counter exceeds ``max_requests`` a 429
         response is raised with a ``Retry-After`` header.
         """
         current_count = await redis.incr(key)
