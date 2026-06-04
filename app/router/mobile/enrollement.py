@@ -5,7 +5,7 @@ from io import BytesIO
 from typing import Annotated, List
 import filetype
 from fastapi import APIRouter, File, UploadFile,  Depends
-
+from pydantic import BaseModel
 from app.container import Container, get_container
 from app.deps.token_auth import MobileUserSchema, get_current_mobile_user
 from app.core.exceptions import AppException
@@ -19,6 +19,12 @@ from app.core.constant import (
 )
 from app.service.face_embedding import FaceImagePayload
 from db.generated.models import User
+
+class EnrollmentResponse(BaseModel):
+    id: uuid.UUID
+    
+    class Config:
+        from_attributes = True
 
 router = APIRouter()
 
@@ -48,7 +54,8 @@ def _validate_dimensions(contents: bytes) -> None:
             f"Image too large — maximum {MAX_IMAGE_DIM}x{MAX_IMAGE_DIM} px"
         )
     
-@router.post("/enroll")
+@router.post("/enroll", response_model=EnrollmentResponse)
+
 async def enroll_face(
    files: Annotated[
         List[UploadFile],
@@ -98,10 +105,11 @@ async def enroll_face(
 
         image_payloads.append(payload)
 
-    return await container.auth_service.add_embbed_user(
+    updated_user = await container.auth_service.add_embbed_user(
         user.user_id,
         image_payloads,
     )
+    return EnrollmentResponse.model_validate(updated_user)
 
 async def read_limited(file: UploadFile, limit: int) -> bytes:
     chunks = []
