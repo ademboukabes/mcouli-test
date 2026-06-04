@@ -114,11 +114,18 @@ async def enroll_face(
 
         image_payloads.append(payload)
 
-    updated_user = await container.auth_service.add_embbed_user(
-        user.user_id,
-        image_payloads,
-    )
-    return EnrollmentResponse.model_validate(updated_user)
+        try:
+            updated_user = await container.auth_service.add_embbed_user(
+                user.user_id,
+                image_payloads,
+            )
+            return EnrollmentResponse.model_validate(updated_user)
+        except AppException:
+            raise
+        except Exception:
+            raise AppException.internal_error(
+                "Enrollment failed due to an internal error"
+            )
 
 async def read_limited(file: UploadFile, limit: int) -> bytes:
     chunks = []
