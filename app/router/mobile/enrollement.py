@@ -16,6 +16,8 @@ from app.core.constant import (
     MIN_ENROLL_IMAGES,
     MIN_IMAGE_DIM,
     MAX_IMAGE_DIM,
+    ENROLL_RATE_LIMIT_MAX,
+    ENROLL_RATE_LIMIT_WINDOW,
 )
 from app.service.face_embedding import FaceImagePayload
 
@@ -78,6 +80,13 @@ async def enroll_face(
     container: Container = Depends(get_container),
     user: MobileUserSchema = Depends(get_current_mobile_user),
 ) -> EnrollmentResponse:
+    
+    await container.auth_service.check_rate_limit(  
+        redis=container.redis,
+        key=f"rate:enroll:{user.user_id}",
+        max_requests=ENROLL_RATE_LIMIT_MAX,
+        window_seconds=ENROLL_RATE_LIMIT_WINDOW,
+    )
 
     if not (MIN_ENROLL_IMAGES <= len(files) <= MAX_ENROLL_IMAGES):
         raise AppException.bad_request(
