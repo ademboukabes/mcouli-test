@@ -18,7 +18,7 @@ from app.core.constant import (
     MAX_IMAGE_DIM,
 )
 from app.service.face_embedding import FaceImagePayload
-from db.generated.models import User
+
 
 class EnrollmentResponse(BaseModel):
     id: uuid.UUID
@@ -77,7 +77,7 @@ async def enroll_face(
     ],
     container: Container = Depends(get_container),
     user: MobileUserSchema = Depends(get_current_mobile_user),
-) -> User:
+) -> EnrollmentResponse:
 
     if not (MIN_ENROLL_IMAGES <= len(files) <= MAX_ENROLL_IMAGES):
         raise AppException.bad_request(
