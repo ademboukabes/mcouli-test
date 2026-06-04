@@ -1,5 +1,5 @@
 from typing import Annotated, List
-
+import filetype
 from fastapi import APIRouter, File, UploadFile,  Depends
 
 from app.container import Container, get_container
@@ -50,12 +50,14 @@ async def enroll_face(
 
     image_payloads: list[FaceImagePayload] = []
     for file in files:
-        if file.content_type not in IMAGE_ALLOWED_TYPES:
-            raise AppException.image_format_error(
-                f"File {file.filename} has unsupported format {file.content_type}"
-            )
-
         contents = await file.read()
+
+        kind = filetype.guess(contents)
+        if kind is None or kind.mime not in IMAGE_ALLOWED_TYPES:
+            raise AppException.image_format_error(
+                f"File {file.filename} is not a valid image. Allowed types: {', '.join(IMAGE_ALLOWED_TYPES)}"
+            )
+        
         if len(contents) > MAX_IMAGE_SIZE:
             raise AppException.bad_request(
                 f"File {file.filename} exceeds maximum size of {MAX_IMAGE_SIZE} bytes"
