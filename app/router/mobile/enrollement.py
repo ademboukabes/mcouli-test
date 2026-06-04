@@ -1,5 +1,7 @@
 import re
 import uuid
+from PIL import Image
+from io import BytesIO
 from typing import Annotated, List
 import filetype
 from fastapi import APIRouter, File, UploadFile,  Depends
@@ -12,6 +14,8 @@ from app.core.constant import (
     MAX_ENROLL_IMAGES,
     MAX_IMAGE_SIZE,
     MIN_ENROLL_IMAGES,
+    MIN_IMAGE_DIM,
+    MAX_IMAGE_DIM,
 )
 from app.service.face_embedding import FaceImagePayload
 from db.generated.models import User
@@ -26,6 +30,24 @@ def _sanitise_filename(raw: str | None, extension: str) -> str:
     name = name.lstrip(".")[:128]
     return f"{prefix}_{name}"
 
+def _validate_dimensions(contents: bytes) -> None:
+    try:
+        img = Image.open(BytesIO(contents))
+        img.verify()
+        w, h = img.size
+    except Exception:
+        raise AppException.image_format_error(
+            "File could not be decoded as a valid image"
+        )
+    if w < MIN_IMAGE_DIM or h < MIN_IMAGE_DIM:
+        raise AppException.bad_request(
+            f"Image too small — minimum {MIN_IMAGE_DIM}x{MIN_IMAGE_DIM} px"
+        )
+    if w > MAX_IMAGE_DIM or h > MAX_IMAGE_DIM:
+        raise AppException.bad_request(
+            f"Image too large — maximum {MAX_IMAGE_DIM}x{MAX_IMAGE_DIM} px"
+        )
+    
 @router.post("/enroll")
 async def enroll_face(
    files: Annotated[
@@ -65,6 +87,8 @@ async def enroll_face(
             raise AppException.image_format_error(
                 f"Unsupported format. Allowed types: {', '.join(IMAGE_ALLOWED_TYPES)}"
             )
+        
+        _validate_dimensions(contents)
 
         payload: FaceImagePayload = FaceImagePayload(
             filename=_sanitise_filename(file.filename, kind.extension),
