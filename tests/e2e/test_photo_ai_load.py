@@ -1,24 +1,35 @@
 import asyncio
-import uuid
+import json
+import os
 import random
+import uuid
+from collections.abc import AsyncGenerator
 from pathlib import Path
+
 import pytest
 from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncConnection
 
 from app.core.config import settings
 from app.infra.database import engine
-from app.infra.minio import init_minio_client, Bucket, IMAGES_BUCKET_NAME
+from app.infra.minio import Bucket, IMAGES_BUCKET_NAME, init_minio_client
 from app.infra.nats import NatsClient, NatsSubjects
 
+# ── guard: only run when explicitly requested ─────────────────────────
 pytestmark = [
-    pytest.mark.asyncio,
     pytest.mark.e2e,
+    pytest.mark.asyncio,
+    pytest.mark.skipif(
+        os.getenv("MULTAI_RUN_E2E") != "1",
+        reason="set MULTAI_RUN_E2E=1 to run live e2e tests",
+    ),
 ]
+
+FIXTURE_DIR = Path(__file__).parent.parent / "fixtures" / "images"
 
 
 @pytest.fixture(scope="function")
-async def setup_infra():
-    # Ensure connections are initialized
+async def setup_infra() -> AsyncGenerator[None, None]:
     await init_minio_client(
         minio_host=settings.MINIO_HOST,
         minio_port=settings.MINIO_API_PORT,
@@ -26,152 +37,182 @@ async def setup_infra():
         minio_root_password=settings.MINIO_ROOT_PASSWORD,
     )
     await NatsClient.connect()
-
     yield
-    
-    # Cleanup
     await NatsClient.close()
-    NatsClient._nc = None
+    NatsClient._nc = None  # type: ignore[attr-defined]
     await engine.dispose()
 
 
-async def _setup_event(conn) -> uuid.UUID:
+async def _setup_event(conn: AsyncConnection) -> uuid.UUID:
     event_id = uuid.uuid4()
-    
-    # Create staff user
-    await conn.execute(
+    await conn.execute(  # type: ignore[union-attr]
         text(
             """
             INSERT INTO staff_users (id, email, password, role)
-            VALUES ('00000000-0000-0000-0000-000000000001'::uuid, 'e2e_load@test.com', 'hash', 'admin')
+            VALUES ('00000000-0000-0000-0000-000000000001'::uuid,
+                    'e2e_load@test.com', 'hash', 'admin')
             ON CONFLICT (id) DO NOTHING
             """
         )
     )
-    
-    # Create event
     event_code = f"LOAD-{str(uuid.uuid4())[:6].upper()}"
-    await conn.execute(
+    await conn.execute(  # type: ignore[union-attr]
         text(
             """
             INSERT INTO events (id, name, event_code, event_date, status, created_by)
-            VALUES (:id, 'E2E Load Event', :event_code, NOW(), 'draft', '00000000-0000-0000-0000-000000000001'::uuid)
+            VALUES (:id, 'E2E Load Event', :code, NOW(), 'draft',
+                    '00000000-0000-0000-0000-000000000001'::uuid)
             """
         ),
-        {"id": event_id, "event_code": event_code}
+        {"id": event_id, "code": event_code},
     )
     return event_id
 
 
-async def _wait_for_jobs_completion(photo_ids: list[uuid.UUID], timeout: int = 60) -> dict:
-    start_time = asyncio.get_event_loop().time()
-    
+async def _wait_for_jobs(
+    photo_ids: list[uuid.UUID], timeout: int = 180
+) -> dict[str, int]:
+    """Return a status→count dict once all jobs have a terminal status."""
+    deadline = asyncio.get_event_loop().time() + timeout
     async with engine.connect() as conn:
-        while asyncio.get_event_loop().time() - start_time < timeout:
-            result = await conn.execute(
-                text(
-                    """
-                    SELECT status, count(*) 
-                    FROM processing_jobs 
-                    WHERE photo_id = ANY(:photo_ids) AND job_type = 'face_detection'
-                    GROUP BY status
-                    """
-                ),
-                {"photo_ids": photo_ids}
-            )
-            rows = result.fetchall()
-            status_counts = {row[0]: row[1] for row in rows}
-            
-            # If total jobs equals number of photos, and no 'pending' or 'running', we're done
-            total_jobs = sum(status_counts.values())
-            if total_jobs == len(photo_ids):
+        while asyncio.get_event_loop().time() < deadline:
+            rows = (
+                await conn.execute(
+                    text(
+                        """
+                        SELECT status, count(*)
+                        FROM processing_jobs
+                        WHERE photo_id = ANY(:ids)
+                          AND job_type = 'face_detection'
+                        GROUP BY status
+                        """
+                    ),
+                    {"ids": photo_ids},
+                )
+            ).fetchall()
+            status_counts: dict[str, int] = {row[0]: int(row[1]) for row in rows}
+            total = sum(status_counts.values())
+            if total == len(photo_ids):
                 completed = status_counts.get("completed", 0)
                 failed = status_counts.get("failed", 0)
                 if completed + failed == len(photo_ids):
                     return status_counts
-
             await asyncio.sleep(2.0)
-            
-    return {"timeout": True}
+    return {"timeout": 1}
 
 
-async def test_photo_ai_load_20_photos(setup_infra):
-    images_dir = Path("tests/fixtures/images")
+async def test_photo_ai_load_20_photos(setup_infra: None) -> None:  # noqa: ARG001
+    """Process 20 photos concurrently; expect 0 failures within 3 minutes."""
     image_files = ["face.jpg", "group.jpg", "noface.jpg"]
-    
-    # Read image contents into memory to upload them quickly
-    image_contents = {}
+    image_contents: dict[str, bytes] = {}
     for img in image_files:
-        with open(images_dir / img, "rb") as f:
-            image_contents[img] = f.read()
+        path = FIXTURE_DIR / img
+        assert path.exists(), f"Fixture not found: {path}"
+        image_contents[img] = path.read_bytes()
 
     num_photos = 20
-    photo_tasks = []
-    
+    photo_tasks: list[dict[str, object]] = []
+    event_id: uuid.UUID | None = None
+
     async with engine.begin() as conn:
         event_id = await _setup_event(conn)
-        
-        for i in range(num_photos):
+        for _ in range(num_photos):
             photo_id = uuid.uuid4()
             selected_img = random.choice(image_files)
             storage_key = f"load-test/{event_id}/{photo_id}.jpg"
-            
-            photo_tasks.append({
-                "photo_id": photo_id,
-                "storage_key": storage_key,
-                "content": image_contents[selected_img]
-            })
-            
-            # Insert photo record
+            photo_tasks.append(
+                {"photo_id": photo_id, "storage_key": storage_key, "content": image_contents[selected_img]}
+            )
             await conn.execute(
                 text(
                     """
                     INSERT INTO photos (id, event_id, storage_key, visibility, status)
-                    VALUES (:id, :event_id, :storage_key, 'private', 'pending')
+                    VALUES (:id, :event_id, :key, 'private', 'pending')
                     """
                 ),
-                {
-                    "id": photo_id,
-                    "event_id": event_id,
-                    "storage_key": storage_key,
-                }
+                {"id": photo_id, "event_id": event_id, "key": storage_key},
             )
 
-    # 1. Upload all 20 photos to MinIO concurrently
+    assert event_id is not None
     bucket = Bucket(IMAGES_BUCKET_NAME, "")
-    upload_coros = []
-    for p in photo_tasks:
-        upload_coros.append(
-            bucket.put_bytes(object_name=p["storage_key"], data=p["content"], content_type="image/jpeg")
-        )
-    await asyncio.gather(*upload_coros)
 
-    # 2. Publish 20 NATS messages concurrently
-    import json
-    publish_coros = []
-    for p in photo_tasks:
-        payload = {
-            "photo_id": str(p["photo_id"]),
-            "image_ref": p["storage_key"],
-            "event_id": str(event_id)
-        }
-        payload_bytes = json.dumps(payload).encode("utf-8")
-        publish_coros.append(
-            NatsClient.publish(
-                NatsSubjects.PHOTO_PROCESS.value,
-                payload_bytes
+    try:
+        # 1. Upload all photos to MinIO concurrently
+        await asyncio.gather(
+            *[
+                bucket.put_bytes(
+                    object_name=p["storage_key"],  # type: ignore[arg-type]
+                    data=p["content"],  # type: ignore[arg-type]
+                    content_type="image/jpeg",
+                )
+                for p in photo_tasks
+            ]
+        )
+
+        # 2. Publish 20 NATS messages concurrently
+        await asyncio.gather(
+            *[
+                NatsClient.publish(
+                    NatsSubjects.PHOTO_PROCESS.value,
+                    json.dumps(
+                        {
+                            "photo_id": str(p["photo_id"]),
+                            "image_ref": p["storage_key"],
+                            "event_id": str(event_id),
+                        }
+                    ).encode("utf-8"),
+                )
+                for p in photo_tasks
+            ]
+        )
+
+        # 3. Wait for all jobs
+        photo_ids: list[uuid.UUID] = [
+            p["photo_id"] for p in photo_tasks  # type: ignore[misc]
+        ]
+        status_counts = await _wait_for_jobs(photo_ids, timeout=180)
+
+        assert "timeout" not in status_counts, (
+            "Load test timed out waiting for jobs to complete"
+        )
+        failed = status_counts.get("failed", 0)
+        completed = status_counts.get("completed", 0)
+        assert failed == 0, f"Expected 0 failed jobs, got {failed}"
+        assert completed == num_photos, (
+            f"Expected {num_photos} completed jobs, got {completed}"
+        )
+    finally:
+        # Always clean up DB and MinIO regardless of test outcome
+        async with engine.begin() as conn:
+            photo_ids_list = [p["photo_id"] for p in photo_tasks]
+            if photo_ids_list:
+                await conn.execute(
+                    text(
+                        "DELETE FROM face_matches fm "
+                        "USING photo_faces pf "
+                        "WHERE pf.id = fm.photo_face_id "
+                        "AND pf.photo_id = ANY(:ids)"
+                    ),
+                    {"ids": photo_ids_list},
+                )
+                await conn.execute(
+                    text("DELETE FROM photo_faces WHERE photo_id = ANY(:ids)"),
+                    {"ids": photo_ids_list},
+                )
+                await conn.execute(
+                    text("DELETE FROM processing_jobs WHERE photo_id = ANY(:ids)"),
+                    {"ids": photo_ids_list},
+                )
+                await conn.execute(
+                    text("DELETE FROM photos WHERE event_id = :eid"),
+                    {"eid": event_id},
+                )
+            await conn.execute(
+                text("DELETE FROM events WHERE id = :eid"), {"eid": event_id}
             )
-        )
-    await asyncio.gather(*publish_coros)
-
-    # 3. Wait for processing to finish
-    photo_ids = [p["photo_id"] for p in photo_tasks]
-    status_counts = await _wait_for_jobs_completion(photo_ids, timeout=180)
-    
-    assert "timeout" not in status_counts, "Load test timed out waiting for jobs to complete"
-    
-    completed = status_counts.get("completed", 0)
-    failed = status_counts.get("failed", 0)
-    
-    assert failed == 0, f"Expected 0 failed jobs, got {failed}"
-    assert completed == num_photos, f"Expected {num_photos} completed jobs, got {completed}"
+        # Clean up MinIO objects
+        for p in photo_tasks:
+            try:
+                await bucket.delete(p["storage_key"])  # type: ignore[arg-type]
+            except Exception:
+                pass
