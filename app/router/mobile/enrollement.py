@@ -1,17 +1,21 @@
 import re
+import time
 import uuid
+from collections.abc import AsyncIterator
 from io import BytesIO
 from typing import Annotated, List
 
 import filetype  # type: ignore[import-untyped]
-import pillow_heif # type: ignore[import-untyped]
-from fastapi import APIRouter, Depends, File, UploadFile
+import pillow_heif  # type: ignore[import-untyped]
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from fastapi.concurrency import run_in_threadpool
 from PIL import Image
 from pydantic import BaseModel
 
 from app.container import Container, get_container
 from app.core.constant import (
+    ENROLL_IN_PROGRESS_TTL_SECONDS,
+    AuditEventType,
     ENROLL_RATE_LIMIT_MAX,
     ENROLL_RATE_LIMIT_WINDOW,
     IMAGE_ALLOWED_TYPES,
@@ -22,6 +26,7 @@ from app.core.constant import (
     MIN_IMAGE_DIM,
 )
 from app.core.exceptions import AppException
+from app.core.logger import logger
 from app.deps.token_auth import MobileUserSchema, get_current_mobile_user
 from app.service.face_embedding import FaceImagePayload
 
@@ -118,46 +123,81 @@ async def enroll_face(
     container: Container = Depends(get_container),
     user: MobileUserSchema = Depends(get_current_mobile_user),
 ) -> EnrollmentResponse:
-    await container.auth_service.check_rate_limit(
-        redis=container.redis,
-        key=f"rate:enroll:{user.user_id}",
-        max_requests=ENROLL_RATE_LIMIT_MAX,
-        window_seconds=ENROLL_RATE_LIMIT_WINDOW,
-    )
+    start_time = time.perf_counter()
+    image_count = len(files)
+    lock_key: str | None = None
+    lock_value: str | None = None
+    lock_acquired = False
 
-    if not (MIN_ENROLL_IMAGES <= len(files) <= MAX_ENROLL_IMAGES):
-        raise AppException.bad_request(
-            f"You must upload between {MIN_ENROLL_IMAGES} and {MAX_ENROLL_IMAGES} images for enrollment."
-        )
-
-    image_payloads: list[FaceImagePayload] = []
-
-    for file in files:
-        contents = await read_limited(file, MAX_IMAGE_SIZE)
-
-        kind = filetype.guess(contents)
-        if kind is None or kind.mime not in IMAGE_ALLOWED_TYPES:
-            raise AppException.image_format_error(
-                f"Unsupported format. Allowed types: {', '.join(IMAGE_ALLOWED_TYPES)}"
-            )
-
-        await run_in_threadpool(_validate_dimensions, contents)
-
-        image_payloads.append(
-            FaceImagePayload(
-                filename=_sanitise_filename(file.filename, kind.extension),
-                content_type=kind.mime,
-                bytes=contents,
-            )
-        )
+    async def image_payloads() -> AsyncIterator[FaceImagePayload]:
+        for file in files:
+            yield await _build_face_image_payload(file)
 
     try:
+        await container.auth_service.check_rate_limit(
+            redis=container.redis,
+            key=f"rate:enroll:{user.user_id}",
+            max_requests=ENROLL_RATE_LIMIT_MAX,
+            window_seconds=ENROLL_RATE_LIMIT_WINDOW,
+        )
+
+        if not (MIN_ENROLL_IMAGES <= image_count <= MAX_ENROLL_IMAGES):
+            raise AppException.bad_request(
+                f"You must upload between {MIN_ENROLL_IMAGES} and "
+                f"{MAX_ENROLL_IMAGES} images for enrollment."
+            )
+
+        lock_key = _enrollment_lock_key(user.user_id)
+        lock_value = str(uuid.uuid4())
+        lock_acquired = await container.redis.set(
+            lock_key,
+            lock_value,
+            expire=ENROLL_IN_PROGRESS_TTL_SECONDS,
+            nx=True,
+        )
+        if not lock_acquired:
+            raise AppException.conflict(
+                "Enrollment already in progress. Please wait for it to finish."
+            )
+
         updated_user = await container.auth_service.add_embbed_user(
             user.user_id,
-            image_payloads,
+            image_payloads(),
+        )
+        await _record_enrollment_audit(
+            container=container,
+            user_id=user.user_id,
+            image_count=image_count,
+            outcome="success",
+            duration_ms=int((time.perf_counter() - start_time) * 1000),
         )
         return EnrollmentResponse.model_validate(updated_user)
+    except HTTPException as exc:
+        await _record_enrollment_audit(
+            container=container,
+            user_id=user.user_id,
+            image_count=image_count,
+            outcome="failure",
+            duration_ms=int((time.perf_counter() - start_time) * 1000),
+            error_category=f"http_{exc.status_code}",
+        )
+        raise
     except Exception as e:
+        await _record_enrollment_audit(
+            container=container,
+            user_id=user.user_id,
+            image_count=image_count,
+            outcome="failure",
+            duration_ms=int((time.perf_counter() - start_time) * 1000),
+            error_category="unexpected_error",
+        )
         raise AppException.internal_error(
             "Enrollment failed due to an internal error"
         ) from e
+    finally:
+        if lock_acquired and lock_key is not None and lock_value is not None:
+            await _release_enrollment_lock(
+                container=container,
+                lock_key=lock_key,
+                lock_value=lock_value,
+            )
