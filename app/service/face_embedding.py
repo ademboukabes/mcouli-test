@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import AsyncIterable, AsyncIterator
 from dataclasses import dataclass
 from typing import List, Literal, Optional, Sequence, Tuple, TypedDict
 
@@ -134,20 +135,27 @@ class FaceEmbeddingService:
         self,
         payloads: Sequence[FaceImagePayload],
     ) -> list[float]:
+        async def iter_payloads() -> AsyncIterator[FaceImagePayload]:
+            for payload in payloads:
+                yield payload
 
-        if not payloads:
-            raise AppException.bad_request(
-                "At least one image is required for enrollment"
-            )
+        return await self.compute_average_embedding_stream(iter_payloads())
 
+    async def compute_average_embedding_stream(
+        self,
+        payloads: AsyncIterable[FaceImagePayload],
+    ) -> list[float]:
+
+        has_payload = False
         embeddings: list[np.ndarray] = []
 
-        for payload in payloads:
+        async for payload in payloads:
+            has_payload = True
             image = self._decode_image(payload)
             image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
 
             # Single detection pass — model.get() already returns embeddings
-            faces: list[FaceStub] = await asyncio.to_thread( # type: ignore
+            faces: list[FaceStub] = await asyncio.to_thread(  # type: ignore
                 self.face_embedding.model.get, image_rgb  # type: ignore
             )
 
@@ -164,6 +172,11 @@ class FaceEmbeddingService:
                 )
 
             embeddings.append(face.embedding.astype(np.float32))
+
+        if not has_payload:
+            raise AppException.bad_request(
+                "At least one image is required for enrollment"
+            )
 
         stacked = np.stack(embeddings, axis=0)
         averaged = np.mean(stacked, axis=0)
