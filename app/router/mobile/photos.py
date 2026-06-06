@@ -6,11 +6,12 @@ from fastapi.responses import Response
 
 from app.container import Container, get_container
 from app.deps.token_auth import MobileUserSchema, get_current_mobile_user
+from app.deps.rate_limit import RateLimiter
 
 router = APIRouter(prefix="/photos")
 
 
-@router.get("")
+@router.get("", dependencies=[Depends(RateLimiter(requests=20, window=60))])
 async def list_my_photos(
     event_id: UUID | None = Query(default=None),
     sort: Literal["asc", "desc"] = Query(default="desc"),
