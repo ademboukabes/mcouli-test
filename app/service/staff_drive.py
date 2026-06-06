@@ -1,3 +1,4 @@
+import asyncio
 import base64
 import hashlib
 import json
@@ -238,44 +239,47 @@ class StaffDriveService:
 
         access_token = await self.get_access_token_for_staff_user(staff_user.id)
         bucket = ImageBucket(f"{DRIVE_BUCKET_PREFIX}/{staff_user.id}")
-        results: list[DriveImportResult] = []
+        semaphore = asyncio.Semaphore(10)
 
-        for selected in selected_files:
+        async def process_file(selected: SelectedDriveFile) -> DriveImportResult:
             if selected.mime_type and selected.mime_type not in IMAGE_ALLOWED_TYPES:
                 raise AppException.bad_request(
                     f"File '{selected.name}' has unsupported type '{selected.mime_type}'. "
                     f"Allowed: {', '.join(sorted(IMAGE_ALLOWED_TYPES))}"
                 )
 
-            download = await GoogleDriveClient.download_file(
-                access_token=access_token,
-                file_id=selected.id,
-            )
-
-            if len(download.content) > MAX_IMPORT_FILE_SIZE_BYTES:
-                raise AppException.bad_request(
-                    f"File '{selected.name}' exceeds the 20 MB size limit"
+            async with semaphore:
+                download = await GoogleDriveClient.download_file(
+                    access_token=access_token,
+                    file_id=selected.id,
                 )
 
-            object_name = self._generate_object_name(selected.name)
-            content_type = selected.mime_type or download.metadata.mime_type
+                if len(download.content) > MAX_IMPORT_FILE_SIZE_BYTES:
+                    raise AppException.bad_request(
+                        f"File '{selected.name}' exceeds the 20 MB size limit"
+                    )
 
-            await bucket.put_bytes(
-                data=download.content,
-                object_name=object_name,
-                content_type=content_type,
-                filename=selected.name,
-            )
+                object_name = self._generate_object_name(selected.name)
+                content_type = selected.mime_type or download.metadata.mime_type
 
-            results.append(DriveImportResult(
+                await bucket.put_bytes(
+                    data=download.content,
+                    object_name=object_name,
+                    content_type=content_type,
+                    filename=selected.name,
+                )
+
+            return DriveImportResult(
                 drive_file_id=selected.id,
                 original_file_name=selected.name,
                 minio_bucket=bucket.bucket_name,
                 minio_object_name=object_name,
                 minio_object_path=f"{bucket.file_prefix}/{object_name}",
-            ))
+            )
 
-        return results
+        tasks = [process_file(selected) for selected in selected_files]
+        results = await asyncio.gather(*tasks)
+        return list(results)
 
     def _fernet(self) -> Fernet:
         digest = hashlib.sha256(settings.encryption_key.encode("utf-8")).digest()
