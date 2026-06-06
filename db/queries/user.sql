@@ -8,6 +8,12 @@ SELECT *
 FROM users
 WHERE id = $1;
 
+-- name: GetUserByIdForUpdate :one
+SELECT *
+FROM users
+WHERE id = $1
+FOR UPDATE;
+
 -- name: GetUserByEmail :one
 SELECT *
 FROM users

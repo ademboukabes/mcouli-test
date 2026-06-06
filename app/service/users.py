@@ -1,5 +1,6 @@
 from datetime import datetime, timedelta, timezone
 import uuid
+from collections.abc import AsyncIterable
 from typing import Optional
 
 from sqlalchemy.exc import SQLAlchemyError
@@ -285,7 +286,7 @@ class AuthService:
     async def add_embbed_user(
         self,
         user_id: uuid.UUID,
-        image_payloads: list[FaceImagePayload],
+        image_payloads: AsyncIterable[FaceImagePayload],
     ) -> User:
         logger.info("Generating face embeddings for user %s", user_id)
 
@@ -298,10 +299,20 @@ class AuthService:
                 "Delete the existing enrollment before re-enrolling."
             )
 
-        averaging = await self.face_embedding_service.compute_average_embedding(
+        averaging = await self.face_embedding_service.compute_average_embedding_stream(
             image_payloads
         )
         vector_literal = "[" + ", ".join(str(x) for x in averaging) + "]"
+
+        locked_existing = await self.user_querier.get_user_by_id_for_update(id=user_id)
+        if not locked_existing:
+            raise AppException.not_found("User not found")
+        if locked_existing.face_embedding is not None:
+            raise AppException.conflict(
+                "User already has an active face enrollment. "
+                "Delete the existing enrollment before re-enrolling."
+            )
+
         user = await self.user_querier.set_user_embedding(
             dollar_1=vector_literal,
             id=user_id,

@@ -55,6 +55,14 @@ WHERE id = :p1
 """
 
 
+GET_USER_BY_ID_FOR_UPDATE = """-- name: get_user_by_id_for_update \\:one
+SELECT id, email, hashed_password, created_at, updated_at, display_name, face_embedding, deleted_at, blocked
+FROM users
+WHERE id = :p1
+FOR UPDATE
+"""
+
+
 LIST_USERS = """-- name: list_users \\:many
 SELECT id, email, hashed_password, created_at, updated_at, display_name, face_embedding, deleted_at, blocked
 FROM users
@@ -165,6 +173,22 @@ class AsyncQuerier:
 
     async def get_user_by_id(self, *, id: uuid.UUID) -> Optional[models.User]:
         row = (await self._conn.execute(sqlalchemy.text(GET_USER_BY_ID), {"p1": id})).first()
+        if row is None:
+            return None
+        return models.User(
+            id=row[0],
+            email=row[1],
+            hashed_password=row[2],
+            created_at=row[3],
+            updated_at=row[4],
+            display_name=row[5],
+            face_embedding=row[6],
+            deleted_at=row[7],
+            blocked=row[8],
+        )
+
+    async def get_user_by_id_for_update(self, *, id: uuid.UUID) -> Optional[models.User]:
+        row = (await self._conn.execute(sqlalchemy.text(GET_USER_BY_ID_FOR_UPDATE), {"p1": id})).first()
         if row is None:
             return None
         return models.User(
