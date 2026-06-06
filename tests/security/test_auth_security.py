@@ -130,3 +130,9 @@ async def test_rate_limiting(client):
     finally:
         async with engine.begin() as conn:
             await conn.execute(text(f"DELETE FROM users WHERE id = '{user_id}'"))
+        try:
+            redis = RedisClient.get_instance()
+            await redis._client.delete("rate_limit:/user/photos:127.0.0.1")
+            await redis._client.delete("rate_limit:/user/photos:testclient")
+        except Exception:
+            pass
