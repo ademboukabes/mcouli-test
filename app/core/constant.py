@@ -22,6 +22,7 @@ class AuditEventType(str, Enum):
     USER_SIGNUP = "user.signup"
     USER_LOGIN = "user.login"
     USER_LOGOUT = "user.logout"
+    FACE_ENROLLMENT_ATTEMPT = "face_enrollment.attempt"
     UPLOAD_REQUEST_CREATED = "upload_request.created"
     UPLOAD_REQUEST_APPROVED = "upload_request.approved"
     UPLOAD_REQUEST_REJECTED = "upload_request.rejected"
@@ -57,3 +58,4 @@ MAX_ENROLL_IMAGES = 5
 
 ENROLL_RATE_LIMIT_MAX = 5
 ENROLL_RATE_LIMIT_WINDOW = 3600
+ENROLL_IN_PROGRESS_TTL_SECONDS = 300
