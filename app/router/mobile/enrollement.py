@@ -107,6 +107,99 @@ async def read_limited(file: UploadFile, limit: int) -> bytes:
     return b"".join(chunks)
 
 
+def _precheck_upload_headers(file: UploadFile) -> None:
+    content_type = file.content_type
+    if not content_type:
+        raise AppException.image_format_error("Missing image Content-Type header")
+
+    normalized_content_type = content_type.split(";", maxsplit=1)[0].strip().lower()
+    if normalized_content_type not in IMAGE_ALLOWED_TYPES:
+        allowed = ", ".join(IMAGE_ALLOWED_TYPES)
+        raise AppException.image_format_error(
+            f"Unsupported Content-Type header. Allowed types: {allowed}"
+        )
+
+    content_length = file.headers.get("content-length")
+    if content_length is None:
+        return
+
+    try:
+        declared_size = int(content_length)
+    except ValueError as exc:
+        raise AppException.bad_request("Invalid image Content-Length header") from exc
+
+    if declared_size > MAX_IMAGE_SIZE:
+        raise AppException.bad_request(
+            f"File exceeds maximum allowed size of {MAX_IMAGE_SIZE} bytes"
+        )
+
+
+async def _build_face_image_payload(file: UploadFile) -> FaceImagePayload:
+    _precheck_upload_headers(file)
+    contents = await read_limited(file, MAX_IMAGE_SIZE)
+
+    kind = filetype.guess(contents)
+    if kind is None or kind.mime not in IMAGE_ALLOWED_TYPES:
+        raise AppException.image_format_error(
+            f"Unsupported format. Allowed types: {', '.join(IMAGE_ALLOWED_TYPES)}"
+        )
+
+    await run_in_threadpool(_validate_dimensions, contents)
+
+    return FaceImagePayload(
+        filename=_sanitise_filename(file.filename, kind.extension),
+        content_type=kind.mime,
+        bytes=contents,
+    )
+
+
+async def _record_enrollment_audit(
+    *,
+    container: Container,
+    user_id: uuid.UUID,
+    image_count: int,
+    outcome: str,
+    duration_ms: int,
+    error_category: str | None = None,
+) -> None:
+    metadata: dict[str, object] = {
+        "endpoint": "enroll",
+        "image_count": image_count,
+        "outcome": outcome,
+        "duration_ms": duration_ms,
+    }
+    if error_category is not None:
+        metadata["error_category"] = error_category
+
+    try:
+        await container.audit_service.create_record(
+            event_type=AuditEventType.FACE_ENROLLMENT_ATTEMPT,
+            user_id=user_id,
+            metadata=metadata,
+        )
+    except Exception as exc:
+        logger.warning(
+            "Failed to publish enrollment audit for user %s: %s", user_id, exc
+        )
+
+
+def _enrollment_lock_key(user_id: uuid.UUID) -> str:
+    return f"enroll:in_progress:{user_id}"
+
+
+async def _release_enrollment_lock(
+    *,
+    container: Container,
+    lock_key: str,
+    lock_value: str,
+) -> None:
+    try:
+        if await container.redis.get(lock_key) == lock_value:
+            await container.redis.delete(lock_key)
+    except Exception as exc:
+        logger.warning("Failed to release enrollment lock %s: %s", lock_key, exc)
+
+
 @router.post("/enroll", response_model=EnrollmentResponse)
 async def enroll_face(
     files: Annotated[
