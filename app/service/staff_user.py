@@ -24,8 +24,9 @@ class StaffUserService:
     ) -> StaffUser:
         try:
             hashed_password = hash_password(password)
+            normalized_email = email.strip().lower() if email else None
             user = await self.staff_user_querier.create_multi(
-                email=email,
+                email=normalized_email,
                 password=hashed_password,
                 role=role,
             )
@@ -108,10 +109,10 @@ class StaffUserService:
         email: str,
         password: str,
     ) -> WebAuthResponse:
-        print("hello")
-        staff: StaffUser | None = await self.staff_user_querier.get_staff_user_by_email(email=email)
+        normalized_email = email.strip().lower()
+        staff: StaffUser | None = await self.staff_user_querier.get_staff_user_by_email(email=normalized_email)
         if staff is None or not verify_password(password, staff.password):
-            logger.info("admin login failed for email %s", email)
+            logger.info("admin login failed for email %s", normalized_email)
             raise AppException.unauthorized("Invalid email or password")
 
 
@@ -126,7 +127,7 @@ class StaffUserService:
             role=staff.role,
         )
 
-    async def Get_stuff_user(
+    async def get_staff_user(
             self,
             stuff_id:uuid.UUID
     )->StaffUser:
