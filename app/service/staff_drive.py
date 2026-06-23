@@ -237,6 +237,11 @@ class StaffDriveService:
         if not selected_files:
             return []
 
+        if len(selected_files) > 1000:
+            raise AppException.bad_request(
+                "Cannot import more than 1000 files at once. Please select fewer files."
+            )
+
         access_token = await self.get_access_token_for_staff_user(staff_user.id)
         bucket = ImageBucket(f"{DRIVE_BUCKET_PREFIX}/{staff_user.id}")
         semaphore = asyncio.Semaphore(10)
@@ -277,9 +282,16 @@ class StaffDriveService:
                 minio_object_path=f"{bucket.file_prefix}/{object_name}",
             )
 
-        tasks = [process_file(selected) for selected in selected_files]
-        results = await asyncio.gather(*tasks)
-        return list(results)
+        results: list[DriveImportResult] = []
+        # Process in chunks of 50 to prevent creating too many asyncio Task objects in memory
+        chunk_size = 50
+        for i in range(0, len(selected_files), chunk_size):
+            chunk = selected_files[i : i + chunk_size]
+            tasks = [process_file(selected) for selected in chunk]
+            chunk_results = await asyncio.gather(*tasks)
+            results.extend(chunk_results)
+
+        return results
 
     def _fernet(self) -> Fernet:
         digest = hashlib.sha256(settings.encryption_key.encode("utf-8")).digest()
