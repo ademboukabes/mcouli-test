@@ -95,6 +95,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     yield
 
     expiry_task.cancel()
+    await asyncio.gather(expiry_task, return_exceptions=True)
     await RedisClient.get_instance().close()
     await NatsClient.close()
 
