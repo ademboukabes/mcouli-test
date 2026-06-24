@@ -181,6 +181,50 @@ class AuthService:
             email=req.email
         )
 
+    async def mobile_register_resend_otp(
+        self,
+        redis: RedisClient,
+        email: str,
+        client_ip: Optional[str] = None,
+    ) -> RegisterPendingResponse:
+        logger.info("resend_otp attempt for %s", email)
+        max_attempts = settings.RATE_LIMIT_LOGIN_MAX_ATTEMPTS
+        window = settings.RATE_LIMIT_LOGIN_WINDOW_SECONDS
+
+        if client_ip:
+            await self.check_rate_limit(
+                redis,
+                f"rate:ip:{client_ip}",
+                max_attempts,
+                window,
+            )
+        await self.check_rate_limit(
+            redis,
+            f"rate:email:{email}",
+            max_attempts,
+            window,
+        )
+
+        pending_key = f"pending_user:{email}"
+        raw_data = await redis.get(pending_key)
+        if not raw_data:
+            raise AppException.not_found("No pending registration found for this email")
+
+        otp = "".join(secrets.choice("0123456789") for _ in range(6))
+
+        # Regenerate OTP with 10 mins TTL, without touching the pending_user TTL
+        await redis.set(f"otp:{email}", otp, expire=600)
+
+        # Send to NATS
+        await NatsClient.publish("email.send_otp", json.dumps({"email": email, "otp": otp}).encode("utf-8"))
+
+        logger.info("resend_otp success, new OTP sent to %s", email)
+        return RegisterPendingResponse(
+            message="New OTP sent to email",
+            status="pending_verification",
+            email=email
+        )
+
     async def verify_mobile_register(
         self,
         redis: RedisClient,

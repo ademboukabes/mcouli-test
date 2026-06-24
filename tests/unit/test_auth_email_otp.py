@@ -1,6 +1,6 @@
 import uuid
 import json
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, patch, ANY
 import pytest
 
 from app.service.users import AuthService
@@ -126,3 +126,46 @@ async def test_verify_mobile_register_success(
 
     # Verify redis cleanup
     assert mock_redis.delete.call_count == 2
+
+
+@pytest.mark.asyncio
+async def test_mobile_register_resend_otp_success(
+    auth_service: AuthService,
+    mock_redis: AsyncMock,
+) -> None:
+    # Arrange
+    email = "test@example.com"
+    mock_redis.get.return_value = '{"hashed_password": "fake"}'
+    mock_redis.incr.return_value = 1
+
+    # Act
+    with patch("app.infra.nats.NatsClient.publish", new_callable=AsyncMock) as mock_publish:
+        res = await auth_service.mobile_register_resend_otp(redis=mock_redis, email=email)
+
+    # Assert
+    assert res.status == "pending_verification"
+    assert res.message == "New OTP sent to email"
+    assert res.email == email
+
+    mock_redis.get.assert_called_with(f"pending_user:{email}")
+    mock_redis.set.assert_called_with(f"otp:{email}", ANY, expire=600)
+    mock_publish.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_mobile_register_resend_otp_not_found(
+    auth_service: AuthService,
+    mock_redis: AsyncMock,
+) -> None:
+    from fastapi import HTTPException
+    # Arrange
+    email = "test@example.com"
+    mock_redis.incr.return_value = 1
+    mock_redis.get.return_value = None  # No pending user
+
+    # Act & Assert
+    with pytest.raises(HTTPException) as exc_info:
+        await auth_service.mobile_register_resend_otp(redis=mock_redis, email=email)
+
+    assert exc_info.value.status_code == 404
+    assert "No pending registration found" in exc_info.value.detail

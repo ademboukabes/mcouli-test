@@ -70,6 +70,17 @@ class RegisterVerifyRequest(MobileAuthBaseRequest):
 
 
 
+class ResendOtpRequest(BaseModel):
+    email: EmailStr = Field(..., max_length=255)
+
+    @field_validator("email", mode="before")
+    @classmethod
+    def _normalize_email(cls, value: object) -> object:
+        if not isinstance(value, str):
+            return value
+        return value.strip().lower()
+
+
 class RefreshTokenRequest(BaseModel):
     refresh_token: str
 

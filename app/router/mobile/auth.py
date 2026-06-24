@@ -12,6 +12,7 @@ from app.schema.request.mobile.auth import (
     MobileLoginRequest,
     MobileRegisterRequest,
     RegisterVerifyRequest,
+    ResendOtpRequest,
     RefreshTokenRequest,
     UpdateDeviceTokenRequest,
     InactivateDeviceRequest,
@@ -42,6 +43,17 @@ async def mobile_register(
 ) -> RegisterPendingResponse:
     client_ip = _get_client_ip(request)
     result = await container.auth_service.mobile_register(container.redis, req, client_ip=client_ip)
+    return result
+
+
+@router.post("/register/resend-otp", response_model=RegisterPendingResponse)
+async def mobile_register_resend_otp(
+    req: ResendOtpRequest,
+    request: Request,
+    container: Container = Depends(get_container),
+) -> RegisterPendingResponse:
+    client_ip = _get_client_ip(request)
+    result = await container.auth_service.mobile_register_resend_otp(container.redis, req.email, client_ip=client_ip)
     return result
 
 
