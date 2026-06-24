@@ -7,6 +7,7 @@ from app.container import get_container, Container
 from app.core.config import settings
 from app.core.constant import AuditEventType
 from app.deps.token_auth import MobileUserSchema, get_current_mobile_user
+from app.deps.rate_limit import RateLimiter
 
 from app.schema.request.mobile.auth import (
     MobileLoginRequest,
@@ -35,7 +36,7 @@ def _get_client_ip(request: Request) -> str | None:
     return request.client.host if request.client else None
 
 
-@router.post("/register", response_model=RegisterPendingResponse)
+@router.post("/register", response_model=RegisterPendingResponse, dependencies=[Depends(RateLimiter(requests=5, window=60))])
 async def mobile_register(
     req: MobileRegisterRequest,
     request: Request,
@@ -46,7 +47,7 @@ async def mobile_register(
     return result
 
 
-@router.post("/register/resend-otp", response_model=RegisterPendingResponse)
+@router.post("/register/resend-otp", response_model=RegisterPendingResponse, dependencies=[Depends(RateLimiter(requests=5, window=60))])
 async def mobile_register_resend_otp(
     req: ResendOtpRequest,
     request: Request,
@@ -57,7 +58,7 @@ async def mobile_register_resend_otp(
     return result
 
 
-@router.post("/register/verify", response_model=MobileAuthResponse)
+@router.post("/register/verify", response_model=MobileAuthResponse, dependencies=[Depends(RateLimiter(requests=10, window=60))])
 async def mobile_register_verify(
     req: RegisterVerifyRequest,
     request: Request,
@@ -73,7 +74,7 @@ async def mobile_register_verify(
     return result
 
 
-@router.post("/login", response_model=MobileAuthResponse)
+@router.post("/login", response_model=MobileAuthResponse, dependencies=[Depends(RateLimiter(requests=5, window=60))])
 async def mobile_login(
     req: MobileLoginRequest,
     request: Request,

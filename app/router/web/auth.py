@@ -3,6 +3,7 @@ from app.container import Container, get_container
 from fastapi import Response
 
 from app.deps.cookie_auth import get_current_staff_user
+from app.deps.rate_limit import RateLimiter
 from app.schema.request.web.auth import WebAuthRequest
 from app.schema.response.web.auth import WebAuthResponse
 from app.schema.response.web.staff_user import StaffUserSchema
@@ -10,7 +11,7 @@ from db.generated.models import StaffUser
 router = APIRouter(prefix="/auth")
 
 
-@router.post("/login", response_model=WebAuthResponse,description="so here both the dahbsoard will authneticate from this endpoitn ")
+@router.post("/login", response_model=WebAuthResponse, description="so here both the dahbsoard will authneticate from this endpoitn ", dependencies=[Depends(RateLimiter(requests=5, window=60))])
 async def admin_login(
     req: WebAuthRequest,
     r:Response,

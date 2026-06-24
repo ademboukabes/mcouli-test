@@ -2,11 +2,22 @@ from fastapi import Request, HTTPException
 from typing import Callable
 
 from app.infra.redis import RedisClient
+from app.core.config import settings
+
+def _get_client_ip(request: Request) -> str:
+    if settings.TRUST_PROXY_HEADERS:
+        forwarded_for = request.headers.get("x-forwarded-for")
+        if forwarded_for:
+            return forwarded_for.split(",", maxsplit=1)[0].strip()
+        real_ip = request.headers.get("x-real-ip")
+        if real_ip:
+            return real_ip.strip()
+    return request.client.host if request.client else "127.0.0.1"
+
 
 def RateLimiter(requests: int, window: int) -> Callable:
     async def _rate_limit_dependency(request: Request) -> None:
-        client_ip = request.client.host if request.client else "127.0.0.1"
-        # We can also use user_id if we wanted to rate-limit per user, but IP is general.
+        client_ip = _get_client_ip(request)
         # For simplicity, IP based rate limit on the endpoint
         path = request.url.path
         key = f"rate_limit:{path}:{client_ip}"
