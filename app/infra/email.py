@@ -44,7 +44,7 @@ class EmailSender:
             method="POST"
         )
 
-        def _send():
+        def _send() -> bool:
             try:
                 with urllib.request.urlopen(req, timeout=10) as response:
                     res_body = response.read()

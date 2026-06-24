@@ -111,6 +111,7 @@ async def test_verify_mobile_register_success(
     mock_session = AsyncMock()
     mock_session.id = uuid.uuid4()
     mock_session_querier.upsert_session.return_value = mock_session
+    mock_device_querier.get_device_by_id.return_value = None
 
     # Act
     with patch("app.service.users.SessionService.cache_session_for_auth", new_callable=AsyncMock):
