@@ -96,6 +96,19 @@ services:
     networks:
       - multi_network
 
+  email-worker:
+    image: ghcr.io/microclub-usthb/multai-back:latest
+    container_name: multi_email_worker
+    restart: unless-stopped
+    env_file:
+      - .env.staging
+    depends_on:
+      - nats
+      - redis
+    command: ["uv", "run", "python", "-m", "app.worker.email_worker.main"]
+    networks:
+      - multi_network
+
 volumes:
   postgres_data:
   minio_data:

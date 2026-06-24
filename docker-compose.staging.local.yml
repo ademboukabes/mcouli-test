@@ -14,5 +14,13 @@ services:
       dockerfile: Dockerfile
     pull_policy: never
 
+  email-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    pull_policy: never
+    volumes:
+      - ./:/app
+
 volumes:
   insightface_cache:

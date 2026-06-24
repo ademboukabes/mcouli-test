@@ -25,6 +25,10 @@ class MeResponse(BaseModel):
     sessions: Optional[SessionSchema]
 
 
+class RegisterPendingResponse(BaseModel):
+    message: str
+    status: str
+    email: str
 
 class MobileAuthResponse(BaseModel):
     access_token: str

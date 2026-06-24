@@ -75,6 +75,10 @@ class Settings(BaseSettings):
     FACE_ENCRYPTION_KEY: str
     FIREBASE_CREDENTIALS_PATH: str
 
+    # Resend Email Configuration
+    RESEND_API_KEY: str = ""
+    EMAIL_FROM: str = "onboarding@resend.dev"
+
     model_config = SettingsConfigDict(
         env_file=".env",
         extra="ignore",

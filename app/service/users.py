@@ -22,8 +22,12 @@ from app.schema.request.mobile.auth import (
     MobileAuthBaseRequest,
     MobileLoginRequest,
     MobileRegisterRequest,
+    RegisterVerifyRequest,
 )
-from app.schema.response.mobile.auth import MobileAuthResponse
+from app.schema.response.mobile.auth import MobileAuthResponse, RegisterPendingResponse
+from app.infra.nats import NatsClient
+import secrets
+import json
 from db.generated import user as user_queries
 from db.generated import devices as device_queries
 from db.generated import session as session_queries
@@ -131,7 +135,7 @@ class AuthService:
         redis: RedisClient,
         req: MobileRegisterRequest,
         client_ip: Optional[str] = None,
-    ) -> MobileAuthResponse:
+    ) -> RegisterPendingResponse:
         logger.info("mobile_register attempt")
         max_attempts = settings.RATE_LIMIT_LOGIN_MAX_ATTEMPTS
         window = settings.RATE_LIMIT_LOGIN_WINDOW_SECONDS
@@ -154,16 +158,61 @@ class AuthService:
         if existing_user is not None:
             logger.warning("register attempt: email_already_in_use")
             raise AppException.conflict("Email already in use; please login instead")
+
         hashed = hash_password(req.password)
-        logger.info("register attempt: creating_new_user")
+        otp = "".join(secrets.choice("0123456789") for _ in range(6))
+
+        pending_key = f"pending_user:{req.email}"
+        pending_data = {
+            "hashed_password": hashed,
+        }
+
+        # Save in Redis for 10 minutes (600 seconds)
+        await redis.set(pending_key, json.dumps(pending_data), expire=600)
+        await redis.set(f"otp:{req.email}", otp, expire=600)
+
+        # Send to NATS
+        await NatsClient.publish("email.send_otp", json.dumps({"email": req.email, "otp": otp}).encode("utf-8"))
+
+        logger.info("register success, OTP sent to %s", req.email)
+        return RegisterPendingResponse(
+            message="OTP sent to email",
+            status="pending_verification",
+            email=req.email
+        )
+
+    async def verify_mobile_register(
+        self,
+        redis: RedisClient,
+        req: RegisterVerifyRequest,
+        client_ip: Optional[str] = None,
+    ) -> MobileAuthResponse:
+        otp_key = f"otp:{req.email}"
+        stored_otp = await redis.get(otp_key)
+
+        if not stored_otp or stored_otp != req.otp:
+            raise AppException.unauthorized("Invalid or expired OTP")
+
+        pending_key = f"pending_user:{req.email}"
+        raw_data = await redis.get(pending_key)
+        if not raw_data:
+            raise AppException.unauthorized("Registration session expired")
+
+        data = json.loads(raw_data)
+
         try:
-            user = await self.user_querier.create_user(email=req.email, hashed_password=hashed)
+            user = await self.user_querier.create_user(email=req.email, hashed_password=data["hashed_password"])
             if not user:
                 raise AppException.internal_error("Failed to create user")
         except SQLAlchemyError as exc:
             logger.error("Failed to create user: %s", exc)
             raise DBException.handle(exc)
-        logger.info("register success user_id=%s", user.id)
+
+        # Clean up redis
+        await redis.delete(otp_key)
+        await redis.delete(pending_key)
+
+        logger.info("register verify success user_id=%s", user.id)
         return await self._create_mobile_session(
             redis=redis,
             user=user,

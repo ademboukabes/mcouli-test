@@ -63,6 +63,10 @@ class MobileLoginRequest(MobileAuthBaseRequest):
     pass
 
 
+class RegisterVerifyRequest(MobileAuthBaseRequest):
+    otp: str = Field(..., min_length=6, max_length=6, description="The 6-digit OTP code sent via email")
+
+
 
 
 
