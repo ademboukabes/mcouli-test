@@ -15,7 +15,8 @@ This folder contains everything you need to run the multAI backend locally. You 
 
 * `docker-compose.mobile.yml` — defines all backend services
 * `.env.mobile` — environment variables (copy from `.env.mobile.example`)
-* `scripts/seed.py` — database seed script
+* `seed.py` — database seed script
+* `.mypy_cache/` — local Python type-check cache (safe to ignore/delete)
 * `README.md` — this file
 
 ---
@@ -46,7 +47,7 @@ This pulls and starts the following containers:
 ### 3. Copy the seed script into the container
 
 ```bash
-docker cp scripts/seed.py multai-mobile-test-fastapi-1:/app/seed.py
+docker cp seed.py multai-mobile-test-fastapi-1:/app/seed.py
 ```
 
 > **Note:** Wait for all containers to show as running before doing this.
@@ -126,7 +127,7 @@ If you want a completely clean state:
 ```bash
 docker compose -f docker-compose.mobile.yml down -v
 docker compose -f docker-compose.mobile.yml up -d
-docker cp scripts/seed.py multai-mobile-test-fastapi-1:/app/seed.py
+docker cp seed.py multai-mobile-test-fastapi-1:/app/seed.py
 docker compose -f docker-compose.mobile.yml exec fastapi uv run python seed.py --reset
 ```
 
@@ -141,7 +142,7 @@ When the backend team pushes a new version:
 ```bash
 docker compose -f docker-compose.mobile.yml pull
 docker compose -f docker-compose.mobile.yml up -d
-docker cp scripts/seed.py multai-mobile-test-fastapi-1:/app/seed.py
+docker cp seed.py multai-mobile-test-fastapi-1:/app/seed.py
 ```
 
 > Re-copy the seed script after updating since the container is recreated.
