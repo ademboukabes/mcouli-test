@@ -50,3 +50,14 @@ async def require_multi_team_lead_staff(
     current_staff_user: Annotated[StaffUser, Depends(get_current_staff_user)],
 ) -> StaffUser:
     return ensure_multi_team_lead_staff(current_staff_user)
+
+
+def ensure_admin_staff(current_staff_user: StaffUser) -> StaffUser:
+    if _role_value(current_staff_user.role) != StaffRole.ADMIN.value:
+        raise AppException.forbidden("Admin access required")
+    return current_staff_user
+
+async def require_admin_staff(
+    current_staff_user: Annotated[StaffUser, Depends(get_current_staff_user)],
+) -> StaffUser:
+    return ensure_admin_staff(current_staff_user)

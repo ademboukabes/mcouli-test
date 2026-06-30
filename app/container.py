@@ -37,7 +37,10 @@ from db.generated import eventParticipant as participant_queries
 from db.generated import stuff_user as staff_queries
 from db.generated import notifications as notification_queries
 from db.generated import audit as audit_queries
+from db.generated import stats as stats_queries
+
 from app.service.event import EventService
+from app.service.stats import StatsService
 from app.worker.notification.notification_queue import NotificationQueue
 from app.worker.notification.settings import NotifSetting
 
@@ -70,7 +73,7 @@ class Container:
         self.event_querier = event_queries.AsyncQuerier(conn)
         self.participant_querier = participant_queries.AsyncQuerier(conn)
         self.staff_querier = staff_queries.AsyncQuerier(conn)
-
+        self.stats_querier = stats_queries.AsyncQuerier(conn)
 
         # services
         self.session_service = SessionService()
@@ -148,6 +151,10 @@ class Container:
             photo_face_querier=self.photo_face_querier,
             photo_approval_querier=self.photo_approval_querier,
             staff_drive_service=self.staff_drive_service,
+        )
+
+        self.stats_service = StatsService(
+            querier=self.stats_querier,
         )
 
 async def get_container(
