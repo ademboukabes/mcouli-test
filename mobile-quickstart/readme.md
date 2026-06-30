@@ -121,28 +121,26 @@ docker compose -f docker-compose.mobile.yml down
 ---
 
 ## Reset everything
-
-If you want a completely clean state:
-
+If you want a completely clean state with the latest image:
 ```bash
 docker compose -f docker-compose.mobile.yml down -v
+docker compose -f docker-compose.mobile.yml pull
 docker compose -f docker-compose.mobile.yml up -d
+docker compose -f docker-compose.mobile.yml ps
 docker cp seed.py multai-mobile-test-fastapi-1:/app/seed.py
-docker compose -f docker-compose.mobile.yml exec fastapi uv run python seed.py --reset
+docker compose -f docker-compose.mobile.yml exec fastapi uv run python seed.py
 ```
-
-> `down -v` removes all volumes so the database and MinIO storage are completely wiped.
+> `down -v` removes all volumes. `pull` grabs the latest backend image before recreating containers. Check the `ps` output shows all containers as `Up`/`Healthy` before running the seed step — copying the seed script too early (before the fastapi container is ready) will fail.
 
 ---
 
 ## Update to the latest backend
-
 When the backend team pushes a new version:
-
 ```bash
 docker compose -f docker-compose.mobile.yml pull
 docker compose -f docker-compose.mobile.yml up -d
+docker compose -f docker-compose.mobile.yml ps
 docker cp seed.py multai-mobile-test-fastapi-1:/app/seed.py
+docker compose -f docker-compose.mobile.yml exec fastapi uv run python seed.py
 ```
-
-> Re-copy the seed script after updating since the container is recreated.
+> Re-copy the seed script after updating since the container is recreated. Run `ps` first to confirm the new container is actually up before copying/seeding.

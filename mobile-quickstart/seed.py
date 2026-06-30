@@ -12,8 +12,8 @@ What this does:
   - Creates upload request groups and requests for staff review endpoints
 
 Usage:
-  docker compose exec fastapi uv run python scripts/seed.py
-  docker compose exec fastapi uv run python scripts/seed.py --reset
+  docker compose -f docker-compose.mobile.yml exec fastapi uv run python seed.py
+  docker compose -f docker-compose.mobile.yml exec fastapi uv run python seed.py --reset
 """
 
 import asyncio
