@@ -23,7 +23,7 @@ def pytest_configure(config: pytest.Config) -> None:
 async def setup_infra() -> AsyncGenerator[None, None]:
     if os.getenv("MULTAI_RUN_E2E") != "1":
         pytest.skip("set MULTAI_RUN_E2E=1 to run live e2e tests")
-    
+
     await init_minio_client(
         minio_host=settings.MINIO_HOST,
         minio_port=settings.MINIO_API_PORT,

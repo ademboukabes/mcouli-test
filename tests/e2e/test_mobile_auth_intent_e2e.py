@@ -67,7 +67,7 @@ class TestMobileAuthEndpointsE2E:
         import redis
         r = redis.Redis(host="localhost", port=6379, decode_responses=True)
         otp = r.get(f"otp:{email}")
-        
+
         verify_payload = {
             "email": email,
             "password": "ValidPass@123",
@@ -113,7 +113,7 @@ class TestMobileAuthEndpointsE2E:
         )
         assert register_response.status_code == 200
         assert register_response.json()["status"] == "pending_verification"
-        
+
         import redis
         r = redis.Redis(host="localhost", port=6379, decode_responses=True)
         otp = r.get(f"otp:{email}")
@@ -176,7 +176,7 @@ class TestMobileAuthEndpointsE2E:
             headers=self.headers,
         )
         assert register_response.status_code == 200
-        
+
         import redis
         r = redis.Redis(host="localhost", port=6379, decode_responses=True)
         otp = r.get(f"otp:{email}")
