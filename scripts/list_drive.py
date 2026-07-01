@@ -24,7 +24,8 @@ async def main():
         row = (await conn.execute(sqlalchemy.text("SELECT id FROM staff_users LIMIT 1"))).fetchone()
         staff_user_id = row[0]
 
-        class DummyUser: pass
+        class DummyUser:
+            pass
         staff_user = DummyUser()
         staff_user.id = staff_user_id
 
