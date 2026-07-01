@@ -4,6 +4,7 @@ from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
+from unittest.mock import AsyncMock, patch
 
 from app.container import get_container
 from app.main import app
@@ -67,7 +68,6 @@ def fake_container() -> FakeContainer:
     return FakeContainer()
 
 
-from unittest.mock import AsyncMock, patch
 
 @pytest.fixture
 def client(fake_container: FakeContainer) -> Iterator[TestClient]:

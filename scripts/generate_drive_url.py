@@ -26,7 +26,8 @@ async def main():
         else:
             staff_user_id = row[0]
 
-        class DummyUser: pass
+        class DummyUser:
+            pass
         staff_user = DummyUser()
         staff_user.id = staff_user_id
 

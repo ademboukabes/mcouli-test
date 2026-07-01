@@ -3,7 +3,6 @@ import json
 import uuid
 from sqlalchemy.ext.asyncio import create_async_engine
 from app.core.config import settings
-from db.generated import stuff_user as staff_queries
 from app.infra.redis import RedisClient
 from app.infra.minio import init_minio_client
 from app.infra.nats import NatsClient, NatsSubjects
@@ -32,7 +31,7 @@ async def main():
     )
 
     async with engine.connect() as conn:
-        q = staff_queries.AsyncQuerier(conn)
+        # staff_queries not used here but kept for context
         import sqlalchemy
         row = (await conn.execute(sqlalchemy.text("SELECT id FROM staff_users LIMIT 1"))).fetchone()
         staff_user_id = row[0]
