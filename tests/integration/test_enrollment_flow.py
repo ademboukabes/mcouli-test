@@ -26,7 +26,7 @@ def mock_face_embedding() -> AsyncMock:
     from app.service.face_embedding import FaceEmbeddingService
     svc = MagicMock(spec=FaceEmbeddingService)
     # Return a dummy embedding of size 512
-    svc.compute_average_embedding = AsyncMock(return_value=[0.1] * 512)
+    svc.compute_average_embedding_stream = AsyncMock(return_value=[0.1] * 512)
     return svc
 
 
@@ -92,7 +92,7 @@ async def test_enrollment_persists_embedding(
         assert "0.1" in str(updated_user.face_embedding)
 
         # Face embedding service should have been called
-        mock_face_embedding.compute_average_embedding.assert_called_once()
+        mock_face_embedding.compute_average_embedding_stream.assert_called_once()
 
     finally:
         # Cleanup
