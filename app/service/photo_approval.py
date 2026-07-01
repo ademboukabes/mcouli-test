@@ -66,7 +66,7 @@ class PhotoApprovalService:
 
     async def expire_stale(self, timeout_days: int) -> int:
         count = 0
-        async for _ in self._approval_querier.expire_stale_approvals(dollar_1=timeout_days):
+        async for _ in self._approval_querier.expire_stale_approvals(timeout_days=timeout_days):
             count += 1
         if count:
             logger.info("Auto-expired %d stale pending photo(s)", count)
