@@ -62,14 +62,22 @@ SELECT id, event_id, uploaded_by, storage_key, taken_at, day_number, visibility,
 
 
 LIST_EVENT_PHOTOS_FOR_USER = """-- name: list_event_photos_for_user \\:many
-SELECT DISTINCT p.id, p.event_id, p.uploaded_by, p.storage_key, p.taken_at, p.day_number, p.visibility, p.status, p.created_at
+SELECT p.id, p.event_id, p.uploaded_by, p.storage_key, p.taken_at, p.day_number, p.visibility, p.status, p.created_at
 FROM photos p
-LEFT JOIN photo_faces pf ON pf.photo_id = p.id
-LEFT JOIN face_matches fm ON fm.photo_face_id = pf.id AND fm.user_id = :p1
-LEFT JOIN photo_approvals pa ON pa.photo_id = p.id AND pa.user_id = :p1
 WHERE p.event_id = :p2
-  AND p.status = 'approved'
-  AND (p.visibility = 'public' OR fm.user_id = :p1 OR pa.user_id = :p1)
+AND p.status = 'approved'
+AND (
+  p.visibility = 'public'
+  OR EXISTS (
+    SELECT 1 FROM photo_faces pf
+    JOIN face_matches fm ON fm.photo_face_id = pf.id
+    WHERE pf.photo_id = p.id AND fm.user_id = :p1
+  )
+  OR EXISTS (
+    SELECT 1 FROM photo_approvals pa
+    WHERE pa.photo_id = p.id AND pa.user_id = :p1
+  )
+)
 ORDER BY
   CASE WHEN :p3 = 'asc' THEN p.created_at END ASC,
   CASE WHEN :p3 != 'asc' THEN p.created_at END DESC
@@ -87,13 +95,20 @@ class ListEventPhotosForUserParams:
 
 
 LIST_USER_PHOTOS = """-- name: list_user_photos \\:many
-SELECT DISTINCT p.id, p.event_id, p.uploaded_by, p.storage_key, p.taken_at, p.day_number, p.visibility, p.status, p.created_at
+SELECT p.id, p.event_id, p.uploaded_by, p.storage_key, p.taken_at, p.day_number, p.visibility, p.status, p.created_at
 FROM photos p
-LEFT JOIN photo_faces pf ON pf.photo_id = p.id
-LEFT JOIN face_matches fm ON fm.photo_face_id = pf.id AND fm.user_id = :p1
-LEFT JOIN photo_approvals pa ON pa.photo_id = p.id AND pa.user_id = :p1
-WHERE (fm.user_id = :p1 OR pa.user_id = :p1)
-  AND (:p2\\:\\:uuid IS NULL OR p.event_id = :p2)
+WHERE (
+  EXISTS (
+    SELECT 1 FROM photo_faces pf
+    JOIN face_matches fm ON fm.photo_face_id = pf.id
+    WHERE pf.photo_id = p.id AND fm.user_id = :p1
+  )
+  OR EXISTS (
+    SELECT 1 FROM photo_approvals pa
+    WHERE pa.photo_id = p.id AND pa.user_id = :p1
+  )
+)
+AND (:p2\\:\\:uuid IS NULL OR p.event_id = :p2)
 ORDER BY
   CASE WHEN :p3 = 'asc' THEN p.created_at END ASC,
   CASE WHEN :p3 != 'asc' THEN p.created_at END DESC

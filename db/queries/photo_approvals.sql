@@ -19,15 +19,15 @@ SELECT * FROM photo_approvals WHERE photo_id = $1;
 
 -- name: ExpireStaleApprovals :many
 WITH stale_photos AS (
-    SELECT id FROM photos
-    WHERE status = 'pending'
-      AND created_at < now() - make_interval(days => $1::int)
+SELECT id FROM photos
+WHERE status = 'pending'
+AND created_at < now() - make_interval(days => sqlc.arg('timeout_days')::int)
 ),
 _update_approvals AS (
-    UPDATE photo_approvals
-    SET decision = 'approved', decided_at = now()
-    WHERE photo_id IN (SELECT id FROM stale_photos)
-      AND decision = 'pending'
+UPDATE photo_approvals
+SET decision = 'approved', decided_at = now()
+WHERE photo_id IN (SELECT id FROM stale_photos)
+AND decision = 'pending'
 )
 UPDATE photos
 SET status = 'approved'

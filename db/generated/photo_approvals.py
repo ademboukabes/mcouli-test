@@ -25,15 +25,15 @@ RETURNING id, photo_id, user_id, decision, decided_at
 
 EXPIRE_STALE_APPROVALS = """-- name: expire_stale_approvals \\:many
 WITH stale_photos AS (
-    SELECT id FROM photos
-    WHERE status = 'pending'
-      AND created_at < now() - make_interval(days => :p1\\:\\:int)
+SELECT id FROM photos
+WHERE status = 'pending'
+AND created_at < now() - make_interval(days => :p1\\:\\:int)
 ),
 _update_approvals AS (
-    UPDATE photo_approvals
-    SET decision = 'approved', decided_at = now()
-    WHERE photo_id IN (SELECT id FROM stale_photos)
-      AND decision = 'pending'
+UPDATE photo_approvals
+SET decision = 'approved', decided_at = now()
+WHERE photo_id IN (SELECT id FROM stale_photos)
+AND decision = 'pending'
 )
 UPDATE photos
 SET status = 'approved'
@@ -80,8 +80,8 @@ class AsyncQuerier:
             decided_at=row[4],
         )
 
-    async def expire_stale_approvals(self, *, dollar_1: int) -> AsyncIterator[uuid.UUID]:
-        result = await self._conn.stream(sqlalchemy.text(EXPIRE_STALE_APPROVALS), {"p1": dollar_1})
+    async def expire_stale_approvals(self, *, timeout_days: int) -> AsyncIterator[uuid.UUID]:
+        result = await self._conn.stream(sqlalchemy.text(EXPIRE_STALE_APPROVALS), {"p1": timeout_days})
         async for row in result:
             yield row[0]
 
