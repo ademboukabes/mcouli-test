@@ -63,7 +63,9 @@ warn_redundant_casts = true
 follow_imports = "silent"
 files = ["app", "db", "migrations"]
 exclude = [
-    "db/generated"
+    "db/generated",
+    "tests",
+    "scripts"
 ]
 [dependency-groups]
 dev = [
