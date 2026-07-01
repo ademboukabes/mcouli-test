@@ -45,7 +45,7 @@ def mock_staged_upload_storage_service() -> AsyncMock:
 
 
 @pytest.mark.asyncio
-async def test_group_photo_auto_approve_no_users(
+async def test_group_photo_pending_no_users(
     mock_conn: AsyncMock,
     mock_face_embedding_service: AsyncMock,
     mock_single_face_service: AsyncMock,
@@ -84,9 +84,9 @@ async def test_group_photo_auto_approve_no_users(
     # Verify notifications were NOT sent
     mock_notification_service.create_notification.assert_not_called()
 
-    # Verify photo is marked public and approved
-    mock_photo_querier.update_photo_status.assert_called_once_with(id=photo_id, status="approved")
-    mock_photo_querier.update_photo_visibility.assert_called_once_with(id=photo_id, visibility="public")
+    # Verify photo stays pending (not marked public or approved)
+    mock_photo_querier.update_photo_status.assert_not_called()
+    mock_photo_querier.update_photo_visibility.assert_not_called()
 
 
 @pytest.mark.asyncio

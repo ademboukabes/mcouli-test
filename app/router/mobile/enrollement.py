@@ -51,6 +51,7 @@ def _sanitise_filename(raw: str | None, extension: str) -> str:
     if not raw:
         return f"{prefix}.{extension}"
     name = re.sub(r'[\\/:*?"<>|\x00-\x1f]', "_", raw)
+    name = name.replace("..", "_")
     name = name.lstrip(".")[:128]
     return f"{prefix}_{name}"
 
