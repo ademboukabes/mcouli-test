@@ -9,7 +9,6 @@ from db.generated import photos as photo_queries
 from db.generated import staff_drive_connections as drive_queries
 from db.generated import staff_notifications as notif_queries
 from db.generated import audit as audit_queries
-from db.generated import events as event_queries
 from app.service.upload_requests import UploadRequestsService
 from app.service.staged_upload_storage import StagedUploadStorageService
 from app.service.staff_drive import StaffDriveService
@@ -24,7 +23,7 @@ import uuid
 async def main():
     url = f"postgresql+asyncpg://{settings.POSTGRES_USER}:{settings.POSTGRES_PASSWORD}@{settings.POSTGRES_HOST}:{settings.POSTGRES_PORT}/{settings.POSTGRES_DB}"
     engine = create_async_engine(url)
-    
+
     try:
         RedisClient.init(host=settings.REDIS_HOST, port=settings.REDIS_PORT, password=settings.REDIS_PASSWORD or "")
     except RuntimeError:
@@ -50,7 +49,7 @@ async def main():
         import sqlalchemy
         row = (await conn.execute(sqlalchemy.text("SELECT id FROM staff_users LIMIT 1"))).fetchone()
         staff_user_id = row[0]
-            
+
         class DummyUser: pass
         staff_user = DummyUser()
         staff_user.id = staff_user_id
@@ -80,7 +79,7 @@ async def main():
         # Get staged photos from minio bucket for this staff user
         from app.infra.minio import ImageBucket
         bucket = ImageBucket(f"staff-drive/{staff_user_id}")
-        
+
         objects = bucket.client.list_objects(bucket.bucket_name, prefix=bucket.file_prefix + "/", recursive=True)
         photo_inputs = []
         async for obj in objects:
@@ -91,13 +90,13 @@ async def main():
             ))
             if len(photo_inputs) >= 20:
                 break
-                
+
         if not photo_inputs:
             print("No staged photos found in minio.")
             return
 
         print(f"Submitting {len(photo_inputs)} photos to upload request...")
-        
+
         req_details = await upload_service.create_upload(
             event_id=event_id,
             folder_id="drive-import",
@@ -106,12 +105,12 @@ async def main():
             day_number=1,
             requested_by=staff_user,
         )
-        
+
         print(f"Created upload request! ID: {req_details.id}")
         print("Approving upload request to trigger AI pipeline...")
-        
+
         await upload_service.approve_request(request_id=req_details.id, approved_by=staff_user)
-        
+
         print("Done! Photos should now be processed by AI.")
 
 asyncio.run(main())

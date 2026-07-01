@@ -1,4 +1,3 @@
-import asyncio
 import uuid
 import jwt
 from datetime import datetime, timedelta, timezone
@@ -48,7 +47,7 @@ async def test_jwt_validation_invalid_signature(client):
         "exp": datetime.now(timezone.utc) + timedelta(hours=1),
     }
     invalid_token = jwt.encode(payload, "wrong_secret_key", algorithm="HS256")
-    
+
     # We must use "Bearer "
     response = await client.get(
         "/user/photos",
@@ -60,7 +59,7 @@ async def test_jwt_validation_invalid_signature(client):
 async def test_jwt_validation_expired_token(client):
     """Test that an expired JWT is rejected."""
     expired_token = create_mock_jwt(str(uuid.uuid4()), exp_delta_hours=-1)
-    
+
     response = await client.get(
         "/user/photos",
         headers={"Authorization": f"Bearer {expired_token}"}
@@ -77,18 +76,18 @@ async def test_blocked_user_access(client):
             hashed_password="hash"
         )
         user_id = user.id
-        
+
         # We need a session ID to put in the JWT, otherwise the auth dependency fails with "Invalid token"
         session_id = uuid.uuid4()
-        
+
         await uq.set_user_blocked(blocked=True, id=user_id)
-        
+
     payload = {
         "session_id": str(session_id),
         "exp": datetime.now(timezone.utc) + timedelta(hours=1),
     }
     token = jwt.encode(payload, settings.jwt_secret, algorithm="HS256")
-    
+
     try:
         response = await client.get(
             "/user/photos",
@@ -125,7 +124,7 @@ async def test_rate_limiting(client):
                 headers={"Authorization": f"Bearer {token}"}
             )
             responses.append(res.status_code)
-            
+
         assert 429 in responses, "Expected to hit rate limit (429) after multiple rapid requests"
     finally:
         async with engine.begin() as conn:

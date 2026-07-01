@@ -276,9 +276,9 @@ def test_register_then_login_same_device_succeeds(
     assert result1.status == "pending_verification"
 
     # Try to register again (should just resend OTP, not fail with 409 because user is not yet fully enrolled)
-    # Actually, we expect 200 with pending_verification again if they try to register while pending, OR it might 
-    # just succeed. Wait, the actual flow drops it in Redis and returns pending. So it won't raise 409 unless 
-    # the user is IN THE DB. Since FakeUserQuerier won't have it, it won't raise 409. 
+    # Actually, we expect 200 with pending_verification again if they try to register while pending, OR it might
+    # just succeed. Wait, the actual flow drops it in Redis and returns pending. So it won't raise 409 unless
+    # the user is IN THE DB. Since FakeUserQuerier won't have it, it won't raise 409.
     # We will just verify OTP instead.
 
     # Now verify to fully create user
@@ -295,7 +295,7 @@ def test_register_then_login_same_device_succeeds(
     import json
     fake_redis._store["otp:newuser@example.com"] = "123456"
     fake_redis._store["pending_user:newuser@example.com"] = json.dumps({"hashed_password": hash_password(password)})
-    
+
     # We have to stub get() on FakeRedis since it doesn't support it by default
     async def fake_get(key: str) -> str | None:
         return fake_redis._store.get(key)
@@ -410,7 +410,7 @@ def test_register_concurrent_signup_integrity_error() -> None:
         face_embedding_service=FakeFaceEmbeddingService(),
     )
 
-    # Stub create_user to raise IntegrityError during VERIFY, because mobile_register 
+    # Stub create_user to raise IntegrityError during VERIFY, because mobile_register
     # no longer calls create_user directly!
     from app.schema.request.mobile.auth import RegisterVerifyRequest
     verify_req = RegisterVerifyRequest(
@@ -421,7 +421,7 @@ def test_register_concurrent_signup_integrity_error() -> None:
         device_type="android",
         device_id=uuid.uuid4(),
     )
-    
+
     fake_redis = FakeRedis()
     import json
     fake_redis._store["otp:newuser@example.com"] = "123456"

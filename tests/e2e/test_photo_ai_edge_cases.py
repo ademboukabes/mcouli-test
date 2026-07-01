@@ -1,17 +1,10 @@
-import asyncio
 import json
-import os
 import uuid
-from collections.abc import AsyncGenerator
-from pathlib import Path
 
-import pytest
 from sqlalchemy import text
-from sqlalchemy.ext.asyncio import AsyncConnection
 
-from app.core.config import settings
 from app.infra.database import engine
-from app.infra.minio import Bucket, IMAGES_BUCKET_NAME, init_minio_client
+from app.infra.minio import Bucket, IMAGES_BUCKET_NAME
 from app.infra.nats import NatsClient, NatsSubjects
 
 from tests.e2e.conftest import _seed_event_and_photo, _wait_for_job, _cleanup, FIXTURE_DIR
