@@ -96,6 +96,7 @@ async def test_enrollment_persists_embedding(
 
     finally:
         # Cleanup
+        await db_conn.rollback()
         await db_conn.execute(
             text(f"DELETE FROM users WHERE id = '{user_id}'")
         )

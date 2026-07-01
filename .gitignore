@@ -9,3 +9,9 @@ db.txt
 
 .venv
 multiai-c9380-firebase-adminsdk-fbsvc-cb6e5ce41b.json
+
+# Local Test & Debug Files
+.coverage
+dummy.json
+test_output.log
+*.log

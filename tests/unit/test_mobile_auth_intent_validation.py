@@ -113,6 +113,9 @@ class FakeRedis:
     async def set(self, key: str, value: str, expire: int) -> None:
         return None
 
+    async def delete(self, key: str) -> None:
+        self._store.pop(key, None)
+
 
 class FakeFaceEmbeddingService:
     pass
@@ -233,9 +236,7 @@ def test_register_with_new_email_succeeds(
     monkeypatch.setattr(users_module, "Get_expiry_time", lambda: 3600)
 
     result = asyncio.run(service.mobile_register(FakeRedis(), req))
-    assert result.access_token == "access"
-    assert result.refresh_token == "refresh"
-    assert result.is_new_user is True
+    assert result.status == "pending_verification"
 
 
 def test_register_then_login_same_device_succeeds(
@@ -270,13 +271,38 @@ def test_register_then_login_same_device_succeeds(
         device_type="android",
         device_id=device_id,
     )
-    result1 = asyncio.run(service.mobile_register(FakeRedis(), register_req))
-    assert result1.is_new_user is True
+    fake_redis = FakeRedis()
+    result1 = asyncio.run(service.mobile_register(fake_redis, register_req))
+    assert result1.status == "pending_verification"
 
-    # Try to register again (should fail)
-    with pytest.raises(HTTPException) as exc_info:
-        asyncio.run(service.mobile_register(FakeRedis(), register_req))
-    assert exc_info.value.status_code == 409
+    # Try to register again (should just resend OTP, not fail with 409 because user is not yet fully enrolled)
+    # Actually, we expect 200 with pending_verification again if they try to register while pending, OR it might 
+    # just succeed. Wait, the actual flow drops it in Redis and returns pending. So it won't raise 409 unless 
+    # the user is IN THE DB. Since FakeUserQuerier won't have it, it won't raise 409. 
+    # We will just verify OTP instead.
+
+    # Now verify to fully create user
+    from app.schema.request.mobile.auth import RegisterVerifyRequest
+    verify_req = RegisterVerifyRequest(
+        email="newuser@example.com",
+        password=password,
+        otp="123456",
+        device_name="TestDevice",
+        device_type="android",
+        device_id=device_id,
+    )
+    # Fake Redis returning the raw data and otp
+    import json
+    fake_redis._store["otp:newuser@example.com"] = "123456"
+    fake_redis._store["pending_user:newuser@example.com"] = json.dumps({"hashed_password": hash_password(password)})
+    
+    # We have to stub get() on FakeRedis since it doesn't support it by default
+    async def fake_get(key: str) -> str | None:
+        return fake_redis._store.get(key)
+    fake_redis.get = fake_get # type: ignore
+
+    verify_result = asyncio.run(service.verify_mobile_register(fake_redis, verify_req))
+    assert verify_result.is_new_user is True
 
     # Now login
     login_req = MobileLoginRequest(
@@ -384,16 +410,28 @@ def test_register_concurrent_signup_integrity_error() -> None:
         face_embedding_service=FakeFaceEmbeddingService(),
     )
 
-    req = MobileRegisterRequest(
+    # Stub create_user to raise IntegrityError during VERIFY, because mobile_register 
+    # no longer calls create_user directly!
+    from app.schema.request.mobile.auth import RegisterVerifyRequest
+    verify_req = RegisterVerifyRequest(
         email="newuser@example.com",
         password="ValidPass@123",
+        otp="123456",
         device_name="Pixel 8",
         device_type="android",
         device_id=uuid.uuid4(),
     )
+    
+    fake_redis = FakeRedis()
+    import json
+    fake_redis._store["otp:newuser@example.com"] = "123456"
+    fake_redis._store["pending_user:newuser@example.com"] = json.dumps({"hashed_password": hash_password("ValidPass@123")})
+    async def fake_get(key: str) -> str | None:
+        return fake_redis._store.get(key)
+    fake_redis.get = fake_get # type: ignore
 
     with pytest.raises(HTTPException) as exc_info:
-        asyncio.run(service.mobile_register(FakeRedis(), req))
+        asyncio.run(service.verify_mobile_register(fake_redis, verify_req))
 
     assert exc_info.value.status_code == 409
     assert "already in use" in exc_info.value.detail.lower()

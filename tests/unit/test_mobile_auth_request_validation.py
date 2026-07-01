@@ -8,7 +8,7 @@ from fastapi.testclient import TestClient
 from app.container import get_container
 from app.main import app
 from app.schema.request.mobile.auth import MobileLoginRequest, MobileRegisterRequest
-from app.schema.response.mobile.auth import MobileAuthResponse
+from app.schema.response.mobile.auth import MobileAuthResponse, RegisterPendingResponse
 
 
 class FakeAuthService:
@@ -23,16 +23,13 @@ class FakeAuthService:
         redis: object,
         req: MobileRegisterRequest,
         client_ip: object = None,
-    ) -> MobileAuthResponse:
+    ) -> RegisterPendingResponse:
         self.register_request = req
         self.register_client_ip = client_ip
-        return MobileAuthResponse(
-            access_token="access",
-            refresh_token="refresh",
-            session_id=str(uuid.uuid4()),
-            expires_in=3600,
-            user_id=uuid.uuid4(),
-            is_new_user=True,
+        return RegisterPendingResponse(
+            message="OTP sent",
+            status="pending_verification",
+            email=req.email,
         )
 
     async def mobile_login(
@@ -70,13 +67,19 @@ def fake_container() -> FakeContainer:
     return FakeContainer()
 
 
+from unittest.mock import AsyncMock, patch
+
 @pytest.fixture
 def client(fake_container: FakeContainer) -> Iterator[TestClient]:
     app.dependency_overrides[get_container] = lambda: fake_container
-    try:
-        yield TestClient(app)
-    finally:
-        app.dependency_overrides.clear()
+    with patch("app.deps.rate_limit.RedisClient.get_instance") as mock_get_instance:
+        mock_redis = AsyncMock()
+        mock_redis.incr.return_value = 1
+        mock_get_instance.return_value = mock_redis
+        try:
+            yield TestClient(app)
+        finally:
+            app.dependency_overrides.clear()
 
 
 def _valid_payload() -> dict[str, object]:

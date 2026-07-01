@@ -58,16 +58,39 @@ class TestMobileAuthEndpointsE2E:
             headers=self.headers,
         )
         assert response1.status_code == 200
-        assert response1.json()["is_new_user"] is True
+        assert response1.json()["status"] == "pending_verification"
 
-        # Second registration with same email fails
+        # Second registration with same email should also succeed and resend OTP
+        # Wait, if they are still pending, it just overwrites the pending data.
+        # But if they are FULLY registered, it returns 409.
+        # Let's verify them first to fully register them.
+        import redis
+        r = redis.Redis(host="localhost", port=6379, decode_responses=True)
+        otp = r.get(f"otp:{email}")
+        
+        verify_payload = {
+            "email": email,
+            "password": "ValidPass@123",
+            "otp": otp,
+            "device_name": "TestDevice",
+            "device_type": "android",
+            "device_id": device_id,
+        }
+        verify_response = requests.post(
+            f"{self.base_url}/user/auth/register/verify",
+            json=verify_payload,
+            headers=self.headers,
+        )
+        assert verify_response.status_code == 200
+
+        # Now second registration with same email fails
         response2 = requests.post(
             f"{self.base_url}/user/auth/register",
             json=register_payload,
             headers=self.headers,
         )
         assert response2.status_code == 409
-        assert "already" in response2.json()["detail"].lower()
+        assert "already in use" in response2.json()["detail"].lower()
 
     def test_register_then_login_succeeds(self) -> None:
         """Test full flow: register then login."""
@@ -89,8 +112,28 @@ class TestMobileAuthEndpointsE2E:
             headers=self.headers,
         )
         assert register_response.status_code == 200
-        assert register_response.json()["is_new_user"] is True
-        register_token = register_response.json()["access_token"]
+        assert register_response.json()["status"] == "pending_verification"
+        
+        import redis
+        r = redis.Redis(host="localhost", port=6379, decode_responses=True)
+        otp = r.get(f"otp:{email}")
+
+        verify_payload = {
+            "email": email,
+            "password": password,
+            "otp": otp,
+            "device_name": "TestDevice",
+            "device_type": "android",
+            "device_id": device_id,
+        }
+        verify_response = requests.post(
+            f"{self.base_url}/user/auth/register/verify",
+            json=verify_payload,
+            headers=self.headers,
+        )
+        assert verify_response.status_code == 200
+        assert verify_response.json()["is_new_user"] is True
+        register_token = verify_response.json()["access_token"]
 
         # Login with same credentials
         login_payload = {
@@ -133,6 +176,25 @@ class TestMobileAuthEndpointsE2E:
             headers=self.headers,
         )
         assert register_response.status_code == 200
+        
+        import redis
+        r = redis.Redis(host="localhost", port=6379, decode_responses=True)
+        otp = r.get(f"otp:{email}")
+
+        verify_payload = {
+            "email": email,
+            "password": password,
+            "otp": otp,
+            "device_name": "TestDevice",
+            "device_type": "android",
+            "device_id": device_id,
+        }
+        verify_response = requests.post(
+            f"{self.base_url}/user/auth/register/verify",
+            json=verify_payload,
+            headers=self.headers,
+        )
+        assert verify_response.status_code == 200
 
         # Try to login with wrong password
         login_payload = {

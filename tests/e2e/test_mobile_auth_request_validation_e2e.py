@@ -40,7 +40,8 @@ def test_live_register_login_rejects_empty_required_text_fields(
     payload = _valid_payload()
     payload[field] = value
 
-    response = httpx.post(url, json=payload, timeout=10.0)
+    headers = {"X-Forwarded-For": f"203.0.113.{uuid.uuid4().int % 250 + 1}"}
+    response = httpx.post(url, json=payload, headers=headers, timeout=10.0)
 
     assert response.status_code == 422
 
@@ -50,6 +51,7 @@ def test_live_register_login_rejects_padded_short_password(url: str) -> None:
     payload = _valid_payload()
     payload["password"] = "       a"
 
-    response = httpx.post(url, json=payload, timeout=10.0)
+    headers = {"X-Forwarded-For": f"203.0.113.{uuid.uuid4().int % 250 + 1}"}
+    response = httpx.post(url, json=payload, headers=headers, timeout=10.0)
 
     assert response.status_code == 422

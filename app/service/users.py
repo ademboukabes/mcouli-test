@@ -174,7 +174,7 @@ class AuthService:
         # Send to NATS
         await NatsClient.publish("email.send_otp", json.dumps({"email": req.email, "otp": otp}).encode("utf-8"))
 
-        logger.info("register success, OTP sent to %s", req.email)
+        logger.info("register success, OTP sent")
         return RegisterPendingResponse(
             message="OTP sent to email",
             status="pending_verification",

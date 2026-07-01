@@ -133,7 +133,5 @@ def test_mobile_register_logs_without_plaintext_email(
     # Verify no plaintext email in logs
     assert req.email not in caplog.text
     assert "user@example.com" not in caplog.text
-    # Verify user_id is logged instead
-    assert "user_id=" in caplog.text
-    assert "session_id=" in caplog.text
+    assert "mobile_register attempt" in caplog.text
 

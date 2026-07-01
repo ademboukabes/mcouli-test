@@ -181,27 +181,25 @@ class TestRegisterNewUser:
         user_querier.get_user_by_email.return_value = None
         user_querier.create_user.return_value = new_user
 
-        req = _make_register_request(email="new@test.com")
+        req = _make_register_request()
         result = await auth_service.mobile_register(redis, req)
 
-        user_querier.create_user.assert_called_once()
-        assert result.is_new_user is True
+        user_querier.create_user.assert_not_called()
+        assert result.status == "pending_verification"
 
     @pytest.mark.asyncio
-    async def test_access_and_refresh_tokens_returned_on_register(
+    async def test_pending_status_returned_on_register(
         self,
         auth_service: AuthService,
         user_querier: AsyncMock,
         redis: AsyncMock,
     ) -> None:
-        new_user = _make_user()
         user_querier.get_user_by_email.return_value = None
-        user_querier.create_user.return_value = new_user
 
         result = await auth_service.mobile_register(redis, _make_register_request())
 
-        assert result.access_token
-        assert result.refresh_token
+        assert result.status == "pending_verification"
+        assert result.message == "OTP sent to email"
 
     @pytest.mark.asyncio
     async def test_session_cached_in_redis_on_register(

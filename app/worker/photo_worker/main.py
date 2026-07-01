@@ -179,9 +179,7 @@ class PhotoWorker:
                 )
 
         if approvals_created == 0:
-            logger.info("No users matched in group photo %s, auto-approving as public", event.photo_id)
-            await self._photo_querier.update_photo_status(id=event.photo_id, status="approved")
-            await self._photo_querier.update_photo_visibility(id=event.photo_id, visibility="public")
+            logger.info("No users matched in group photo %s, leaving as pending", event.photo_id)
 
 
     async def _create_job(self, event: PhotoProcessEvent) -> models.ProcessingJob | None:
