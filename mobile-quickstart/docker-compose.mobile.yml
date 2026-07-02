@@ -1,3 +1,4 @@
+name: multai-mobile-test
 services:
   postgres:
     image: pgvector/pgvector:pg16
