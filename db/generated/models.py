@@ -245,6 +245,7 @@ class User:
     face_embedding: Optional[Any]
     deleted_at: Optional[datetime.datetime]
     blocked: bool
+    avatar_key: Optional[str]
 
 
 @dataclasses.dataclass()
