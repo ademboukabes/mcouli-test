@@ -1,6 +1,8 @@
 from typing import Optional
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Request, UploadFile
+from fastapi.responses import Response
+from app.core.image_validation import build_image_payload
 from uuid import UUID
 
 from app.container import get_container, Container
@@ -202,7 +204,57 @@ async def get_me(
         )
 
     return MeResponse(
-        user=UserSchema(id=user.id, email=user.email, name=user.display_name),
+        user=UserSchema(
+            id=user.id,
+            email=user.email,
+            name=user.display_name,
+            avatar_url="/user/auth/me/avatar/image" if user.avatar_key else None,
+        ),
         devices=device_list,
         sessions=session_schema,
+    )
+
+@router.post("/me/avatar", response_model=UserSchema)
+async def upload_avatar(
+    file: UploadFile,
+    current_user: MobileUserSchema = Depends(get_current_mobile_user),
+    container: Container = Depends(get_container),
+) -> UserSchema:
+    payload = await build_image_payload(file)
+    object_name = str(current_user.user_id)
+
+    await container.auth_service.upload_avatar_bytes(
+        avatar_key=object_name,
+        data=payload.bytes,
+        content_type=payload.content_type,
+        filename=payload.filename,
+    )
+    try:
+        user = await container.auth_service.update_avatar(
+            user_id=current_user.user_id, avatar_key=object_name,
+        )
+    except Exception:
+        await container.auth_service.delete_avatar_bytes(avatar_key=object_name)
+        raise
+
+    return UserSchema(
+        id=user.id,
+        email=user.email,
+        name=user.display_name,
+        avatar_url="/user/auth/me/avatar/image",
+    )
+
+
+@router.get("/me/avatar/image")
+async def get_avatar_image(
+    current_user: MobileUserSchema = Depends(get_current_mobile_user),
+    container: Container = Depends(get_container),
+) -> Response:
+    data, filename, content_type = await container.auth_service.get_avatar_bytes(
+        user_id=current_user.user_id,
+    )
+    return Response(
+        content=data,
+        media_type=content_type,
+        headers={"Content-Disposition": f'inline; filename="{filename}"'},
     )
