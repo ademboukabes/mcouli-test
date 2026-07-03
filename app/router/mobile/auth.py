@@ -202,7 +202,7 @@ async def get_me(
         )
 
     return MeResponse(
-        user=UserSchema(id=user.id, email=user.email),
+        user=UserSchema(id=user.id, email=user.email, name=user.display_name),
         devices=device_list,
         sessions=session_schema,
     )

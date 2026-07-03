@@ -18,6 +18,7 @@ class SessionSchema(BaseModel):
 class UserSchema(BaseModel):
     id: uuid.UUID
     email: str
+    name: str | None
 
 class MeResponse(BaseModel):
     user: UserSchema
