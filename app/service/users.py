@@ -553,7 +553,7 @@ class AuthService:
             raise
         except Exception as exc:
             raise AppException.storage_error("Failed to retrieve avatar image") from exc
-    
+
     async def delete_avatar_bytes(self, *, avatar_key: str) -> None:
         try:
             bucket = Bucket(IMAGES_BUCKET_NAME, "avatars")
