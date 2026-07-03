@@ -3,6 +3,7 @@ import uuid
 from collections.abc import AsyncIterable
 from typing import Optional
 
+from fastapi import HTTPException  
 from sqlalchemy.exc import SQLAlchemyError
 
 from app.core.exceptions import AppException, DBException
@@ -17,7 +18,7 @@ from app.core.securite import (
 from app.core import constant
 from app.core.config import settings
 from app.infra.redis import RedisClient
-
+from app.infra.minio import Bucket, IMAGES_BUCKET_NAME
 from app.schema.request.mobile.auth import (
     MobileAuthBaseRequest,
     MobileLoginRequest,
@@ -512,7 +513,47 @@ class AuthService:
         except Exception as exc:
             logger.error("Failed to update user: %s", exc)
             raise DBException.handle(exc)
+        
+    async def update_avatar(self, *, user_id: uuid.UUID, avatar_key: str) -> User:
+        try:
+            user = await self.user_querier.update_user_avatar(
+                avatar_key=avatar_key,
+                id=user_id,
+            )
+            if not user:
+                raise AppException.not_found("User not found")
+            return user
+        except Exception as exc:
+            logger.error("Failed to update avatar for user %s: %s", user_id, exc)
+            raise DBException.handle(exc)
 
+    async def upload_avatar_bytes(
+        self, *, avatar_key: str, data: bytes, content_type: str, filename: str
+    ) -> None:
+        try:
+            bucket = Bucket(IMAGES_BUCKET_NAME, "avatars")
+            await bucket.put_bytes(
+                data=data,
+                object_name=avatar_key,
+                content_type=content_type,
+                filename=filename,
+            )
+        except Exception as exc:
+            raise AppException.storage_error("Failed to upload avatar image") from exc
+
+    async def get_avatar_bytes(self, *, user_id: uuid.UUID) -> tuple[bytes, str, str]:
+        user = await self.get_user(user_id=user_id)
+        if not user.avatar_key:
+            raise AppException.not_found("No avatar set")
+        
+        bucket = Bucket(IMAGES_BUCKET_NAME, "avatars")
+        try:
+            return await bucket.get(user.avatar_key)
+        except HTTPException:
+            raise
+        except Exception as exc:
+            raise AppException.storage_error("Failed to retrieve avatar image") from exc
+    
     async def delete_user(self, *, redis: RedisClient, user_id: uuid.UUID) -> User:
         try:
             existing = await self.user_querier.get_user_by_id(id=user_id)
@@ -581,13 +622,7 @@ class AuthService:
         max_requests: int,
         window_seconds: int,
     ) -> None:
-        """Enforce rate limiting using Redis INCR + EXPIRE.
-
-        Increments a counter for ``key``. On the first increment the key
-        is given a TTL of ``window_seconds`` so the window resets
-        automatically. If the counter exceeds ``max_requests`` a 429
-        response is raised with a ``Retry-After`` header.
-        """
+        """Enforce rate limiting using Redis INCR + EXPIRE."""
         current_count = await redis.incr(key)
         if current_count == 1:
             await redis.expire(key, window_seconds)
