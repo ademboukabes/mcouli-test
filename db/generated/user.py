@@ -15,7 +15,7 @@ from db.generated import models
 CREATE_USER = """-- name: create_user \\:one
 INSERT INTO users (email, hashed_password)
 VALUES (:p1, :p2)
-RETURNING id, email, hashed_password, created_at, updated_at, display_name, face_embedding, deleted_at, blocked
+RETURNING id, email, hashed_password, created_at, updated_at, display_name, face_embedding, deleted_at, blocked, avatar_key
 """
 
 
@@ -42,21 +42,21 @@ class FindClosestUserByEmbeddingRow:
 
 
 GET_USER_BY_EMAIL = """-- name: get_user_by_email \\:one
-SELECT id, email, hashed_password, created_at, updated_at, display_name, face_embedding, deleted_at, blocked
+SELECT id, email, hashed_password, created_at, updated_at, display_name, face_embedding, deleted_at, blocked, avatar_key
 FROM users
 WHERE email = :p1
 """
 
 
 GET_USER_BY_ID = """-- name: get_user_by_id \\:one
-SELECT id, email, hashed_password, created_at, updated_at, display_name, face_embedding, deleted_at, blocked
+SELECT id, email, hashed_password, created_at, updated_at, display_name, face_embedding, deleted_at, blocked, avatar_key
 FROM users
 WHERE id = :p1
 """
 
 
 GET_USER_BY_ID_FOR_UPDATE = """-- name: get_user_by_id_for_update \\:one
-SELECT id, email, hashed_password, created_at, updated_at, display_name, face_embedding, deleted_at, blocked
+SELECT id, email, hashed_password, created_at, updated_at, display_name, face_embedding, deleted_at, blocked, avatar_key
 FROM users
 WHERE id = :p1
 FOR UPDATE
@@ -64,7 +64,7 @@ FOR UPDATE
 
 
 LIST_USERS = """-- name: list_users \\:many
-SELECT id, email, hashed_password, created_at, updated_at, display_name, face_embedding, deleted_at, blocked
+SELECT id, email, hashed_password, created_at, updated_at, display_name, face_embedding, deleted_at, blocked, avatar_key
 FROM users
 ORDER BY created_at DESC
 LIMIT :p1 OFFSET :p2
@@ -90,7 +90,7 @@ UPDATE users
 SET blocked = :p1,
     updated_at = NOW()
 WHERE id = :p2
-RETURNING id, email, hashed_password, created_at, updated_at, display_name, face_embedding, deleted_at, blocked
+RETURNING id, email, hashed_password, created_at, updated_at, display_name, face_embedding, deleted_at, blocked, avatar_key
 """
 
 
@@ -99,7 +99,7 @@ UPDATE users
 SET face_embedding = :p1\\:\\:vector,
     updated_at = NOW()
 WHERE id = :p2
-RETURNING id, email, hashed_password, created_at, updated_at, display_name, face_embedding, deleted_at, blocked
+RETURNING id, email, hashed_password, created_at, updated_at, display_name, face_embedding, deleted_at, blocked, avatar_key
 """
 
 
@@ -110,7 +110,16 @@ SET email = COALESCE(:p1, email),
     blocked = COALESCE(:p3, blocked),
     updated_at = NOW()
 WHERE id = :p4
-RETURNING id, email, hashed_password, created_at, updated_at, display_name, face_embedding, deleted_at, blocked
+RETURNING id, email, hashed_password, created_at, updated_at, display_name, face_embedding, deleted_at, blocked, avatar_key
+"""
+
+
+UPDATE_USER_AVATAR = """-- name: update_user_avatar \\:one
+UPDATE users
+SET avatar_key = :p1,
+    updated_at = NOW()
+WHERE id = :p2
+RETURNING id, email, hashed_password, created_at, updated_at, display_name, face_embedding, deleted_at, blocked, avatar_key
 """
 
 
@@ -119,7 +128,7 @@ UPDATE users
 SET hashed_password = :p1,
     updated_at = NOW()
 WHERE id = :p2
-RETURNING id, email, hashed_password, created_at, updated_at, display_name, face_embedding, deleted_at, blocked
+RETURNING id, email, hashed_password, created_at, updated_at, display_name, face_embedding, deleted_at, blocked, avatar_key
 """
 
 
@@ -141,6 +150,7 @@ class AsyncQuerier:
             face_embedding=row[6],
             deleted_at=row[7],
             blocked=row[8],
+            avatar_key=row[9],
         )
 
     async def delete_user(self, *, id: uuid.UUID) -> None:
@@ -169,6 +179,7 @@ class AsyncQuerier:
             face_embedding=row[6],
             deleted_at=row[7],
             blocked=row[8],
+            avatar_key=row[9],
         )
 
     async def get_user_by_id(self, *, id: uuid.UUID) -> Optional[models.User]:
@@ -185,6 +196,7 @@ class AsyncQuerier:
             face_embedding=row[6],
             deleted_at=row[7],
             blocked=row[8],
+            avatar_key=row[9],
         )
 
     async def get_user_by_id_for_update(self, *, id: uuid.UUID) -> Optional[models.User]:
@@ -201,6 +213,7 @@ class AsyncQuerier:
             face_embedding=row[6],
             deleted_at=row[7],
             blocked=row[8],
+            avatar_key=row[9],
         )
 
     async def list_users(self, *, limit: int, offset: int) -> AsyncIterator[models.User]:
@@ -216,6 +229,7 @@ class AsyncQuerier:
                 face_embedding=row[6],
                 deleted_at=row[7],
                 blocked=row[8],
+                avatar_key=row[9],
             )
 
     async def list_users_with_embedding(self) -> AsyncIterator[ListUsersWithEmbeddingRow]:
@@ -240,6 +254,7 @@ class AsyncQuerier:
             face_embedding=row[6],
             deleted_at=row[7],
             blocked=row[8],
+            avatar_key=row[9],
         )
 
     async def set_user_embedding(self, *, dollar_1: Any, id: uuid.UUID) -> Optional[models.User]:
@@ -256,6 +271,7 @@ class AsyncQuerier:
             face_embedding=row[6],
             deleted_at=row[7],
             blocked=row[8],
+            avatar_key=row[9],
         )
 
     async def update_user(self, *, email: str, display_name: Optional[str], blocked: bool, id: uuid.UUID) -> Optional[models.User]:
@@ -277,6 +293,24 @@ class AsyncQuerier:
             face_embedding=row[6],
             deleted_at=row[7],
             blocked=row[8],
+            avatar_key=row[9],
+        )
+
+    async def update_user_avatar(self, *, avatar_key: Optional[str], id: uuid.UUID) -> Optional[models.User]:
+        row = (await self._conn.execute(sqlalchemy.text(UPDATE_USER_AVATAR), {"p1": avatar_key, "p2": id})).first()
+        if row is None:
+            return None
+        return models.User(
+            id=row[0],
+            email=row[1],
+            hashed_password=row[2],
+            created_at=row[3],
+            updated_at=row[4],
+            display_name=row[5],
+            face_embedding=row[6],
+            deleted_at=row[7],
+            blocked=row[8],
+            avatar_key=row[9],
         )
 
     async def update_user_password(self, *, hashed_password: Optional[str], id: uuid.UUID) -> Optional[models.User]:
@@ -293,4 +327,5 @@ class AsyncQuerier:
             face_embedding=row[6],
             deleted_at=row[7],
             blocked=row[8],
+            avatar_key=row[9],
         )

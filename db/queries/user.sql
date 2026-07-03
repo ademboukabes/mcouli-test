@@ -26,6 +26,13 @@ SET hashed_password = $1,
 WHERE id = $2
 RETURNING *;
 
+-- name: UpdateUserAvatar :one
+UPDATE users
+SET avatar_key = $1,
+    updated_at = NOW()
+WHERE id = $2
+RETURNING *;
+
 -- name: UpdateUser :one
 UPDATE users
 SET email = COALESCE($1, email),
