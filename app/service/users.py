@@ -3,7 +3,7 @@ import uuid
 from collections.abc import AsyncIterable
 from typing import Optional
 
-from fastapi import HTTPException  
+from fastapi import HTTPException
 from sqlalchemy.exc import SQLAlchemyError
 
 from app.core.exceptions import AppException, DBException
@@ -513,7 +513,7 @@ class AuthService:
         except Exception as exc:
             logger.error("Failed to update user: %s", exc)
             raise DBException.handle(exc)
-        
+
     async def update_avatar(self, *, user_id: uuid.UUID, avatar_key: str) -> User:
         try:
             user = await self.user_querier.update_user_avatar(
@@ -545,7 +545,7 @@ class AuthService:
         user = await self.get_user(user_id=user_id)
         if not user.avatar_key:
             raise AppException.not_found("No avatar set")
-        
+
         bucket = Bucket(IMAGES_BUCKET_NAME, "avatars")
         try:
             return await bucket.get(user.avatar_key)
@@ -554,6 +554,13 @@ class AuthService:
         except Exception as exc:
             raise AppException.storage_error("Failed to retrieve avatar image") from exc
     
+    async def delete_avatar_bytes(self, *, avatar_key: str) -> None:
+        try:
+            bucket = Bucket(IMAGES_BUCKET_NAME, "avatars")
+            await bucket.delete(avatar_key)
+        except Exception as exc:
+            logger.warning("Failed to clean up orphaned avatar %s: %s", avatar_key, exc)
+
     async def delete_user(self, *, redis: RedisClient, user_id: uuid.UUID) -> User:
         try:
             existing = await self.user_querier.get_user_by_id(id=user_id)
