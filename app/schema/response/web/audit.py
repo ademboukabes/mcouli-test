@@ -8,10 +8,11 @@ from pydantic import BaseModel
 
 from db.generated.models import AuditEvent, User
 from app.core.constant import AuditEventType
-from app.schema.response.mobile.auth import UserSchema
 
 
-class AuditActorSchema(UserSchema):
+class AuditActorSchema(BaseModel):
+    id: UUID
+    email: str
     display_name: str | None
 
     @classmethod
@@ -21,7 +22,6 @@ class AuditActorSchema(UserSchema):
             email=user.email,
             display_name=user.display_name,
         )
-
 
 class AuditEventSchema(BaseModel):
     id: UUID
