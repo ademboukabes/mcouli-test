@@ -26,15 +26,14 @@ from db.generated import photos as photo_queries
 from db.generated import session as session_queries
 from db.generated import staff_drive_connections as staff_drive_queries
 from db.generated import staff_notifications as staff_notification_queries
-from db.generated import stuff_user as staff_user_queries
+from db.generated import staff_user as staff_user_queries
 from db.generated import upload_request_groups as upload_request_group_queries
 from db.generated import upload_request_photos as upload_request_photo_queries
 from db.generated import upload_requests as upload_request_queries
 from db.generated import user as user_queries
 
 from db.generated import events as event_queries
-from db.generated import eventParticipant as participant_queries
-from db.generated import stuff_user as staff_queries
+from db.generated import event_participant as participant_queries
 from db.generated import notifications as notification_queries
 from db.generated import audit as audit_queries
 from db.generated import stats as stats_queries
@@ -72,7 +71,6 @@ class Container:
         self.audit_querier = audit_queries.AsyncQuerier(conn)
         self.event_querier = event_queries.AsyncQuerier(conn)
         self.participant_querier = participant_queries.AsyncQuerier(conn)
-        self.staff_querier = staff_queries.AsyncQuerier(conn)
         self.stats_querier = stats_queries.AsyncQuerier(conn)
 
         # services
