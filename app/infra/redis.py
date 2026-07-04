@@ -77,3 +77,4 @@ class RedisClient:
 
     async def close(self) -> None:
         await self._client.close()
+        type(self)._instance = None
