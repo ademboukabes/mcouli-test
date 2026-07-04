@@ -8,8 +8,8 @@ import uuid
 from app.core.exceptions import AppException, DBException, DBExceptionImpl
 from app.core.securite import  create_access_staff_token, hash_password, verify_password
 from app.schema.response.web.auth import WebAuthResponse
-from db.generated import stuff_user as staff_queries
-from db.generated.stuff_user import ListStaffUsersParams
+from db.generated import staff_user as staff_queries
+from db.generated.staff_user import ListStaffUsersParams
 from db.generated.models import StaffUser, StaffRole
 
 

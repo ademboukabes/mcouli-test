@@ -17,7 +17,7 @@ from app.infra.google_drive import GoogleDriveClient
 from app.infra.minio import ImageBucket
 from app.infra.redis import RedisClient
 from db.generated import staff_drive_connections as drive_queries
-from db.generated import stuff_user as staff_queries
+from db.generated import staff_user as staff_queries
 from db.generated.models import StaffDriveConnection, StaffUser
 
 

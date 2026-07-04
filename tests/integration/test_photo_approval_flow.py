@@ -14,7 +14,7 @@ from sqlalchemy import text
 
 from app.service.photo_approval import PhotoApprovalService
 from db.generated import user as user_queries
-from db.generated import stuff_user as staff_queries
+from db.generated import staff_user as staff_queries
 from db.generated import events as event_queries
 from db.generated import photos as photo_queries
 from db.generated import photo_approvals as approval_queries
