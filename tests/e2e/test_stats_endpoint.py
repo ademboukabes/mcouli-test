@@ -13,6 +13,9 @@ from typing import Generator
 
 @pytest.fixture(scope="module")
 def client() -> Generator[TestClient, None, None]:
+    import os
+    if os.getenv("MULTAI_RUN_E2E") != "1":
+        pytest.skip("set MULTAI_RUN_E2E=1 to run live e2e tests")
     # Override the dependency to bypass cookie auth
     mock_admin = StaffUser(
         id=uuid.uuid4(),
