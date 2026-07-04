@@ -64,8 +64,9 @@ run-workers:
 	uv run python -m app.worker.upload_group_worker.main & \
 	uv run python -m app.worker.photo_worker.main & \
 	uv run python -m app.worker.storage_cleaner.main & \
+	uv run python -m app.worker.email_worker.main & \
 	wait
-
+	
 lint:
 	uv run ruff check .
 
