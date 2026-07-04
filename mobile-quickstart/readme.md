@@ -62,6 +62,35 @@ This creates all the test data you need: users, events, photos, and notification
 
 ---
 
+## Background workers
+
+In addition to `postgres`, `redis`, `minio`, `nats`, `migrate`, and `fastapi`, the stack also starts these background workers by default:
+
+* **email-worker** — sends transactional emails (OTP codes, notifications)
+* **photo-worker** — processes uploaded photos and face recognition
+* **audit-worker** — records audit log events
+* **upload-group-worker** — manages grouped photo upload requests
+* **storage-cleaner** — periodically cleans up orphaned files in MinIO
+
+You don't need to do anything special for these — they start automatically with `docker compose up -d` and don't require any extra configuration.
+
+## Notification worker (optional)
+
+`notification-worker` is different — it needs a real Firebase service account file to run, so it's **off by default**. The rest of the backend (including all workers above) works fine without it.
+
+If you need push notifications working locally:
+
+1. Get `firebase-credentials.json` from the backend team.
+2. Place it at the **project root** (one level above `mobile-quickstart/`), not inside this folder.
+3. Start with the profile enabled:
+```bash
+docker compose -f docker-compose.mobile.yml --profile firebase up -d
+```
+
+If you forget the `--profile firebase` flag, `notification-worker` simply won't appear in `docker compose ps` — that's expected, not an error.
+
+---
+
 ## Credentials
 
 After seeding, the summary printed in the terminal shows all credentials. The default ones are:
