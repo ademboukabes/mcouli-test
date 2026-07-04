@@ -11,6 +11,7 @@ from app.core.config import settings
 from db.generated import user as user_queries
 from app.infra.database import engine
 from app.infra.redis import RedisClient
+from app.service.session import SessionService
 
 pytestmark = pytest.mark.asyncio(loop_scope="session")
 
@@ -79,8 +80,19 @@ async def test_blocked_user_access(client):
 
         # We need a session ID to put in the JWT, otherwise the auth dependency fails with "Invalid token"
         session_id = uuid.uuid4()
-
+        
         await uq.set_user_blocked(blocked=True, id=user_id)
+        
+    redis = RedisClient.get_instance()
+    await SessionService.cache_session_for_auth(
+        redis=redis,
+        session_id=session_id,
+        user_id=user_id,
+        email="blocked@test.com",
+        expires_at=datetime.now(timezone.utc) + timedelta(hours=1),
+        blocked=True,
+        ttl=3600,
+    )
 
     payload = {
         "session_id": str(session_id),
@@ -96,7 +108,7 @@ async def test_blocked_user_access(client):
         assert response.status_code in (401, 403), f"Expected 401 or 403, got {response.status_code}"
     finally:
         async with engine.begin() as conn:
-            await conn.execute(text(f"DELETE FROM users WHERE id = '{user_id}'"))
+            await conn.execute(text("DELETE FROM users WHERE id = :uid"), {"uid": user_id})
 
 async def test_rate_limiting(client):
     """Test that multiple requests within a short timeframe hit rate limits."""
@@ -108,6 +120,17 @@ async def test_rate_limiting(client):
         )
         user_id = user.id
         session_id = uuid.uuid4()
+        
+    redis = RedisClient.get_instance()
+    await SessionService.cache_session_for_auth(
+        redis=redis,
+        session_id=session_id,
+        user_id=user_id,
+        email="rate@test.com",
+        expires_at=datetime.now(timezone.utc) + timedelta(hours=1),
+        blocked=False,
+        ttl=3600,
+    )
 
     payload = {
         "session_id": str(session_id),
@@ -128,7 +151,7 @@ async def test_rate_limiting(client):
         assert 429 in responses, "Expected to hit rate limit (429) after multiple rapid requests"
     finally:
         async with engine.begin() as conn:
-            await conn.execute(text(f"DELETE FROM users WHERE id = '{user_id}'"))
+            await conn.execute(text("DELETE FROM users WHERE id = :uid"), {"uid": user_id})
         try:
             redis = RedisClient.get_instance()
             await redis._client.delete("rate_limit:/user/photos:127.0.0.1")

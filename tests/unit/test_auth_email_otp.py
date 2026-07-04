@@ -139,7 +139,7 @@ async def test_mobile_register_resend_otp_success(
     mock_redis.incr.return_value = 1
 
     # Act
-    with patch("app.infra.nats.NatsClient.publish", new_callable=AsyncMock) as mock_publish:
+    with patch("app.service.users.NatsClient.publish", new_callable=AsyncMock) as mock_publish:
         res = await auth_service.mobile_register_resend_otp(redis=mock_redis, email=email)
 
     # Assert

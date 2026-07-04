@@ -73,9 +73,10 @@ async def _wait_for_jobs(
     photo_ids: list[uuid.UUID], timeout: int = 180
 ) -> dict[str, int]:
     """Return a status→count dict once all jobs have a terminal status."""
-    deadline = asyncio.get_event_loop().time() + timeout
+    loop = asyncio.get_running_loop()
+    deadline = loop.time() + timeout
     async with engine.connect() as conn:
-        while asyncio.get_event_loop().time() < deadline:
+        while loop.time() < deadline:
             rows = (
                 await conn.execute(
                     text(
