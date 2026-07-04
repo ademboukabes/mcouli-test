@@ -13,7 +13,7 @@ from app.schema.response.web.event import (
     ParticipantResponse
 )
 from db.generated import events as event_queries
-from db.generated import eventParticipant as participant_queries
+from db.generated import event_participant as participant_queries
 from db.generated import models
 
 class EventService:

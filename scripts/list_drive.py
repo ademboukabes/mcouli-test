@@ -1,7 +1,7 @@
 import asyncio
 from sqlalchemy.ext.asyncio import create_async_engine
 from app.core.config import settings
-from db.generated import stuff_user as staff_queries
+from db.generated import staff_user as staff_queries
 from app.infra.redis import RedisClient
 from app.infra.google_drive import GoogleDriveClient
 from app.service.staff_drive import StaffDriveService

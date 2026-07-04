@@ -1,7 +1,7 @@
 import asyncio
 from sqlalchemy.ext.asyncio import create_async_engine
 from app.core.config import settings
-from db.generated import stuff_user as staff_queries
+from db.generated import staff_user as staff_queries
 from db.generated import upload_request_groups as group_queries
 from db.generated import upload_requests as request_queries
 from db.generated import upload_request_photos as request_photo_queries
