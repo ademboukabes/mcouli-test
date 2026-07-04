@@ -80,9 +80,9 @@ async def test_blocked_user_access(client):
 
         # We need a session ID to put in the JWT, otherwise the auth dependency fails with "Invalid token"
         session_id = uuid.uuid4()
-        
+
         await uq.set_user_blocked(blocked=True, id=user_id)
-        
+
     redis = RedisClient.get_instance()
     await SessionService.cache_session_for_auth(
         redis=redis,
@@ -120,7 +120,7 @@ async def test_rate_limiting(client):
         )
         user_id = user.id
         session_id = uuid.uuid4()
-        
+
     redis = RedisClient.get_instance()
     await SessionService.cache_session_for_auth(
         redis=redis,
