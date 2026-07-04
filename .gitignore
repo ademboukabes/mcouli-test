@@ -1,14 +1,13 @@
 .env
 .env.staging
+.env.mobile
 __pycache__
 db/schema.sql
-
 .vscode/settings.json
 multiai-c9380-firebase-adminsdk-fbsvc-cb6e5ce41b.json
+firebase-credentials.json
 db.txt
-
 .venv
-multiai-c9380-firebase-adminsdk-fbsvc-cb6e5ce41b.json
 
 # Local Test & Debug Files
 .coverage
