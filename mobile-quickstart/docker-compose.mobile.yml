@@ -2,6 +2,7 @@ name: multai-mobile-test
 services:
   postgres:
     image: pgvector/pgvector:pg16
+    container_name: mobile_postgres
     restart: unless-stopped
     env_file: .env.mobile
     ports:
@@ -17,14 +18,18 @@ services:
 
   redis:
     image: redis:7-alpine
+    container_name: mobile_redis
     restart: unless-stopped
     ports:
       - "6379:6379"
+    volumes:
+      - redis_data:/data
     networks:
       - multi_network
 
   minio:
     image: minio/minio:latest
+    container_name: mobile_minio
     restart: unless-stopped
     env_file: .env.mobile
     command: server /data --console-address ":9001"
@@ -38,19 +43,26 @@ services:
 
   nats:
     image: nats:2.10-alpine
+    container_name: mobile_nats
+    restart: unless-stopped
     command: >
       -js
+      -sd /data
       -a 0.0.0.0
       -m 8222
       --user testuser
       --pass testpassword
     ports:
       - "4222:4222"
+      - "8222:8222"
+    volumes:
+      - nats_data:/data
     networks:
       - multi_network
 
   migrate:
     image: ghcr.io/microclub-usthb/multai-back:latest
+    container_name: mobile_migrate
     env_file: .env.mobile
     depends_on:
       postgres:
@@ -61,6 +73,7 @@ services:
 
   fastapi:
     image: ghcr.io/microclub-usthb/multai-back:latest
+    container_name: mobile_fastapi
     restart: unless-stopped
     env_file: .env.mobile
     depends_on:
@@ -77,9 +90,86 @@ services:
     networks:
       - multi_network
 
+  # ==========================================
+  # BACKGROUND WORKERS POOL (Added for full app feature completeness)
+  # ==========================================
+  email-worker:
+    image: ghcr.io/microclub-usthb/multai-back:latest
+    container_name: mobile_email_worker
+    restart: unless-stopped
+    env_file: .env.mobile
+    depends_on:
+      fastapi:
+        condition: service_started
+    command: ["uv", "run", "python", "-m", "app.worker.email_worker.main"]
+    networks:
+      - multi_network
+
+  photo-worker:
+    image: ghcr.io/microclub-usthb/multai-back:latest
+    container_name: mobile_photo_worker
+    restart: unless-stopped
+    env_file: .env.mobile
+    depends_on:
+      fastapi:
+        condition: service_started
+    command: ["uv", "run", "python", "-m", "app.worker.photo_worker.main"]
+    networks:
+      - multi_network
+
+  notification-worker:
+    image: ghcr.io/microclub-usthb/multai-back:latest
+    container_name: mobile_notification_worker
+    restart: unless-stopped
+    env_file: .env.mobile
+    depends_on:
+      fastapi:
+        condition: service_started
+    command: ["uv", "run", "python", "-m", "app.worker.notification.main"]
+    networks:
+      - multi_network
+
+  upload-group-worker:
+    image: ghcr.io/microclub-usthb/multai-back:latest
+    container_name: mobile_upload_group_worker
+    restart: unless-stopped
+    env_file: .env.mobile
+    depends_on:
+      fastapi:
+        condition: service_started
+    command: ["uv", "run", "python", "-m", "app.worker.upload_group_worker.main"]
+    networks:
+      - multi_network
+
+  audit-worker:
+    image: ghcr.io/microclub-usthb/multai-back:latest
+    container_name: mobile_audit_worker
+    restart: unless-stopped
+    env_file: .env.mobile
+    depends_on:
+      fastapi:
+        condition: service_started
+    command: ["uv", "run", "python", "-m", "app.worker.audit.main"]
+    networks:
+      - multi_network
+
+  storage-cleaner:
+    image: ghcr.io/microclub-usthb/multai-back:latest
+    container_name: mobile_storage_cleaner
+    restart: unless-stopped
+    env_file: .env.mobile
+    depends_on:
+      fastapi:
+        condition: service_started
+    command: ["uv", "run", "python", "-m", "app.worker.storage_cleaner.main"]
+    networks:
+      - multi_network
+
 volumes:
   postgres_data:
   minio_data:
+  redis_data:
+  nats_data:
 
 networks:
   multi_network:
