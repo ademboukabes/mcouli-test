@@ -6,6 +6,7 @@ services:
     pull_policy: never
     volumes:
       - ./:/app
+      - /app/.venv
       - insightface_cache:/root/.insightface
 
   migrate:
@@ -13,6 +14,9 @@ services:
       context: .
       dockerfile: Dockerfile
     pull_policy: never
+    volumes:
+      - ./:/app
+      - /app/.venv
 
   email-worker:
     build:
@@ -21,6 +25,55 @@ services:
     pull_policy: never
     volumes:
       - ./:/app
+      - /app/.venv
+
+  photo-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    pull_policy: never
+    volumes:
+      - ./:/app
+      - /app/.venv
+      - insightface_cache:/root/.insightface
+
+  notification-worker:
+    profiles: ["firebase"]
+    build:
+      context: .
+      dockerfile: Dockerfile
+    pull_policy: never
+    volumes:
+      - ./:/app
+      - /app/.venv
+      - ./firebase-credentials.json:/app/firebase-credentials.json
+
+  upload-group-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    pull_policy: never
+    volumes:
+      - ./:/app
+      - /app/.venv
+
+  audit-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    pull_policy: never
+    volumes:
+      - ./:/app
+      - /app/.venv
+
+  storage-cleaner:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    pull_policy: never
+    volumes:
+      - ./:/app
+      - /app/.venv
 
 volumes:
   insightface_cache:

@@ -19,8 +19,10 @@ services:
   nats:
     image: nats:2.10-alpine
     container_name: multi_nats
+    restart: unless-stopped
     command: >
       -js
+      -sd /data
       -a 0.0.0.0
       -m ${NATS_MONITOR_PORT}
       --user ${NATS_USER}
@@ -28,6 +30,8 @@ services:
     ports:
       - "${NATS_PORT}:4222"
       - "${NATS_MONITOR_PORT}:8222"
+    volumes:
+      - nats_data:/data
     networks:
       - multi_network
 
@@ -62,6 +66,8 @@ services:
     image: redis:7-alpine
     container_name: multi_redis
     restart: unless-stopped
+    env_file:
+      - .env.staging
     ports:
       - "${REDIS_PORT}:6379"
     networks:
@@ -109,10 +115,81 @@ services:
     networks:
       - multi_network
 
+  photo-worker:
+    image: ghcr.io/microclub-usthb/multai-back:latest
+    container_name: multi_photo_worker
+    restart: unless-stopped
+    env_file:
+      - .env.staging
+    depends_on:
+      - postgres
+      - redis
+      - nats
+      - minio
+    command: ["uv", "run", "python", "-m", "app.worker.photo_worker.main"]
+    networks:
+      - multi_network
+
+  notification-worker:
+    profiles: ["firebase"]
+    image: ghcr.io/microclub-usthb/multai-back:latest
+    container_name: multi_notification_worker
+    restart: unless-stopped
+    env_file:
+      - .env.staging
+    depends_on:
+      - nats
+      - redis
+    command: ["uv", "run", "python", "-m", "app.worker.notification.main"]
+    networks:
+      - multi_network
+
+  upload-group-worker:
+    image: ghcr.io/microclub-usthb/multai-back:latest
+    container_name: multi_upload_group_worker
+    restart: unless-stopped
+    env_file:
+      - .env.staging
+    depends_on:
+      - postgres
+      - redis
+      - nats
+      - minio
+    command: ["uv", "run", "python", "-m", "app.worker.upload_group_worker.main"]
+    networks:
+      - multi_network
+
+  audit-worker:
+    image: ghcr.io/microclub-usthb/multai-back:latest
+    container_name: multi_audit_worker
+    restart: unless-stopped
+    env_file:
+      - .env.staging
+    depends_on:
+      - postgres
+      - nats
+    command: ["uv", "run", "python", "-m", "app.worker.audit.main"]
+    networks:
+      - multi_network
+
+  storage-cleaner:
+    image: ghcr.io/microclub-usthb/multai-back:latest
+    container_name: multi_storage_cleaner
+    restart: unless-stopped
+    env_file:
+      - .env.staging
+    depends_on:
+      - postgres
+      - nats
+    command: ["uv", "run", "python", "-m", "app.worker.storage_cleaner.main"]
+    networks:
+      - multi_network
+
 volumes:
   postgres_data:
   minio_data:
   redis_data:
+  nats_data:
 
 networks:
   multi_network:
