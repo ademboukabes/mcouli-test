@@ -3,9 +3,8 @@ from __future__ import annotations
 import asyncio
 import json
 import uuid
-from typing import Iterable, Optional, Set, Tuple
+from typing import Iterable, Optional, Set
 
-import sqlalchemy.ext.asyncio
 from fastapi import HTTPException
 from pydantic import BaseModel, ValidationError
 
@@ -24,19 +23,6 @@ class FinalBucketCleanupPayload(BaseModel):
 
 
 storage_service = StagedUploadStorageService()
-
-
-async def create_photo_querier() -> Tuple[
-    sqlalchemy.ext.asyncio.AsyncConnection,
-    upload_request_photo_queries.AsyncQuerier,
-]:
-    conn = await engine.connect()
-    querier = upload_request_photo_queries.AsyncQuerier(conn)
-    return conn, querier
-
-
-async def close_connection(conn: sqlalchemy.ext.asyncio.AsyncConnection) -> None:
-    await conn.close()
 
 
 def _parse_payload(raw_data: bytes | str) -> Optional[FinalBucketCleanupPayload]:
@@ -131,11 +117,12 @@ async def _handle_cleanup_event(
 
 
 async def main() -> None:
-    conn, querier = await create_photo_querier()
     await NatsClient.connect()
     try:
         async def _jetstream_handler(data: bytes | str) -> None:
-            await _handle_cleanup_event(data, querier)
+            async with engine.begin() as conn:
+                querier = upload_request_photo_queries.AsyncQuerier(conn)
+                await _handle_cleanup_event(data, querier)
 
         await NatsClient.js_subscribe(
             subject=settings.subject_enum,
@@ -150,7 +137,6 @@ async def main() -> None:
         )
         await asyncio.Event().wait()
     finally:
-        await close_connection(conn)
         await NatsClient.close()
 
 
