@@ -28,7 +28,7 @@ for _name, _original in _original_modules.items():
         sys.modules.pop(_name, None)
     else:
         sys.modules[_name] = _original
-        
+
 # ── fixtures ──────────────────────────────────────────────────────────
 
 

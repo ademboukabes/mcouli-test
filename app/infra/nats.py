@@ -68,7 +68,7 @@ class NatsClient:
             finally:
                 NatsClient._nc = None
                 NatsClient._js = None
-                
+
     @staticmethod
     async def publish(subject: NatsSubjects | str, message: bytes) -> None:
         if NatsClient._nc is None:
