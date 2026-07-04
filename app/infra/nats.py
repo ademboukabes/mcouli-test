@@ -62,12 +62,13 @@ class NatsClient:
     @staticmethod
     async def close() -> None:
         if NatsClient._nc and not NatsClient._nc.is_closed:
-            await NatsClient._nc.drain()
-            await NatsClient._nc.close()
-            NatsClient._nc = None
-            NatsClient._js = None
-
-
+            try:
+                await NatsClient._nc.drain()
+                await NatsClient._nc.close()
+            finally:
+                NatsClient._nc = None
+                NatsClient._js = None
+                
     @staticmethod
     async def publish(subject: NatsSubjects | str, message: bytes) -> None:
         if NatsClient._nc is None:
