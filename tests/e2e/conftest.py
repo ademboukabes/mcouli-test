@@ -82,9 +82,10 @@ async def _seed_event_and_photo(
 
 async def _wait_for_job(photo_id: uuid.UUID, timeout_s: int = 60) -> str:
     """Poll processing_jobs until terminal status. Returns 'completed', 'failed', or 'timeout'."""
-    deadline = asyncio.get_event_loop().time() + timeout_s
+    loop = asyncio.get_running_loop()
+    deadline = loop.time() + timeout_s
     async with engine.connect() as conn:
-        while asyncio.get_event_loop().time() < deadline:
+        while loop.time() < deadline:
             row = (
                 await conn.execute(
                     text(

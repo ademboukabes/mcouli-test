@@ -77,7 +77,7 @@ async def test_enrollment_persists_embedding(
     user_id = user.id
 
     # 2. Execute enrollment
-    payload = FaceImagePayload(image_bytes=b"fake-image", filename="face.jpg")
+    payload = FaceImagePayload(bytes=b"fake-image", filename="face.jpg", content_type="image/jpeg")
 
     try:
         await auth_service.add_embbed_user(
@@ -96,8 +96,7 @@ async def test_enrollment_persists_embedding(
 
     finally:
         # Cleanup
-        await db_conn.rollback()
         await db_conn.execute(
-            text(f"DELETE FROM users WHERE id = '{user_id}'")
+            text("DELETE FROM users WHERE id = :uid"), {"uid": user_id}
         )
         await db_conn.commit()
