@@ -1,4 +1,8 @@
 import pytest
+import os
+if os.getenv("MULTAI_RUN_E2E") != "1":
+    pytest.skip("set MULTAI_RUN_E2E=1 to run live e2e tests", allow_module_level=True)
+
 import uuid
 from fastapi.testclient import TestClient
 from datetime import datetime, timezone
