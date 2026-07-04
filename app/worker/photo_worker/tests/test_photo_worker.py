@@ -5,9 +5,14 @@ from unittest.mock import AsyncMock, MagicMock, patch, create_autospec
 
 import pytest
 
-sys.modules["db.generated.user"] = MagicMock()
-sys.modules["app.worker.notification.settings"] = MagicMock()
-sys.modules["app.worker.notification.notification_queue"] = MagicMock()
+_MOCKED_MODULES = (
+    "db.generated.user",
+    "app.worker.notification.settings",
+    "app.worker.notification.notification_queue",
+)
+_original_modules = {name: sys.modules.get(name) for name in _MOCKED_MODULES}
+for _name in _MOCKED_MODULES:
+    sys.modules[_name] = MagicMock()
 
 from app.service.face_embedding import DetectedFace, FaceEmbeddingService, FaceImagePayload  # noqa: E402
 from app.service.face_match import SingleFaceMatchService  # noqa: E402
@@ -16,7 +21,14 @@ from app.worker.photo_worker.main import PhotoWorker  # noqa: E402
 from app.worker.photo_worker.schema.event import PhotoProcessEvent  # noqa: E402
 from db.generated import photo_faces as photo_face_queries  # noqa: E402
 
-
+# Restore sys.modules so other test files importing these modules
+# (e.g. db.generated.user) get the real thing, not this leaked mock.
+for _name, _original in _original_modules.items():
+    if _original is None:
+        sys.modules.pop(_name, None)
+    else:
+        sys.modules[_name] = _original
+        
 # ── fixtures ──────────────────────────────────────────────────────────
 
 
