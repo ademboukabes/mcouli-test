@@ -890,7 +890,7 @@ class UploadRequestsService:
         current_staff_user: StaffUser,
         scope: Literal["my", "all"],
         status: str | None,
-    ) -> list[UploadRequestGroupDetails]:
+    ) -> list[UploadRequestGroup]:
         if scope == "all" and self._role_value(current_staff_user.role) != StaffRole.MULTI_TEAM_LEAD.value:
             raise AppException.forbidden("Multi team lead access required")
 
@@ -915,15 +915,7 @@ class UploadRequestsService:
         async for group in iterator:
             groups.append(group)
 
-        details: list[UploadRequestGroupDetails] = []
-        for group in groups:
-            details.append(
-                await self.get_group_details(
-                    group_id=group.id,
-                    current_staff_user=current_staff_user,
-                )
-            )
-        return details
+        return groups
 
     async def list_group_photos(
         self,
