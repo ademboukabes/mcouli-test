@@ -10,7 +10,7 @@ from app.schema.response.staff.uploads import (
     UploadRequestSchema,
 )
 from app.service.upload_requests import UploadRequestGroupDetails
-from db.generated.models import UploadRequestPhoto
+from db.generated.models import UploadRequestGroup, UploadRequestPhoto
 
 
 class UploadRequestGroupSchema(BaseModel):
@@ -67,3 +67,32 @@ class UploadRequestGroupPhotoListResponse(UploadRequestPhotoListResponse):
         return cls(
             items=[UploadRequestPhotoSchema.model_validate(p) for p in photos]
         )
+
+class UploadRequestGroupSummarySchema(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: UUID
+    event_id: UUID
+    folder_id: str
+    status: str
+    processing_status: str
+    total_photo_count: int
+    batch_count: int
+    processed_photo_count: int
+    failed_photo_count: int
+    created_at: datetime
+    approved_at: datetime | None
+    rejection_reason: str | None
+    error_message: str | None
+
+    @field_validator("status", mode="before")
+    @classmethod
+    def coerce_status(cls, v: object) -> str:
+        return getattr(v, "value", str(v))
+
+
+class UploadRequestGroupSummaryListResponse(BaseModel):
+    items: list[UploadRequestGroupSummarySchema]
+
+    @classmethod
+    def from_groups(cls, groups: list["UploadRequestGroup"]) -> "UploadRequestGroupSummaryListResponse":
+        return cls(items=[UploadRequestGroupSummarySchema.model_validate(g) for g in groups])
