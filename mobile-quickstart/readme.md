@@ -15,7 +15,7 @@ This folder contains everything you need to run the multAI backend locally. You 
 
 * `docker-compose.mobile.yml` — defines all backend services
 * `.env.mobile` — environment variables (copy from `.env.mobile.example`)
-* `seed.py` — database seed script
+* `seed.py` — database seed script (already baked into the backend image, no manual copying needed)
 * `.mypy_cache/` — local Python type-check cache (safe to ignore/delete)
 * `README.md` — this file
 
@@ -44,18 +44,10 @@ This pulls and starts the following containers:
 * **migrate** — runs database migrations once then exits
 * **fastapi** — the API server
 
-### 3. Copy the seed script into the container
+### 3. Seed the database
 
 ```bash
-docker cp seed.py multai-mobile-test-fastapi-1:/app/seed.py
-```
-
-> **Note:** Wait for all containers to show as running before doing this.
-
-### 4. Seed the database
-
-```bash
-docker compose -f docker-compose.mobile.yml exec fastapi uv run python seed.py
+docker compose -f docker-compose.mobile.yml exec -e PYTHONPATH=/app fastapi uv run python mobile-quickstart/seed.py
 ```
 
 This creates all the test data you need: users, events, photos, and notifications.
@@ -156,10 +148,9 @@ docker compose -f docker-compose.mobile.yml down -v
 docker compose -f docker-compose.mobile.yml pull
 docker compose -f docker-compose.mobile.yml up -d
 docker compose -f docker-compose.mobile.yml ps
-docker cp seed.py multai-mobile-test-fastapi-1:/app/seed.py
-docker compose -f docker-compose.mobile.yml exec fastapi uv run python seed.py
+docker compose -f docker-compose.mobile.yml exec -e PYTHONPATH=/app fastapi uv run python mobile-quickstart/seed.py
 ```
-> `down -v` removes all volumes. `pull` grabs the latest backend image before recreating containers. Check the `ps` output shows all containers as `Up`/`Healthy` before running the seed step — copying the seed script too early (before the fastapi container is ready) will fail.
+> `down -v` removes all volumes. `pull` grabs the latest backend image before recreating containers. Check the `ps` output shows all containers as `Up`/`Healthy` before running the seed step — running it too early (before the fastapi container is ready) will fail.
 
 ---
 
@@ -169,7 +160,6 @@ When the backend team pushes a new version:
 docker compose -f docker-compose.mobile.yml pull
 docker compose -f docker-compose.mobile.yml up -d
 docker compose -f docker-compose.mobile.yml ps
-docker cp seed.py multai-mobile-test-fastapi-1:/app/seed.py
-docker compose -f docker-compose.mobile.yml exec fastapi uv run python seed.py
+docker compose -f docker-compose.mobile.yml exec -e PYTHONPATH=/app fastapi uv run python mobile-quickstart/seed.py
 ```
-> Re-copy the seed script after updating since the container is recreated. Run `ps` first to confirm the new container is actually up before copying/seeding.
+> Run `ps` first to confirm the new container is actually up before seeding — the seed script ships inside the image, so no manual copying is needed.

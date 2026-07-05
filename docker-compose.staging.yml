@@ -1,3 +1,4 @@
+name: multai-staging
 services:
   postgres:
     image: pgvector/pgvector:pg16
