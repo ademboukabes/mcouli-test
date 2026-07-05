@@ -123,13 +123,15 @@ services:
     profiles: ["firebase"]
     restart: unless-stopped
     env_file: .env.mobile
+    volumes:
+      - ../firebase-credentials.json:/app/firebase-credentials.json:ro
     depends_on:
       fastapi:
         condition: service_started
     command: ["uv", "run", "python", "-m", "app.worker.notification.main"]
     networks:
       - multi_network
-
+      
   upload-group-worker:
     image: ghcr.io/microclub-usthb/multai-back:latest
     container_name: mobile_upload_group_worker

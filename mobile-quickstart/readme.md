@@ -73,7 +73,20 @@ You don't need to do anything special for these — they start automatically wit
 If you need push notifications working locally:
 
 1. Get `firebase-credentials.json` from the backend team.
-2. Place it at the **project root** (one level above `mobile-quickstart/`), not inside this folder.
+2. Place it in the folder that **contains** `mobile-quickstart/` — one level above wherever you put this folder, not inside it.
+
+   For example, if you copied `mobile-quickstart/` into your own project at `my-app/mobile-quickstart/`, put the file at `my-app/firebase-credentials.json`:
+
+   ```
+   my-app/
+   ├── firebase-credentials.json   ✅ correct location
+   ├── src/
+   └── mobile-quickstart/           (this folder)
+       ├── docker-compose.mobile.yml
+       ├── .env.mobile
+       └── seed.py
+   ```
+
 3. Start with the profile enabled:
 ```bash
 docker compose -f docker-compose.mobile.yml --profile firebase up -d
