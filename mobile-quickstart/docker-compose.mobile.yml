@@ -120,6 +120,7 @@ services:
   notification-worker:
     image: ghcr.io/microclub-usthb/multai-back:latest
     container_name: mobile_notification_worker
+    profiles: ["firebase"]
     restart: unless-stopped
     env_file: .env.mobile
     depends_on:

@@ -1,3 +1,4 @@
+name: multai-dev
 services:
   postgres:
     image: pgvector/pgvector:pg16
