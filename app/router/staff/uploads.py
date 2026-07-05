@@ -14,9 +14,9 @@ from app.schema.request.staff.uploads import (
     RejectUploadRequestRequest,
 )
 from app.schema.response.staff.upload_groups import (
-    UploadRequestGroupListResponse,
     UploadRequestGroupPhotoListResponse,
     UploadRequestGroupSchema,
+    UploadRequestGroupSummaryListResponse,
 )
 from app.schema.response.staff.uploads import (
     UploadRequestListResponse,
@@ -67,19 +67,19 @@ async def list_upload_requests(
     )
 
 
-@router.get("/groups", response_model=UploadRequestGroupListResponse)
+@router.get("/groups", response_model=UploadRequestGroupSummaryListResponse)
 async def list_upload_request_groups(
     scope: Literal["my", "all"] = Query(default="my"),
     status: UploadRequestStatus | None = Query(default=None),
     current_staff_user: StaffUser = Depends(get_current_staff_user),
     container: Container = Depends(get_container),
-) -> UploadRequestGroupListResponse:
+) -> UploadRequestGroupSummaryListResponse:
     groups = await container.upload_requests_service.list_groups(
         current_staff_user=current_staff_user,
         scope=scope,
         status=status.value if status is not None else None,
     )
-    return UploadRequestGroupListResponse.from_details_list(groups)
+    return UploadRequestGroupSummaryListResponse.from_groups(groups)
 
 
 @router.get("/groups/{group_id}", response_model=UploadRequestGroupSchema)
