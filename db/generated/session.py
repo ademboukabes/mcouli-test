@@ -37,10 +37,16 @@ AND user_id = :p2
 """
 
 
-GET_SESSION_BY_DEVICE = """-- name: get_session_by_device \\:one
+DELETE_SESSION_BY_ID = """-- name: delete_session_by_id \\:exec
+DELETE FROM user_sessions
+WHERE id = :p1 AND user_id = :p2
+"""
+
+
+GET_SESSION_BY_DEVICE_FOR_USER = """-- name: get_session_by_device_for_user \\:one
 SELECT id, user_id, device_id, created_at, last_active, expires_at
 FROM user_sessions
-WHERE device_id = :p1
+WHERE device_id = :p1 AND user_id = :p2
 """
 
 
@@ -116,8 +122,11 @@ class AsyncQuerier:
     async def delete_session_by_device(self, *, device_id: uuid.UUID, user_id: uuid.UUID) -> None:
         await self._conn.execute(sqlalchemy.text(DELETE_SESSION_BY_DEVICE), {"p1": device_id, "p2": user_id})
 
-    async def get_session_by_device(self, *, device_id: uuid.UUID) -> Optional[models.UserSession]:
-        row = (await self._conn.execute(sqlalchemy.text(GET_SESSION_BY_DEVICE), {"p1": device_id})).first()
+    async def delete_session_by_id(self, *, id: uuid.UUID, user_id: uuid.UUID) -> None:
+        await self._conn.execute(sqlalchemy.text(DELETE_SESSION_BY_ID), {"p1": id, "p2": user_id})
+
+    async def get_session_by_device_for_user(self, *, device_id: uuid.UUID, user_id: uuid.UUID) -> Optional[models.UserSession]:
+        row = (await self._conn.execute(sqlalchemy.text(GET_SESSION_BY_DEVICE_FOR_USER), {"p1": device_id, "p2": user_id})).first()
         if row is None:
             return None
         return models.UserSession(
