@@ -373,8 +373,13 @@ class AuthService:
         user_id: str,
         session_id: str,
     ) -> dict[str, str]:
+        sid = uuid.UUID(session_id)
+        await SessionService.delete_session_cache(redis, sid)
+        await self.session_querier.delete_session_by_id(id=sid, user_id=uuid.UUID(user_id))
+
         session_key = constant.RedisKey.UserSessionByUser.value.format(user_id=user_id)
         await redis.delete(session_key)
+
         return {"message": "Logged out successfully"}
 
     async def add_embbed_user(
