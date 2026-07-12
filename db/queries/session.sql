@@ -18,10 +18,10 @@ RETURNING
     expires_at,
     created_at;
 
--- name: GetSessionByDevice :one
+-- name: GetSessionByDeviceForUser :one
 SELECT *
 FROM user_sessions
-WHERE device_id = $1;
+WHERE device_id = $1 AND user_id = $2;
 
 -- name: GetSessionById :one
 SELECT *
@@ -38,11 +38,14 @@ UPDATE user_sessions
 SET last_active = NOW()
 WHERE id = $1;
 
-
 -- name: DeleteSessionByDevice :exec
 DELETE FROM user_sessions
 WHERE device_id = $1
 AND user_id = $2;
+
+-- name: DeleteSessionById :exec
+DELETE FROM user_sessions
+WHERE id = $1 AND user_id = $2;
 
 -- name: DeleteAllUserSessions :exec
 DELETE FROM user_sessions
