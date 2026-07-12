@@ -3,6 +3,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, Request, UploadFile
 from fastapi.responses import Response
 from app.core.image_validation import build_image_payload
+from app.core.exceptions import AppException
 from uuid import UUID
 
 from app.container import get_container, Container
@@ -125,19 +126,27 @@ async def revoke_device(
 ) -> dict[str, str]:
     from app.core.constant import RedisKey
 
-    session = await container.session_service.session_querier.get_session_by_device(
-        device_id=device_id
+    device = await container.device_service.get_device_by_id(
+        device_id=device_id, user_id=current_user.user_id
     )
+    if device is None or device.user_id != current_user.user_id:
+        raise AppException.not_found("Device not found")
+
+    session = await container.session_service.session_querier.get_session_by_device_for_user(
+        device_id=device_id, user_id=current_user.user_id
+    )
+
+    await container.device_service.revoke_device(
+        device_id=device_id,
+        user_id=current_user.user_id,
+    )
+
     if session:
         await container.session_service.delete_session_cache(container.redis, session.id)
 
     user_session_key = RedisKey.UserSessionByUser.value.format(user_id=current_user.user_id)
     await container.redis.delete(user_session_key)
 
-    await container.device_service.revoke_device(
-        device_id=device_id,
-        user_id=current_user.user_id,
-    )
     return {"message": "Device revoked successfully"}
 
 
