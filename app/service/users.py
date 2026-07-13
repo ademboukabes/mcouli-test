@@ -15,7 +15,6 @@ from app.core.securite import (
     decode_refresh_mobile_token,
     Get_expiry_time,
 )
-from app.core import constant
 from app.core.config import settings
 from app.infra.redis import RedisClient
 from app.infra.minio import Bucket, IMAGES_BUCKET_NAME
@@ -275,8 +274,6 @@ class AuthService:
     ) -> MobileAuthResponse:
         user_id: uuid.UUID = user.id
 
-        session_key = constant.RedisKey.UserSessionByUser.value.format(user_id=user_id)
-
         session_count = await self.session_querier.count_user_sessions(user_id=user_id)
         if session_count and session_count >= AuthService.SESSION_LIMIT:
             logger.warning(
@@ -301,10 +298,6 @@ class AuthService:
 
         if not session:
             raise AppException.internal_error("Failed to create session")
-
-        await redis.set(
-            session_key, str(session.id), expire=AuthService.REDIS_SESSION_TTL
-        )
 
         access_token = create_acces_mobile_token(str(session.id))
         refresh_token = create_refresh_mobile_token(str(session.id))
@@ -376,9 +369,6 @@ class AuthService:
         sid = uuid.UUID(session_id)
         await SessionService.delete_session_cache(redis, sid)
         await self.session_querier.delete_session_by_id(id=sid, user_id=uuid.UUID(user_id))
-
-        session_key = constant.RedisKey.UserSessionByUser.value.format(user_id=user_id)
-        await redis.delete(session_key)
 
         return {"message": "Logged out successfully"}
 
@@ -571,18 +561,14 @@ class AuthService:
             existing = await self.user_querier.get_user_by_id(id=user_id)
             if not existing:
                 raise AppException.not_found("User not found")
+
+            sessions = self.session_querier.list_sessions_by_user(user_id=user_id)
+            async for s in sessions:
+                await SessionService.delete_session_cache(redis=redis, session_id=s.id)
+            await self.session_querier.delete_all_user_sessions(user_id=user_id)
+
             await self.user_querier.delete_user(id=user_id)
-            session_key = constant.RedisKey.UserSessionByUser.value.format(
-                user_id=user_id
-            )
-            raw_session_id = await redis.get(session_key)
-            if raw_session_id:
-                try:
-                    session_id = uuid.UUID(raw_session_id)
-                    await SessionService.delete_session_cache(redis=redis, session_id=session_id)
-                except (ValueError, Exception):
-                    pass
-            await redis.delete(session_key)
+
             return existing
         except Exception as exc:
             logger.error("Failed to delete user: %s", exc)
@@ -594,15 +580,10 @@ class AuthService:
             if not user:
                 raise AppException.not_found("User not found")
 
-            session_key = constant.RedisKey.UserSessionByUser.value.format(user_id=user_id)
-            raw_session_id = await redis.get(session_key)
-            if raw_session_id:
-                try:
-                    session_id = uuid.UUID(raw_session_id)
-                    await SessionService.delete_session_cache(redis=redis, session_id=session_id)
-                except (ValueError, Exception):
-                    pass
-            await redis.delete(session_key)
+            sessions = self.session_querier.list_sessions_by_user(user_id=user_id)
+            async for s in sessions:
+                await SessionService.delete_session_cache(redis, s.id)
+            await self.session_querier.delete_all_user_sessions(user_id=user_id)
 
             return user
         except Exception as exc:
