@@ -62,7 +62,7 @@ class AuthService:
         user_id: uuid.UUID,
         req: MobileAuthBaseRequest,
     ) -> UserDevice:
-        existing_device = await self.device_querier.get_device_by_id(id=req.device_id)
+        existing_device = await self.device_querier.get_device_by_id_any(id=req.device_id)
 
         if existing_device:
             if existing_device.user_id != user_id:
