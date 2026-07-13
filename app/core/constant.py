@@ -3,7 +3,6 @@ from enum import Enum
 
 class RedisKey(str, Enum):
     UserSession = "user_session"
-    UserSessionByUser = "user_session:{user_id}"
     INVALID_TOKEN_SET_KEY = "notifications:invalid_tokens"
     MobileSessionCache = "session:{session_id}"
 
