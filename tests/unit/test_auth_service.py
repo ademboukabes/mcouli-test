@@ -331,7 +331,7 @@ class TestLogout:
 
         redis.delete.assert_called_once()
         key_used = redis.delete.call_args.args[0]
-        assert user_id in key_used
+        assert session_id in key_used
 
     @pytest.mark.asyncio
     async def test_logout_returns_success_message(
