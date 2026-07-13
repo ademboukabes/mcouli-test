@@ -124,7 +124,6 @@ async def revoke_device(
     container: Container = Depends(get_container),
     current_user: MobileUserSchema = Depends(get_current_mobile_user),
 ) -> dict[str, str]:
-    from app.core.constant import RedisKey
 
     device = await container.device_service.get_device_by_id(
         device_id=device_id, user_id=current_user.user_id
@@ -144,8 +143,6 @@ async def revoke_device(
     if session:
         await container.session_service.delete_session_cache(container.redis, session.id)
 
-    user_session_key = RedisKey.UserSessionByUser.value.format(user_id=current_user.user_id)
-    await container.redis.delete(user_session_key)
 
     return {"message": "Device revoked successfully"}
 
