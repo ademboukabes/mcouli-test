@@ -115,6 +115,7 @@ def device_querier() -> AsyncMock:
     from db.generated import devices as device_queries
     q = MagicMock(spec=device_queries.AsyncQuerier)
     q.get_device_by_id = AsyncMock(return_value=None)
+    q.get_device_by_id_any = AsyncMock(return_value=None)
     q.create_device = AsyncMock(return_value=_make_device())
     q.activate_device = AsyncMock()
     return q
