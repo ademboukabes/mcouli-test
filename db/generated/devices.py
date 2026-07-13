@@ -69,7 +69,14 @@ AND is_2fa_enabled = FALSE
 
 GET_DEVICE_BY_ID = """-- name: get_device_by_id \\:one
 SELECT id, user_id, device_name, device_type, totp_secret, is_2fa_enabled, last_active, created_at, push_token, is_active, is_invalid_token from user_devices
-WHERE id =:p1
+WHERE id = :p1
+AND user_id = :p2
+"""
+
+
+GET_DEVICE_BY_ID_ANY = """-- name: get_device_by_id_any \\:one
+SELECT id, user_id, device_name, device_type, totp_secret, is_2fa_enabled, last_active, created_at, push_token, is_active, is_invalid_token from user_devices
+WHERE id = :p1
 """
 
 
@@ -159,8 +166,26 @@ class AsyncQuerier:
     async def enable_device2_fa(self, *, id: uuid.UUID, user_id: uuid.UUID) -> None:
         await self._conn.execute(sqlalchemy.text(ENABLE_DEVICE2_FA), {"p1": id, "p2": user_id})
 
-    async def get_device_by_id(self, *, id: uuid.UUID) -> Optional[models.UserDevice]:
-        row = (await self._conn.execute(sqlalchemy.text(GET_DEVICE_BY_ID), {"p1": id})).first()
+    async def get_device_by_id(self, *, id: uuid.UUID, user_id: uuid.UUID) -> Optional[models.UserDevice]:
+        row = (await self._conn.execute(sqlalchemy.text(GET_DEVICE_BY_ID), {"p1": id, "p2": user_id})).first()
+        if row is None:
+            return None
+        return models.UserDevice(
+            id=row[0],
+            user_id=row[1],
+            device_name=row[2],
+            device_type=row[3],
+            totp_secret=row[4],
+            is_2fa_enabled=row[5],
+            last_active=row[6],
+            created_at=row[7],
+            push_token=row[8],
+            is_active=row[9],
+            is_invalid_token=row[10],
+        )
+
+    async def get_device_by_id_any(self, *, id: uuid.UUID) -> Optional[models.UserDevice]:
+        row = (await self._conn.execute(sqlalchemy.text(GET_DEVICE_BY_ID_ANY), {"p1": id})).first()
         if row is None:
             return None
         return models.UserDevice(
