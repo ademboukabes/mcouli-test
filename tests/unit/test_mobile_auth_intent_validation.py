@@ -67,7 +67,7 @@ class FakeUserQuerier:
 class FakeDeviceQuerier:
     async def get_device_by_id_any(self, id: uuid.UUID) -> FakeDevice | None:
         return None
-    
+
     async def get_device_by_id(self, id: uuid.UUID) -> FakeDevice | None:
         return None
 
