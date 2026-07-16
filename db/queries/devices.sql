@@ -34,9 +34,14 @@ WHERE id = $1
 AND user_id = $2
 AND is_2fa_enabled = FALSE;
 
+-- name: GetDeviceByIdAny :one
+SELECT * from user_devices
+WHERE id = $1;
+
 -- name: GetDeviceById :one
 SELECT * from user_devices
-WHERE id =$1;
+WHERE id = $1
+AND user_id = $2;
 
 -- name: CountUserDevices :one
 SELECT COUNT(*) 

@@ -115,6 +115,7 @@ def device_querier() -> AsyncMock:
     from db.generated import devices as device_queries
     q = MagicMock(spec=device_queries.AsyncQuerier)
     q.get_device_by_id = AsyncMock(return_value=None)
+    q.get_device_by_id_any = AsyncMock(return_value=None)
     q.create_device = AsyncMock(return_value=_make_device())
     q.activate_device = AsyncMock()
     return q
@@ -331,7 +332,7 @@ class TestLogout:
 
         redis.delete.assert_called_once()
         key_used = redis.delete.call_args.args[0]
-        assert user_id in key_used
+        assert session_id in key_used
 
     @pytest.mark.asyncio
     async def test_logout_returns_success_message(
