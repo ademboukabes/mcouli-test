@@ -33,11 +33,12 @@ INSERT INTO user_devices (
     user_id,
     device_name,
     device_type,
-    totp_secret
+    totp_secret,
+    physical_device_id
 ) VALUES (
-    COALESCE(:p1, uuid_generate_v4()), :p2, :p3, :p4, :p5
+    COALESCE(:p1, uuid_generate_v4()), :p2, :p3, :p4, :p5, :p6
 )
-RETURNING id, user_id, device_name, device_type, totp_secret, is_2fa_enabled, last_active, created_at, push_token, is_active, is_invalid_token
+RETURNING id, user_id, device_name, device_type, totp_secret, is_2fa_enabled, last_active, created_at, push_token, is_active, is_invalid_token, physical_device_id
 """
 
 
@@ -48,6 +49,7 @@ class CreateDeviceParams:
     device_name: Optional[str]
     device_type: Optional[str]
     totp_secret: Optional[str]
+    physical_device_id: uuid.UUID
 
 
 DEACTIVATE_DEVICE = """-- name: deactivate_device \\:exec
@@ -67,21 +69,33 @@ AND is_2fa_enabled = FALSE
 """
 
 
+GET_ANY_DEVICE_BY_PHYSICAL_ID = """-- name: get_any_device_by_physical_id \\:many
+SELECT id, user_id, device_name, device_type, totp_secret, is_2fa_enabled, last_active, created_at, push_token, is_active, is_invalid_token, physical_device_id FROM user_devices
+WHERE physical_device_id = :p1
+"""
+
+
 GET_DEVICE_BY_ID = """-- name: get_device_by_id \\:one
-SELECT id, user_id, device_name, device_type, totp_secret, is_2fa_enabled, last_active, created_at, push_token, is_active, is_invalid_token from user_devices
+SELECT id, user_id, device_name, device_type, totp_secret, is_2fa_enabled, last_active, created_at, push_token, is_active, is_invalid_token, physical_device_id from user_devices
 WHERE id = :p1
 AND user_id = :p2
 """
 
 
 GET_DEVICE_BY_ID_ANY = """-- name: get_device_by_id_any \\:one
-SELECT id, user_id, device_name, device_type, totp_secret, is_2fa_enabled, last_active, created_at, push_token, is_active, is_invalid_token from user_devices
+SELECT id, user_id, device_name, device_type, totp_secret, is_2fa_enabled, last_active, created_at, push_token, is_active, is_invalid_token, physical_device_id from user_devices
 WHERE id = :p1
 """
 
 
+GET_DEVICE_BY_PHYSICAL_ID = """-- name: get_device_by_physical_id \\:one
+SELECT id, user_id, device_name, device_type, totp_secret, is_2fa_enabled, last_active, created_at, push_token, is_active, is_invalid_token, physical_device_id FROM user_devices
+WHERE user_id = :p1 AND physical_device_id = :p2
+"""
+
+
 LIST_USER_DEVICES = """-- name: list_user_devices \\:many
-SELECT id, user_id, device_name, device_type, totp_secret, is_2fa_enabled, last_active, created_at, push_token, is_active, is_invalid_token
+SELECT id, user_id, device_name, device_type, totp_secret, is_2fa_enabled, last_active, created_at, push_token, is_active, is_invalid_token, physical_device_id
 FROM user_devices
 WHERE user_id = :p1
 ORDER BY last_active DESC
@@ -119,7 +133,7 @@ SET
     is_invalid_token = FALSE
 WHERE id = :p1
 AND user_id = :p3
-RETURNING id, user_id, device_name, device_type, totp_secret, is_2fa_enabled, last_active, created_at, push_token, is_active, is_invalid_token
+RETURNING id, user_id, device_name, device_type, totp_secret, is_2fa_enabled, last_active, created_at, push_token, is_active, is_invalid_token, physical_device_id
 """
 
 
@@ -143,6 +157,7 @@ class AsyncQuerier:
             "p3": arg.device_name,
             "p4": arg.device_type,
             "p5": arg.totp_secret,
+            "p6": arg.physical_device_id,
         })).first()
         if row is None:
             return None
@@ -158,6 +173,7 @@ class AsyncQuerier:
             push_token=row[8],
             is_active=row[9],
             is_invalid_token=row[10],
+            physical_device_id=row[11],
         )
 
     async def deactivate_device(self, *, id: uuid.UUID, user_id: uuid.UUID) -> None:
@@ -165,6 +181,24 @@ class AsyncQuerier:
 
     async def enable_device2_fa(self, *, id: uuid.UUID, user_id: uuid.UUID) -> None:
         await self._conn.execute(sqlalchemy.text(ENABLE_DEVICE2_FA), {"p1": id, "p2": user_id})
+
+    async def get_any_device_by_physical_id(self, *, physical_device_id: uuid.UUID) -> AsyncIterator[models.UserDevice]:
+        result = await self._conn.stream(sqlalchemy.text(GET_ANY_DEVICE_BY_PHYSICAL_ID), {"p1": physical_device_id})
+        async for row in result:
+            yield models.UserDevice(
+                id=row[0],
+                user_id=row[1],
+                device_name=row[2],
+                device_type=row[3],
+                totp_secret=row[4],
+                is_2fa_enabled=row[5],
+                last_active=row[6],
+                created_at=row[7],
+                push_token=row[8],
+                is_active=row[9],
+                is_invalid_token=row[10],
+                physical_device_id=row[11],
+            )
 
     async def get_device_by_id(self, *, id: uuid.UUID, user_id: uuid.UUID) -> Optional[models.UserDevice]:
         row = (await self._conn.execute(sqlalchemy.text(GET_DEVICE_BY_ID), {"p1": id, "p2": user_id})).first()
@@ -182,6 +216,7 @@ class AsyncQuerier:
             push_token=row[8],
             is_active=row[9],
             is_invalid_token=row[10],
+            physical_device_id=row[11],
         )
 
     async def get_device_by_id_any(self, *, id: uuid.UUID) -> Optional[models.UserDevice]:
@@ -200,6 +235,26 @@ class AsyncQuerier:
             push_token=row[8],
             is_active=row[9],
             is_invalid_token=row[10],
+            physical_device_id=row[11],
+        )
+
+    async def get_device_by_physical_id(self, *, user_id: uuid.UUID, physical_device_id: uuid.UUID) -> Optional[models.UserDevice]:
+        row = (await self._conn.execute(sqlalchemy.text(GET_DEVICE_BY_PHYSICAL_ID), {"p1": user_id, "p2": physical_device_id})).first()
+        if row is None:
+            return None
+        return models.UserDevice(
+            id=row[0],
+            user_id=row[1],
+            device_name=row[2],
+            device_type=row[3],
+            totp_secret=row[4],
+            is_2fa_enabled=row[5],
+            last_active=row[6],
+            created_at=row[7],
+            push_token=row[8],
+            is_active=row[9],
+            is_invalid_token=row[10],
+            physical_device_id=row[11],
         )
 
     async def list_user_devices(self, *, user_id: uuid.UUID) -> AsyncIterator[models.UserDevice]:
@@ -217,6 +272,7 @@ class AsyncQuerier:
                 push_token=row[8],
                 is_active=row[9],
                 is_invalid_token=row[10],
+                physical_device_id=row[11],
             )
 
     async def mark_device_token_invalid(self, *, push_token: Optional[str]) -> None:
@@ -244,4 +300,5 @@ class AsyncQuerier:
             push_token=row[8],
             is_active=row[9],
             is_invalid_token=row[10],
+            physical_device_id=row[11],
         )
