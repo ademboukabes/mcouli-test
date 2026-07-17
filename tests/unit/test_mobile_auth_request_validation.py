@@ -88,7 +88,7 @@ def _valid_payload() -> dict[str, object]:
         "password": "ValidPass@123",
         "device_name": "Pixel 8",
         "device_type": "android",
-        "device_id": str(uuid.uuid4()),
+        "physical_device_id": str(uuid.uuid4()),
     }
 
 

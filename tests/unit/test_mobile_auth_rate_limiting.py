@@ -81,7 +81,7 @@ def test_rate_limiting_triggered_after_max_attempts() -> None:
         password="ValidPass@123",
         device_name="Pixel 8",
         device_type="android",
-        device_id=uuid.uuid4(),
+        physical_device_id=uuid.uuid4(),
     )
 
     # Call mobile_login 5 times (which is the default max limit in settings)

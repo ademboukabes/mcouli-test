@@ -1,4 +1,3 @@
-
 # Test doubles intentionally implement only the AuthService methods exercised here.
 # They do not subclass the generated queriers, so mypy would otherwise flag each
 # constructor injection as an arg-type mismatch.
@@ -26,8 +25,10 @@ class FakeUser:
 
 
 class FakeDevice:
-    is_invalid_token = False
-    is_active = True
+    def __init__(self) -> None:
+        self.id = uuid.uuid4()
+        self.is_invalid_token = False
+        self.is_active = True
 
 
 class FakeSession:
@@ -50,6 +51,11 @@ class FakeUserQuerier:
 
 
 class FakeDeviceQuerier:
+    async def get_device_by_physical_id(
+        self, *, user_id: uuid.UUID, physical_device_id: uuid.UUID
+    ) -> FakeDevice | None:
+        return None
+
     async def get_device_by_id_any(self, id: uuid.UUID) -> FakeDevice | None:
         return None
 
@@ -66,6 +72,11 @@ class FakeSessionQuerier:
 
     async def count_user_sessions(self, user_id: uuid.UUID) -> int:
         return 0
+
+    async def get_session_by_device_for_user(
+        self, *, device_id: uuid.UUID, user_id: uuid.UUID
+    ) -> FakeSession | None:
+        return None
 
     async def upsert_session(
         self,
@@ -95,6 +106,7 @@ class FakeRedis:
     async def set(self, key: str, value: str, expire: int) -> None:
         return None
 
+
 class FakeFaceEmbeddingService:
     pass
 
@@ -120,7 +132,7 @@ def test_mobile_register_logs_without_plaintext_email(
         password="ValidPass@123",
         device_name="Pixel 8",
         device_type="android",
-        device_id=uuid.uuid4(),
+        physical_device_id=uuid.uuid4(),
     )
 
     async def _noop_cache_session_for_auth(**_: object) -> None:
@@ -137,4 +149,3 @@ def test_mobile_register_logs_without_plaintext_email(
     assert req.email not in caplog.text
     assert "user@example.com" not in caplog.text
     assert "mobile_register attempt" in caplog.text
-

@@ -73,7 +73,7 @@ def _make_login_request(
     return MobileLoginRequest(
         email=email,
         password=password,
-        device_id=uuid.uuid4(),
+        physical_device_id=uuid.uuid4(),   # was: device_id
         device_name="iPhone 15",
         device_type="ios",
     )
@@ -87,11 +87,10 @@ def _make_register_request(
     return MobileRegisterRequest(
         email=email,
         password=password,
-        device_id=uuid.uuid4(),
+        physical_device_id=uuid.uuid4(),   # was: device_id
         device_name="iPhone 15",
         device_type="ios",
     )
-
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -116,6 +115,7 @@ def device_querier() -> AsyncMock:
     q = MagicMock(spec=device_queries.AsyncQuerier)
     q.get_device_by_id = AsyncMock(return_value=None)
     q.get_device_by_id_any = AsyncMock(return_value=None)
+    q.get_device_by_physical_id = AsyncMock(return_value=None)   # new
     q.create_device = AsyncMock(return_value=_make_device())
     q.activate_device = AsyncMock()
     return q
@@ -126,6 +126,7 @@ def session_querier() -> AsyncMock:
     from db.generated import session as session_queries
     q = MagicMock(spec=session_queries.AsyncQuerier)
     q.count_user_sessions = AsyncMock(return_value=0)
+    q.get_session_by_device_for_user = AsyncMock(return_value=None)   # new
     q.upsert_session = AsyncMock(return_value=_make_session())
     q.get_session_by_id = AsyncMock()
     return q
