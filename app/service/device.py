@@ -1,5 +1,4 @@
 from db.generated import devices as device_queries
-from app.core.securite import  create_totp_secret
 import uuid
 from app.core.exceptions import DBException,AppException, DBExceptionImpl
 from db.generated.models import UserDevice
@@ -10,30 +9,6 @@ class DeviceService:
 
     def init(self: "DeviceService", device_querier: device_queries.AsyncQuerier) -> None:
         self.device_querier = device_querier
-
-    async def create_device(
-        self: "DeviceService",
-        user_id: uuid.UUID,
-        device_name: str,
-        device_type: str,
-        id: uuid.UUID | None = None,
-    ) -> UserDevice | None:
-        try :
-            DeviceCount = await self.count_devices(user_id=user_id)
-            if  DeviceCount >=3:
-                raise AppException.bad_request("You can only have 3 devices")
-            return await self.device_querier.create_device(
-                arg=device_queries.CreateDeviceParams(
-                column_1=id,
-                user_id=user_id,
-                device_name=device_name,
-                device_type=device_type,
-                totp_secret=create_totp_secret(),
-                )
-
-            )
-        except Exception as e :
-            raise DBException.handle(e)
 
     async def activate_device(
         self: "DeviceService",
