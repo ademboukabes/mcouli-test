@@ -62,26 +62,28 @@ class AuthService:
         user_id: uuid.UUID,
         req: MobileAuthBaseRequest,
     ) -> UserDevice:
-        existing_device = await self.device_querier.get_device_by_id_any(id=req.device_id)
+        existing_device = await self.device_querier.get_device_by_physical_id(
+            user_id=user_id,
+            physical_device_id=req.physical_device_id
+        )
 
         if existing_device:
-            if existing_device.user_id != user_id:
-                raise AppException.forbidden("Device already registered to another user")
             if existing_device.is_invalid_token:
                 raise AppException.forbidden(
                     "Device push token is invalid. Update the token before logging in."
                 )
             if not existing_device.is_active:
-                await self.device_querier.activate_device(id=req.device_id, user_id=user_id)
+                await self.device_querier.activate_device(id=existing_device.id, user_id=user_id)
             return existing_device
 
         device = await self.device_querier.create_device(
             arg=device_queries.CreateDeviceParams(
-                column_1=req.device_id,
+                column_1=None,
                 user_id=user_id,
                 device_name=req.device_name,
                 device_type=req.device_type,
                 totp_secret=None,
+                physical_device_id=req.physical_device_id
             )
         )
         if not device:
@@ -274,25 +276,30 @@ class AuthService:
     ) -> MobileAuthResponse:
         user_id: uuid.UUID = user.id
 
-        session_count = await self.session_querier.count_user_sessions(user_id=user_id)
-        if session_count and session_count >= AuthService.SESSION_LIMIT:
-            logger.warning(
-                "session_limit_reached user_id=%s limit=%s",
-                user_id,
-                AuthService.SESSION_LIMIT,
-            )
-            raise AppException.forbidden("Maximum session limit reached")
+        device = await self._ensure_device_for_login(user_id, req)
 
-        device_id = req.device_id
+        existing_session = await self.session_querier.get_session_by_device_for_user(
+            device_id=device.id,
+            user_id=user_id,
+        )
+
+        if existing_session is None:
+            session_count = await self.session_querier.count_user_sessions(user_id=user_id)
+            if session_count and session_count >= AuthService.SESSION_LIMIT:
+                logger.warning(
+                    "session_limit_reached user_id=%s limit=%s",
+                    user_id,
+                    AuthService.SESSION_LIMIT,
+                )
+                raise AppException.forbidden("Maximum session limit reached")
+
         expires_at = datetime.now(timezone.utc) + timedelta(
             days=settings.MOBILE_SESSION_DAYS
         )
 
-        await self._ensure_device_for_login(user_id, req)
-
         session = await self.session_querier.upsert_session(
             user_id=user_id,
-            device_id=device_id,
+            device_id=device.id,
             expires_at=expires_at,
         )
 
