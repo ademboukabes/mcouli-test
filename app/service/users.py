@@ -31,7 +31,7 @@ import json
 from db.generated import user as user_queries
 from db.generated import devices as device_queries
 from db.generated import session as session_queries
-from db.generated.models import User, UserDevice
+from db.generated.models import User, UserDevice, UserSession
 from app.core.logger import logger
 from app.service.face_embedding import FaceImagePayload, FaceEmbeddingService
 from app.schema.internal.single_face_match import ClosestUserMatch
@@ -284,14 +284,18 @@ class AuthService:
         )
 
         if existing_session is None:
-            session_count = await self.session_querier.count_user_sessions(user_id=user_id)
-            if session_count and session_count >= AuthService.SESSION_LIMIT:
+            sessions: list[UserSession] = []
+            async for s in self.session_querier.list_sessions_by_user(user_id=user_id):
+                sessions.append(s)
+
+            if len(sessions) >= AuthService.SESSION_LIMIT:
+                oldest = min(sessions, key=lambda s: (s.last_active, s.created_at))
+                await SessionService.delete_session_cache(redis, oldest.id)
+                await self.session_querier.delete_session_by_id(id=oldest.id, user_id=user_id)
                 logger.warning(
-                    "session_limit_reached user_id=%s limit=%s",
-                    user_id,
-                    AuthService.SESSION_LIMIT,
+                    "session_evicted user_id=%s evicted_session_id=%s",
+                    user_id, oldest.id,
                 )
-                raise AppException.forbidden("Maximum session limit reached")
 
         expires_at = datetime.now(timezone.utc) + timedelta(
             days=settings.MOBILE_SESSION_DAYS
@@ -319,6 +323,7 @@ class AuthService:
             expires_at=session.expires_at,
             blocked=user.blocked,
             ttl=AuthService.REDIS_SESSION_TTL,
+            last_active=session.last_active
         )
 
         return MobileAuthResponse(
