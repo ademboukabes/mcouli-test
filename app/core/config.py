@@ -39,6 +39,8 @@ class Settings(BaseSettings):
     MOBILE_SESSION_LIMIT: int = 3
     MOBILE_SESSION_TTL_SECONDS: int = 180
     MOBILE_SESSION_DAYS: int = 7
+    SESSION_ACTIVITY_THROTTLE_SECONDS: int = 60
+
     # Mobile auth validation defaults
     MOBILE_AUTH_PASSWORD_MIN_LEN: int = 8
     MOBILE_AUTH_PASSWORD_MAX_LEN: int = 128
