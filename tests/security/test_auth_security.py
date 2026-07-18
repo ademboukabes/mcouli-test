@@ -92,6 +92,7 @@ async def test_blocked_user_access(client):
         expires_at=datetime.now(timezone.utc) + timedelta(hours=1),
         blocked=True,
         ttl=3600,
+        last_active=datetime.now(timezone.utc)
     )
 
     payload = {
@@ -130,6 +131,7 @@ async def test_rate_limiting(client):
         expires_at=datetime.now(timezone.utc) + timedelta(hours=1),
         blocked=False,
         ttl=3600,
+        last_active=datetime.now(timezone.utc)
     )
 
     payload = {

@@ -77,7 +77,7 @@ class TestSanitiseFilename:
         assert ".." not in result
         assert "/" not in result
         assert "\\" not in result
-        
+
     def test_null_bytes_are_replaced(self) -> None:
         assert "\x00" not in sanitise_filename("face\x00evil.jpg", "jpg")
 
