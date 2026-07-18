@@ -1,3 +1,4 @@
+from collections.abc import AsyncIterator
 from typing import Any
 
 # Test doubles intentionally implement only the AuthService methods exercised here.
@@ -45,6 +46,8 @@ class FakeSession:
         self.user_id = user_id
         self.device_id = device_id
         self.expires_at = datetime.now(timezone.utc)
+        self.last_active = datetime.now(timezone.utc)
+        self.created_at = datetime.now(timezone.utc)
 
 
 class FakeUserQuerier:
@@ -125,6 +128,20 @@ class FakeSessionQuerier:
                 return session
         return None
 
+    async def list_sessions_by_user(self, user_id: uuid.UUID) -> AsyncIterator[FakeSession]:
+        for (u, _d), session in self._sessions.items():
+            if u == user_id:
+                yield session
+
+    async def delete_session_by_id(self, *, id: uuid.UUID, user_id: uuid.UUID) -> None:
+        key_to_remove = None
+        for key, session in self._sessions.items():
+            if session.id == id and session.user_id == user_id:
+                key_to_remove = key
+                break
+        if key_to_remove:
+            del self._sessions[key_to_remove]
+
     async def upsert_session(
         self,
         *,
@@ -136,12 +153,12 @@ class FakeSessionQuerier:
         existing = self._sessions.get(key)
         if existing:
             existing.expires_at = expires_at
+            existing.last_active = datetime.now(timezone.utc)
             return existing
         session = FakeSession(user_id=user_id, device_id=device_id)
         session.expires_at = expires_at
         self._sessions[key] = session
         return session
-
 
 class FakeRedis:
     def __init__(self) -> None:
@@ -494,8 +511,8 @@ def test_relogin_on_existing_device_succeeds_even_at_session_cap(
 ) -> None:
     """Regression test for the session-cap-vs-replace bug: a user at the
     session cap must still be able to re-login on a device they already
-    have an active session on (replace), while a genuinely new device is
-    still correctly rejected."""
+    have an active session on (replace), while a genuinely new device
+    should evict the oldest and succeed (Phase 4 behavior)."""
     user = FakeUser(email="user@example.com", exists=True)
     device_querier = FakeDeviceQuerier()
     session_querier = FakeSessionQuerier()
@@ -521,16 +538,17 @@ def test_relogin_on_existing_device_succeeds_even_at_session_cap(
 
     assert len(session_querier._sessions) == AuthService.SESSION_LIMIT
 
-    # A genuinely new device should now be rejected.
-    with pytest.raises(HTTPException) as exc_info:
-        asyncio.run(service.mobile_login(FakeRedis(), MobileLoginRequest(
-            email="user@example.com",
-            password="ValidPass@123",
-            device_name="New device",
-            device_type="android",
-            physical_device_id=uuid.uuid4(),
-        )))
-    assert exc_info.value.status_code == 403
+    # A genuinely NEW device at the cap should evict the oldest and SUCCEED.
+    result = asyncio.run(service.mobile_login(FakeRedis(), MobileLoginRequest(
+        email="user@example.com",
+        password="ValidPass@123",
+        device_name="New device",
+        device_type="android",
+        physical_device_id=uuid.uuid4(),
+    )))
+    assert result.access_token == "access"
+    # Count stays at cap — one evicted, one added.
+    assert len(session_querier._sessions) == AuthService.SESSION_LIMIT
 
     # Re-logging in on an EXISTING device (replace) must still succeed.
     existing_physical_id = next(iter(device_querier._devices.values())).physical_device_id
@@ -545,7 +563,6 @@ def test_relogin_on_existing_device_succeeds_even_at_session_cap(
     assert result.access_token == "access"
     # Session count must NOT have grown — this was a replace, not an addition.
     assert len(session_querier._sessions) == AuthService.SESSION_LIMIT
-
 
 def test_same_physical_device_id_reuses_device_row(
     monkeypatch: pytest.MonkeyPatch,
