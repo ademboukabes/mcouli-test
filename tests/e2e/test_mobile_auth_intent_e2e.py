@@ -29,7 +29,7 @@ class TestMobileAuthEndpointsE2E:
             "password": "anypassword",
             "device_name": "TestDevice",
             "device_type": "android",
-            "device_id": str(uuid.uuid4()),
+            "physical_device_id": str(uuid.uuid4()),
         }
         response = requests.post(
             f"{self.base_url}/user/auth/login",
@@ -50,7 +50,7 @@ class TestMobileAuthEndpointsE2E:
             "password": "ValidPass@123",
             "device_name": "TestDevice",
             "device_type": "android",
-            "device_id": device_id,
+            "physical_device_id": device_id,
         }
         response1 = requests.post(
             f"{self.base_url}/user/auth/register",
@@ -74,7 +74,7 @@ class TestMobileAuthEndpointsE2E:
             "otp": otp,
             "device_name": "TestDevice",
             "device_type": "android",
-            "device_id": device_id,
+            "physical_device_id": device_id,
         }
         verify_response = requests.post(
             f"{self.base_url}/user/auth/register/verify",
@@ -104,7 +104,7 @@ class TestMobileAuthEndpointsE2E:
             "password": password,
             "device_name": "TestDevice",
             "device_type": "android",
-            "device_id": device_id,
+            "physical_device_id": device_id,
         }
         register_response = requests.post(
             f"{self.base_url}/user/auth/register",
@@ -124,7 +124,7 @@ class TestMobileAuthEndpointsE2E:
             "otp": otp,
             "device_name": "TestDevice",
             "device_type": "android",
-            "device_id": device_id,
+            "physical_device_id": device_id,
         }
         verify_response = requests.post(
             f"{self.base_url}/user/auth/register/verify",
@@ -141,7 +141,7 @@ class TestMobileAuthEndpointsE2E:
             "password": password,
             "device_name": "TestDevice",
             "device_type": "android",
-            "device_id": device_id,
+            "physical_device_id": device_id,
         }
         login_response = requests.post(
             f"{self.base_url}/user/auth/login",
@@ -168,7 +168,7 @@ class TestMobileAuthEndpointsE2E:
             "password": password,
             "device_name": "TestDevice",
             "device_type": "android",
-            "device_id": device_id,
+            "physical_device_id": device_id,
         }
         register_response = requests.post(
             f"{self.base_url}/user/auth/register",
@@ -187,7 +187,7 @@ class TestMobileAuthEndpointsE2E:
             "otp": otp,
             "device_name": "TestDevice",
             "device_type": "android",
-            "device_id": device_id,
+            "physical_device_id": device_id,
         }
         verify_response = requests.post(
             f"{self.base_url}/user/auth/register/verify",
@@ -202,7 +202,7 @@ class TestMobileAuthEndpointsE2E:
             "password": "WrongPass@123",
             "device_name": "TestDevice",
             "device_type": "android",
-            "device_id": device_id,
+            "physical_device_id": device_id,
         }
         response = requests.post(
             f"{self.base_url}/user/auth/login",
@@ -218,7 +218,7 @@ class TestMobileAuthEndpointsE2E:
             "email": "user@example.com",
             "device_name": "TestDevice",
             "device_type": "android",
-            "device_id": str(uuid.uuid4()),
+            "physical_device_id": str(uuid.uuid4()),
             # Missing password
         }
         response = requests.post(
@@ -234,7 +234,7 @@ class TestMobileAuthEndpointsE2E:
             "email": "user@example.com",
             "password": "ValidPass@123",
             "device_name": "TestDevice",
-            "device_id": str(uuid.uuid4()),
+            "physical_device_id": str(uuid.uuid4()),
             # Missing device_type
         }
         response = requests.post(

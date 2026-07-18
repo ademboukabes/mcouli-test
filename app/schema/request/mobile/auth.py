@@ -20,7 +20,7 @@ class MobileAuthBaseRequest(BaseModel):
         min_length=1,
         max_length=settings.MOBILE_AUTH_DEVICE_TYPE_MAX_LEN,
     )
-    device_id: UUID
+    physical_device_id: UUID
 
     @field_validator("email", mode="before")
     @classmethod

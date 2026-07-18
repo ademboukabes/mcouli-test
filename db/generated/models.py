@@ -147,6 +147,17 @@ class ProcessingJob:
 
 
 @dataclasses.dataclass()
+class RefreshToken:
+    id: uuid.UUID
+    session_id: uuid.UUID
+    family_id: uuid.UUID
+    token_hash: str
+    used: bool
+    created_at: datetime.datetime
+    used_at: Optional[datetime.datetime]
+
+
+@dataclasses.dataclass()
 class StaffDriveConnection:
     id: uuid.UUID
     staff_user_id: uuid.UUID
@@ -261,6 +272,7 @@ class UserDevice:
     push_token: Optional[str]
     is_active: bool
     is_invalid_token: bool
+    physical_device_id: uuid.UUID
 
 
 @dataclasses.dataclass()

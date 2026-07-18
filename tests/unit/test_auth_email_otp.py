@@ -48,28 +48,22 @@ async def test_mobile_register_sends_otp(
     mock_redis: AsyncMock,
     mock_user_querier: AsyncMock,
 ) -> None:
-    # Arrange
     req = MobileRegisterRequest(
         email="test@example.com",
         password="Password1!",
         device_name="iPhone",
         device_type="iOS",
-        device_id=uuid.uuid4(),
+        physical_device_id=uuid.uuid4(),
     )
-    mock_user_querier.get_user_by_email.return_value = None # User does not exist
-    mock_redis.incr.return_value = 1 # Rate limit check passes
+    mock_user_querier.get_user_by_email.return_value = None
+    mock_redis.incr.return_value = 1
 
-    # Act
     res = await auth_service.mobile_register(redis=mock_redis, req=req)
 
-    # Assert
     assert res.status == "pending_verification"
     assert res.email == "test@example.com"
-
-    # Verify redis was called to save pending user and OTP
     assert mock_redis.set.call_count == 2
 
-    # Verify NATS publish was called
     mock_publish.assert_called_once()
     args, _ = mock_publish.call_args
     assert args[0] == "email.send_otp"
@@ -85,20 +79,19 @@ async def test_verify_mobile_register_success(
     mock_device_querier: AsyncMock,
     mock_session_querier: AsyncMock,
 ) -> None:
-    # Arrange
     device_id = uuid.uuid4()
     req = RegisterVerifyRequest(
         email="test@example.com",
         password="Password1!",
         device_name="iPhone",
         device_type="iOS",
-        device_id=device_id,
+        physical_device_id=device_id,
         otp="123456"
     )
 
     mock_redis.get.side_effect = [
-        "123456", # First call gets OTP
-        json.dumps({"hashed_password": "hashed_pass"}) # Second call gets pending user
+        "123456",
+        json.dumps({"hashed_password": "hashed_pass"})
     ]
 
     mock_user = AsyncMock()
@@ -111,47 +104,38 @@ async def test_verify_mobile_register_success(
     mock_session = AsyncMock()
     mock_session.id = uuid.uuid4()
     mock_session_querier.upsert_session.return_value = mock_session
-    mock_device_querier.get_device_by_id.return_value = None
-    mock_device_querier.get_device_by_id_any.return_value = None
 
-    # Act
+    # FIX 1: Mock the new lookup method to return None (device not found)
+    mock_device_querier.get_device_by_physical_id.return_value = None
+    # FIX 2: Mock create_device to return a truthy device
+    mock_device_querier.create_device.return_value = AsyncMock()
+
     with patch("app.service.users.SessionService.cache_session_for_auth", new_callable=AsyncMock):
         res = await auth_service.verify_mobile_register(redis=mock_redis, req=req)
 
-    # Assert
     assert res.is_new_user is True
     assert res.user_id == mock_user.id
-
-    # Verify user was created
     mock_user_querier.create_user.assert_called_once_with(email="test@example.com", hashed_password="hashed_pass")
-
-    # Verify redis cleanup
     assert mock_redis.delete.call_count == 2
-
 
 @pytest.mark.asyncio
 async def test_mobile_register_resend_otp_success(
     auth_service: AuthService,
     mock_redis: AsyncMock,
 ) -> None:
-    # Arrange
     email = "test@example.com"
     mock_redis.get.return_value = '{"hashed_password": "fake"}'
     mock_redis.incr.return_value = 1
 
-    # Act
     with patch("app.service.users.NatsClient.publish", new_callable=AsyncMock) as mock_publish:
         res = await auth_service.mobile_register_resend_otp(redis=mock_redis, email=email)
 
-    # Assert
     assert res.status == "pending_verification"
     assert res.message == "New OTP sent to email"
     assert res.email == email
-
     mock_redis.get.assert_called_with(f"pending_user:{email}")
     mock_redis.set.assert_called_with(f"otp:{email}", ANY, expire=600)
     mock_publish.assert_called_once()
-
 
 @pytest.mark.asyncio
 async def test_mobile_register_resend_otp_not_found(
@@ -159,12 +143,10 @@ async def test_mobile_register_resend_otp_not_found(
     mock_redis: AsyncMock,
 ) -> None:
     from fastapi import HTTPException
-    # Arrange
     email = "test@example.com"
     mock_redis.incr.return_value = 1
-    mock_redis.get.return_value = None  # No pending user
+    mock_redis.get.return_value = None
 
-    # Act & Assert
     with pytest.raises(HTTPException) as exc_info:
         await auth_service.mobile_register_resend_otp(redis=mock_redis, email=email)
 

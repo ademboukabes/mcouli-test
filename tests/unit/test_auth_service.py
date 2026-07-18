@@ -17,6 +17,9 @@ from app.service.users import AuthService
 from app.core.securite import hash_password
 from app.schema.request.mobile.auth import MobileLoginRequest, MobileRegisterRequest
 
+async def _empty_async_iter():
+    return
+    yield  # pragma: no cover
 
 # ---------------------------------------------------------------------------
 # Factories
@@ -73,7 +76,7 @@ def _make_login_request(
     return MobileLoginRequest(
         email=email,
         password=password,
-        device_id=uuid.uuid4(),
+        physical_device_id=uuid.uuid4(),   # was: device_id
         device_name="iPhone 15",
         device_type="ios",
     )
@@ -87,11 +90,10 @@ def _make_register_request(
     return MobileRegisterRequest(
         email=email,
         password=password,
-        device_id=uuid.uuid4(),
+        physical_device_id=uuid.uuid4(),   # was: device_id
         device_name="iPhone 15",
         device_type="ios",
     )
-
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -116,6 +118,7 @@ def device_querier() -> AsyncMock:
     q = MagicMock(spec=device_queries.AsyncQuerier)
     q.get_device_by_id = AsyncMock(return_value=None)
     q.get_device_by_id_any = AsyncMock(return_value=None)
+    q.get_device_by_physical_id = AsyncMock(return_value=None)   # new
     q.create_device = AsyncMock(return_value=_make_device())
     q.activate_device = AsyncMock()
     return q
@@ -126,6 +129,9 @@ def session_querier() -> AsyncMock:
     from db.generated import session as session_queries
     q = MagicMock(spec=session_queries.AsyncQuerier)
     q.count_user_sessions = AsyncMock(return_value=0)
+    q.get_session_by_device_for_user = AsyncMock(return_value=None)
+    q.list_sessions_by_user = MagicMock(return_value=_empty_async_iter())
+    q.delete_session_by_id = AsyncMock()
     q.upsert_session = AsyncMock(return_value=_make_session())
     q.get_session_by_id = AsyncMock()
     return q
@@ -280,7 +286,7 @@ class TestLoginExistingUser:
 
 class TestSessionLimit:
     @pytest.mark.asyncio
-    async def test_exceeding_session_limit_raises_403(
+    async def test_at_cap_evicts_oldest_and_succeeds(
         self,
         auth_service: AuthService,
         user_querier: AsyncMock,
@@ -289,13 +295,30 @@ class TestSessionLimit:
     ) -> None:
         user = _make_user()
         user_querier.get_user_by_email.return_value = user
-        # Return a count >= SESSION_LIMIT
-        session_querier.count_user_sessions.return_value = AuthService.SESSION_LIMIT
 
-        with pytest.raises(HTTPException) as exc_info:
-            await auth_service.mobile_login(redis, _make_login_request())
-        assert exc_info.value.status_code == 403
-        assert "session limit" in exc_info.value.detail.lower()
+        oldest = _make_session(user_id=user.id)
+        middle = _make_session(user_id=user.id)
+        newest = _make_session(user_id=user.id)
+
+        # Stagger so oldest is clearly the minimum
+        base = datetime.now(timezone.utc)
+        oldest.last_active = base - timedelta(seconds=2)
+        middle.last_active = base - timedelta(seconds=1)
+        newest.last_active = base
+
+        async def _sessions(*, user_id):
+            yield oldest
+            yield middle
+            yield newest
+
+        session_querier.list_sessions_by_user = _sessions
+
+        result = await auth_service.mobile_login(redis, _make_login_request())
+
+        assert result.access_token
+        session_querier.delete_session_by_id.assert_called_once()
+        called_id = session_querier.delete_session_by_id.call_args.kwargs.get("id")
+        assert called_id == oldest.id
 
     @pytest.mark.asyncio
     async def test_within_session_limit_succeeds(
@@ -307,10 +330,11 @@ class TestSessionLimit:
     ) -> None:
         user = _make_user()
         user_querier.get_user_by_email.return_value = user
-        session_querier.count_user_sessions.return_value = AuthService.SESSION_LIMIT - 1
+        session_querier.list_sessions_by_user = MagicMock(return_value=_empty_async_iter())
 
         result = await auth_service.mobile_login(redis, _make_login_request())
         assert result.access_token
+        session_querier.delete_session_by_id.assert_not_called()
 
 
 # ===========================================================================

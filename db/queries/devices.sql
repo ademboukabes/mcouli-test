@@ -4,9 +4,10 @@ INSERT INTO user_devices (
     user_id,
     device_name,
     device_type,
-    totp_secret
+    totp_secret,
+    physical_device_id
 ) VALUES (
-    COALESCE($1, uuid_generate_v4()), $2, $3, $4, $5
+    COALESCE($1, uuid_generate_v4()), $2, $3, $4, $5, $6
 )
 RETURNING *;
 
@@ -76,3 +77,11 @@ SET
     is_invalid_token = TRUE,
     is_active = FALSE
 WHERE push_token = $1;
+
+-- name: GetDeviceByPhysicalId :one
+SELECT * FROM user_devices
+WHERE user_id = $1 AND physical_device_id = $2;
+
+-- name: GetAnyDeviceByPhysicalId :many
+SELECT * FROM user_devices
+WHERE physical_device_id = $1;

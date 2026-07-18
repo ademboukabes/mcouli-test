@@ -14,6 +14,7 @@ class MobileSessionCache(BaseModel):
     email: str
     expires_at: datetime
     blocked: bool
+    last_active: datetime
 
 
 class SessionService:
@@ -35,6 +36,7 @@ class SessionService:
         expires_at: datetime,
         blocked: bool,
         ttl: int,
+        last_active: datetime
     ) -> None:
         key = RedisKey.MobileSessionCache.value.format(session_id=session_id)
         payload = MobileSessionCache(
@@ -43,6 +45,7 @@ class SessionService:
             email=email,
             expires_at=expires_at,
             blocked=blocked,
+            last_active=last_active
         )
         await redis.set(key=key, value=payload.model_dump_json(), expire=ttl)
 
