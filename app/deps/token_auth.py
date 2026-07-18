@@ -27,7 +27,10 @@ async def get_current_mobile_user(
 ) -> MobileUserSchema:
     """
     Dependency to get the current logged-in mobile user.
-    Fast path: Redis cache (0 DB queries).
+    Fast path: Redis cache hit. Usually 0 DB queries; occasionally 1 cheap,
+    throttled UPDATE to last_active (see SESSION_ACTIVITY_THROTTLE_SECONDS) —
+    this is not a full round trip through the slow path, just a single
+    indexed write on the request's existing connection.
     Slow path: Postgres fallback (2 DB queries) with cache re-population.
     """
     token = credentials.credentials
@@ -49,6 +52,23 @@ async def get_current_mobile_user(
             raise HTTPException(status_code=401, detail="Session expired")
         if cached.blocked:
             raise HTTPException(status_code=403, detail="User is blocked")
+
+        now = datetime.now(timezone.utc)
+        if (now - cached.last_active).total_seconds() > settings.SESSION_ACTIVITY_THROTTLE_SECONDS:
+            await container.session_service.session_querier.update_session_activity(
+                id=cached.session_id
+            )
+            await SessionService.cache_session_for_auth(
+                redis=redis,
+                session_id=cached.session_id,
+                user_id=cached.user_id,
+                email=cached.email,
+                expires_at=cached.expires_at,
+                blocked=cached.blocked,
+                ttl=settings.MOBILE_SESSION_TTL_SECONDS,
+                last_active=now,
+            )
+
         return MobileUserSchema(
             user_id=cached.user_id,
             email=cached.email,
@@ -70,7 +90,9 @@ async def get_current_mobile_user(
     if user.blocked:
         raise HTTPException(status_code=403, detail="User is blocked")
 
-    # Re-populate cache so next request hits Redis
+    # Re-populate cache so next request hits Redis. The session row was just
+    # fetched fresh from Postgres, so its last_active is already accurate —
+    # no extra write needed here, only cache population.
     await SessionService.cache_session_for_auth(
         redis=redis,
         session_id=session.id,
@@ -79,6 +101,7 @@ async def get_current_mobile_user(
         expires_at=session.expires_at,
         blocked=user.blocked,
         ttl=settings.MOBILE_SESSION_TTL_SECONDS,
+        last_active=session.last_active,
     )
 
     return MobileUserSchema(
