@@ -114,9 +114,6 @@ class FakeSessionQuerier:
     def __init__(self) -> None:
         self._sessions: dict[tuple[uuid.UUID, uuid.UUID], FakeSession] = {}
 
-    async def count_user_sessions(self, user_id: uuid.UUID) -> int:
-        return sum(1 for (u, _d) in self._sessions if u == user_id)
-
     async def get_session_by_device_for_user(
         self, *, device_id: uuid.UUID, user_id: uuid.UUID
     ) -> FakeSession | None:
@@ -141,6 +138,25 @@ class FakeSessionQuerier:
                 break
         if key_to_remove:
             del self._sessions[key_to_remove]
+
+    async def lock_user_sessions(self, *, user_id: str) -> None:
+        return None
+
+    async def evict_overflow_sessions(
+        self, *, user_id: uuid.UUID, id: uuid.UUID, session_limit: int
+    ) -> AsyncIterator[uuid.UUID]:
+        candidates = [
+            s for (u, _d), s in list(self._sessions.items())
+            if u == user_id and s.id != id
+        ]
+        # +1 accounts for the current session itself, which isn't in `candidates`
+        # but does count toward the real COUNT(*) the SQL version computes.
+        overflow = max(0, (len(candidates) + 1) - session_limit)
+        candidates.sort(key=lambda s: (s.last_active, s.created_at))
+        for s in candidates[:overflow]:
+            key = next(k for k, v in self._sessions.items() if v is s)
+            del self._sessions[key]
+            yield s.id
 
     async def upsert_session(
         self,

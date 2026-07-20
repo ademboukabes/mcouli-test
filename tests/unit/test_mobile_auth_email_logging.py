@@ -4,6 +4,7 @@
 # mypy: disable-error-code=arg-type
 
 import asyncio
+from collections.abc import AsyncIterator
 import logging
 import uuid
 from datetime import datetime, timezone
@@ -70,8 +71,15 @@ class FakeSessionQuerier:
     def __init__(self, session: FakeSession) -> None:
         self._session = session
 
-    async def count_user_sessions(self, user_id: uuid.UUID) -> int:
-        return 0
+
+    async def lock_user_sessions(self, *, user_id: str) -> None:
+        return None
+
+    async def evict_overflow_sessions(
+        self, *, user_id: uuid.UUID, id: uuid.UUID, session_limit: int
+    ) -> AsyncIterator[uuid.UUID]:
+        return
+        yield  # pragma: no cover
 
     async def get_session_by_device_for_user(
         self, *, device_id: uuid.UUID, user_id: uuid.UUID

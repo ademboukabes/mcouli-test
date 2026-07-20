@@ -1,6 +1,6 @@
 import uuid
 import json
-from unittest.mock import AsyncMock, patch, ANY
+from unittest.mock import AsyncMock, MagicMock, patch, ANY
 import pytest
 
 from app.service.users import AuthService
@@ -100,7 +100,14 @@ async def test_verify_mobile_register_success(
     mock_user.blocked = False
     mock_user_querier.create_user.return_value = mock_user
 
-    mock_session_querier.count_user_sessions.return_value = 0
+    mock_session_querier.lock_user_sessions = AsyncMock(return_value=None)
+
+    async def _empty_evict(*, user_id, id, session_limit):
+        return
+        yield  # pragma: no cover
+
+    mock_session_querier.evict_overflow_sessions = MagicMock(side_effect=_empty_evict)
+
     mock_session = AsyncMock()
     mock_session.id = uuid.uuid4()
     mock_session_querier.upsert_session.return_value = mock_session
