@@ -4,7 +4,7 @@
 # source: session.sql
 import dataclasses
 import datetime
-from typing import AsyncIterator, Optional
+from typing import Any, AsyncIterator, Optional
 import uuid
 
 import sqlalchemy
@@ -43,6 +43,25 @@ WHERE id = :p1 AND user_id = :p2
 """
 
 
+EVICT_OVERFLOW_SESSIONS = """-- name: evict_overflow_sessions \\:many
+WITH overflow AS (
+    SELECT GREATEST(0, COUNT(*) - :p3) AS n
+    FROM user_sessions AS count_s
+    WHERE count_s.user_id = :p1
+)
+DELETE FROM user_sessions AS outer_s
+WHERE outer_s.id IN (
+    SELECT inner_s.id
+    FROM user_sessions AS inner_s
+    WHERE inner_s.user_id = :p1 AND inner_s.id != :p2
+    ORDER BY inner_s.last_active ASC, inner_s.created_at ASC
+    LIMIT (SELECT n FROM overflow)
+    FOR UPDATE SKIP LOCKED
+)
+RETURNING outer_s.id
+"""
+
+
 GET_SESSION_BY_DEVICE_FOR_USER = """-- name: get_session_by_device_for_user \\:one
 SELECT id, user_id, device_id, created_at, last_active, expires_at
 FROM user_sessions
@@ -61,6 +80,11 @@ LIST_SESSIONS_BY_USER = """-- name: list_sessions_by_user \\:many
 SELECT id, user_id, device_id, created_at, last_active, expires_at
 FROM user_sessions
 WHERE user_id = :p1
+"""
+
+
+LOCK_USER_SESSIONS = """-- name: lock_user_sessions \\:exec
+SELECT pg_advisory_xact_lock(hashtext(:p1\\:\\:text)\\:\\:bigint)
 """
 
 
@@ -125,6 +149,11 @@ class AsyncQuerier:
     async def delete_session_by_id(self, *, id: uuid.UUID, user_id: uuid.UUID) -> None:
         await self._conn.execute(sqlalchemy.text(DELETE_SESSION_BY_ID), {"p1": id, "p2": user_id})
 
+    async def evict_overflow_sessions(self, *, user_id: uuid.UUID, id: uuid.UUID, session_limit: Optional[Any]) -> AsyncIterator[uuid.UUID]:
+        result = await self._conn.stream(sqlalchemy.text(EVICT_OVERFLOW_SESSIONS), {"p1": user_id, "p2": id, "p3": session_limit})
+        async for row in result:
+            yield row[0]
+
     async def get_session_by_device_for_user(self, *, device_id: uuid.UUID, user_id: uuid.UUID) -> Optional[models.UserSession]:
         row = (await self._conn.execute(sqlalchemy.text(GET_SESSION_BY_DEVICE_FOR_USER), {"p1": device_id, "p2": user_id})).first()
         if row is None:
@@ -162,6 +191,9 @@ class AsyncQuerier:
                 last_active=row[4],
                 expires_at=row[5],
             )
+
+    async def lock_user_sessions(self, *, user_id: str) -> None:
+        await self._conn.execute(sqlalchemy.text(LOCK_USER_SESSIONS), {"p1": user_id})
 
     async def update_session_activity(self, *, id: uuid.UUID) -> None:
         await self._conn.execute(sqlalchemy.text(UPDATE_SESSION_ACTIVITY), {"p1": id})
