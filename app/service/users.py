@@ -124,10 +124,18 @@ class AuthService:
         if not verify_password(req.password, existing_user.hashed_password or ""):
             logger.warning("login attempt: invalid_credentials user_id=%s", existing_user.id)
             raise AppException.unauthorized("Invalid credentials")
-        logger.info("login success user_id=%s", existing_user.id)
+
+        locked_user = await self.user_querier.get_user_by_id_for_update(id=existing_user.id)
+        if not locked_user:
+            raise AppException.unauthorized("User not found")
+        if locked_user.blocked:
+            logger.warning("login attempt: user_blocked_at_commit user_id=%s", locked_user.id)
+            raise AppException.forbidden("User is blocked")
+
+        logger.info("login success user_id=%s", locked_user.id)
         return await self._create_mobile_session(
             redis=redis,
-            user=existing_user,
+            user=locked_user,
             req=req,
             is_new_user=False,
         )
