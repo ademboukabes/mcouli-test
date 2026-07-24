@@ -559,9 +559,6 @@ class TestBlockedUserRaceCondition:
 
         await auth_service.mobile_login(redis, _make_login_request())
 
-        cache_kwargs = redis.set.call_args
-        # cache_session_for_auth writes via redis.set with the payload as JSON;
-        # simplest reliable check is via the querier call itself:
         user_querier.get_user_by_id_for_update.assert_called_once_with(id=stale.id)
 
     @pytest.mark.asyncio

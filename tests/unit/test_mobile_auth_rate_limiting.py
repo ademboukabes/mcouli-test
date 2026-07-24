@@ -44,7 +44,7 @@ class FakeUserQuerier:
 
     async def get_user_by_id_for_update(self, id: uuid.UUID) -> FakeUser:
         return self._user
-    
+
 class FakeDeviceQuerier:
     pass
 
