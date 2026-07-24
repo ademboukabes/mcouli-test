@@ -321,3 +321,99 @@ async def test_concurrent_new_device_logins_settle_at_cap_real_db(
         )
         await db_conn.execute(text("DELETE FROM users WHERE id = :uid"), {"uid": user_id})
         await db_conn.commit()
+
+@pytest.mark.asyncio
+async def test_concurrent_block_and_login_never_leaves_blocked_user_with_session(
+    db_conn,
+) -> None:
+    """The race this test exists for: block_user and mobile_login racing on
+    the same user. Regardless of which wins the timing, a user that ends up
+    blocked must never retain an active session — that would mean a login
+    slipped through the row-lock re-check and created a session after
+    block_user's cleanup already ran. Repeated because this is a genuine
+    timing race, not deterministic on a single run."""
+    from app.core.config import settings
+    from app.service.users import AuthService
+    from sqlalchemy.ext.asyncio import create_async_engine
+
+    url = (
+        f"postgresql+asyncpg://{settings.POSTGRES_USER}:{settings.POSTGRES_PASSWORD}"
+        f"@{settings.POSTGRES_HOST}:{settings.POSTGRES_PORT}/{settings.POSTGRES_DB}"
+    )
+    engine = create_async_engine(url, pool_pre_ping=True)
+
+    async def _run_one_trial() -> None:
+        password = "ValidPass@123"
+        email = f"test-block-race-{uuid.uuid4()}@multai.com"
+
+        user = await user_queries.AsyncQuerier(db_conn).create_user(
+            email=email, hashed_password=hash_password(password),
+        )
+        assert user is not None
+        user_id = user.id
+        await db_conn.commit()
+
+        async def _login() -> None:
+            async with engine.connect() as conn:
+                svc = AuthService(
+                    user_querier=user_queries.AsyncQuerier(conn),
+                    session_querier=session_queries.AsyncQuerier(conn),
+                    device_querier=device_queries.AsyncQuerier(conn),
+                    face_embedding_service=MagicMock(),
+                )
+                req = MobileLoginRequest(
+                    email=email, password=password,
+                    device_name="Race Device", device_type="android",
+                    physical_device_id=uuid.uuid4(),
+                )
+                try:
+                    await svc.mobile_login(_FakeRedis(), req)
+                except Exception:
+                    pass
+                await conn.commit()
+
+        async def _block() -> None:
+            async with engine.connect() as conn:
+                svc = AuthService(
+                    user_querier=user_queries.AsyncQuerier(conn),
+                    session_querier=session_queries.AsyncQuerier(conn),
+                    device_querier=device_queries.AsyncQuerier(conn),
+                    face_embedding_service=MagicMock(),
+                )
+                await svc.block_user(redis=_FakeRedis(), user_id=user_id)
+                await conn.commit()
+
+        await asyncio.gather(_login(), _block())
+
+        blocked = (
+            await db_conn.execute(
+                text("SELECT blocked FROM users WHERE id = :uid"), {"uid": user_id}
+            )
+        ).scalar()
+        session_count = (
+            await db_conn.execute(
+                text("SELECT COUNT(*) FROM user_sessions WHERE user_id = :uid"),
+                {"uid": user_id},
+            )
+        ).scalar()
+
+        await db_conn.execute(
+            text("DELETE FROM user_sessions WHERE user_id = :uid"), {"uid": user_id}
+        )
+        await db_conn.execute(
+            text("DELETE FROM user_devices WHERE user_id = :uid"), {"uid": user_id}
+        )
+        await db_conn.execute(text("DELETE FROM users WHERE id = :uid"), {"uid": user_id})
+        await db_conn.commit()
+
+        if blocked:
+            assert session_count == 0, (
+                "A blocked user retained an active session — the row-lock "
+                "re-check in mobile_login did not close the race."
+            )
+
+    try:
+        for _ in range(20):
+            await _run_one_trial()
+    finally:
+        await engine.dispose()

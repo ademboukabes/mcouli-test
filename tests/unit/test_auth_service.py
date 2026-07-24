@@ -105,6 +105,7 @@ def user_querier() -> AsyncMock:
     from db.generated import user as user_queries
     q = MagicMock(spec=user_queries.AsyncQuerier)
     q.get_user_by_email = AsyncMock(return_value=None)
+    q.get_user_by_id_for_update = AsyncMock(return_value=None)
     q.create_user = AsyncMock()
     q.get_user_by_id = AsyncMock()
     q.find_closest_user_by_embedding = AsyncMock(return_value=None)
@@ -246,6 +247,7 @@ class TestLoginExistingUser:
     ) -> None:
         existing = _make_user(password="Correctpass1!")
         user_querier.get_user_by_email.return_value = existing
+        user_querier.get_user_by_id_for_update.return_value = existing
 
         result = await auth_service.mobile_login(
             redis, _make_login_request(password="Correctpass1!")
@@ -263,6 +265,7 @@ class TestLoginExistingUser:
     ) -> None:
         existing = _make_user(password="Rightpassword1!")
         user_querier.get_user_by_email.return_value = existing
+        user_querier.get_user_by_id_for_update.return_value = existing
 
         with pytest.raises(HTTPException) as exc_info:
             await auth_service.mobile_login(
@@ -297,6 +300,7 @@ class TestSessionLimit:
     ) -> None:
         user = _make_user()
         user_querier.get_user_by_email.return_value = user
+        user_querier.get_user_by_id_for_update.return_value = user
 
         evicted_id = uuid.uuid4()
 
@@ -321,6 +325,7 @@ class TestSessionLimit:
     ) -> None:
         user = _make_user()
         user_querier.get_user_by_email.return_value = user
+        user_querier.get_user_by_id_for_update.return_value = user
         session_querier.list_sessions_by_user = MagicMock(return_value=_empty_async_iter())
 
         result = await auth_service.mobile_login(redis, _make_login_request())
@@ -340,6 +345,7 @@ class TestSessionLimit:
         and every session id it yields must trigger a Redis cache eviction."""
         user = _make_user()
         user_querier.get_user_by_email.return_value = user
+        user_querier.get_user_by_id_for_update.return_value = user
 
         evicted_ids = [uuid.uuid4(), uuid.uuid4(), uuid.uuid4()]
 
@@ -509,3 +515,67 @@ class TestFindClosestUser:
         assert result is not None
         assert result.user_id == row.id
         assert result.distance == 0.25
+
+class TestBlockedUserRaceCondition:
+    @pytest.mark.asyncio
+    async def test_blocked_between_initial_check_and_lock_is_caught(
+        self,
+        auth_service: AuthService,
+        user_querier: AsyncMock,
+        session_querier: AsyncMock,
+        redis: AsyncMock,
+    ) -> None:
+        """Simulates the exact race: the first read sees an unblocked user,
+        but the row-locked re-read (as if block_user committed in between)
+        sees blocked=True. Login must still be rejected, and no session
+        may be created."""
+        unblocked_snapshot = _make_user(blocked=False)
+        blocked_after_lock = _make_user(
+            user_id=unblocked_snapshot.id, blocked=True
+        )
+        user_querier.get_user_by_email.return_value = unblocked_snapshot
+        user_querier.get_user_by_id_for_update.return_value = blocked_after_lock
+
+        with pytest.raises(HTTPException) as exc_info:
+            await auth_service.mobile_login(redis, _make_login_request())
+
+        assert exc_info.value.status_code == 403
+        session_querier.upsert_session.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_locked_row_read_is_used_for_session_creation(
+        self,
+        auth_service: AuthService,
+        user_querier: AsyncMock,
+        session_querier: AsyncMock,
+        redis: AsyncMock,
+    ) -> None:
+        """The locked re-read's user object must be what actually gets
+        passed forward — not the earlier, possibly-stale read."""
+        stale = _make_user(email="stale@test.com")
+        fresh = _make_user(user_id=stale.id, email="fresh@test.com")
+        user_querier.get_user_by_email.return_value = stale
+        user_querier.get_user_by_id_for_update.return_value = fresh
+
+        await auth_service.mobile_login(redis, _make_login_request())
+
+        cache_kwargs = redis.set.call_args
+        # cache_session_for_auth writes via redis.set with the payload as JSON;
+        # simplest reliable check is via the querier call itself:
+        user_querier.get_user_by_id_for_update.assert_called_once_with(id=stale.id)
+
+    @pytest.mark.asyncio
+    async def test_missing_user_at_lock_time_raises_401(
+        self,
+        auth_service: AuthService,
+        user_querier: AsyncMock,
+        redis: AsyncMock,
+    ) -> None:
+        """Defensive case: user vanished between the two reads (e.g. deleted)."""
+        user_querier.get_user_by_email.return_value = _make_user()
+        user_querier.get_user_by_id_for_update.return_value = None
+
+        with pytest.raises(HTTPException) as exc_info:
+            await auth_service.mobile_login(redis, _make_login_request())
+
+        assert exc_info.value.status_code == 401

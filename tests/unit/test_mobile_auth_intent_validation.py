@@ -65,7 +65,13 @@ class FakeUserQuerier:
     async def get_user_by_id(self, id: uuid.UUID) -> FakeUser | None:
         if self._user.id == id:
             return self._user
+        for created in self._created_users.values():
+            if created.id == id:
+                return created
         return None
+
+    async def get_user_by_id_for_update(self, id: uuid.UUID) -> FakeUser | None:
+        return await self.get_user_by_id(id=id)
 
     async def create_user(self, *, email: str, hashed_password: str) -> FakeUser:
         new_user = FakeUser(email=email, exists=True)
