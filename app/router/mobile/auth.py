@@ -7,7 +7,6 @@ from app.core.exceptions import AppException
 from uuid import UUID
 
 from app.container import get_container, Container
-from app.core.config import settings
 from app.core.constant import AuditEventType
 from app.deps.client_ip import get_client_ip
 from app.deps.token_auth import MobileUserSchema, get_current_mobile_user
