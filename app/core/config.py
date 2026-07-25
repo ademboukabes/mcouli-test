@@ -41,6 +41,10 @@ class Settings(BaseSettings):
     MOBILE_SESSION_DAYS: int = 7
     SESSION_ACTIVITY_THROTTLE_SECONDS: int = 60
 
+    # Mobile access/refresh token lifetimes
+    MOBILE_ACCESS_TOKEN_TTL_SECONDS: int = 900
+    MOBILE_REFRESH_TOKEN_REUSE_GRACE_SECONDS: int = 30
+
     # Mobile auth validation defaults
     MOBILE_AUTH_PASSWORD_MIN_LEN: int = 8
     MOBILE_AUTH_PASSWORD_MAX_LEN: int = 128
