@@ -20,6 +20,7 @@ from app.core.securite import hash_password
 from app.schema.request.mobile.auth import MobileLoginRequest
 from app.service.users import AuthService
 from db.generated import devices as device_queries
+from db.generated import refresh_token as refresh_token_queries
 from db.generated import session as session_queries
 from db.generated import user as user_queries
 
@@ -61,6 +62,7 @@ def auth_service(mock_face_embedding: AsyncMock, db_conn) -> AuthService:
         session_querier=session_queries.AsyncQuerier(db_conn),
         device_querier=device_queries.AsyncQuerier(db_conn),
         face_embedding_service=mock_face_embedding,
+        refresh_token_querier=refresh_token_queries.AsyncQuerier(db_conn),
     )
 
 
@@ -162,10 +164,10 @@ async def test_relogin_on_same_device_replaces_not_duplicates_real_db(
 async def test_revoke_device_cascades_delete_session_real_db(
     db_conn,
 ) -> None:
-    """Regression test verifying user_sessions_device_id_fkey is genuinely
+    r"""Regression test verifying user_sessions_device_id_fkey is genuinely
     ON DELETE CASCADE: deleting a device row via the real revoke_device
     query must also delete its session row, with no separate DELETE
-    needed. Previously verified once by hand via psql \\d user_sessions;
+    needed. Previously verified once by hand via psql \d user_sessions;
     this makes it automatic."""
     email = f"test-revoke-{uuid.uuid4()}@multai.com"
 
@@ -288,6 +290,7 @@ async def test_concurrent_new_device_logins_settle_at_cap_real_db(
                 session_querier=session_queries.AsyncQuerier(conn),
                 device_querier=device_queries.AsyncQuerier(conn),
                 face_embedding_service=auth_service.face_embedding_service,
+                refresh_token_querier=refresh_token_queries.AsyncQuerier(conn),
             )
             req = MobileLoginRequest(
                 email=email,
@@ -360,6 +363,7 @@ async def test_concurrent_block_and_login_never_leaves_blocked_user_with_session
                     session_querier=session_queries.AsyncQuerier(conn),
                     device_querier=device_queries.AsyncQuerier(conn),
                     face_embedding_service=MagicMock(),
+                    refresh_token_querier=refresh_token_queries.AsyncQuerier(conn),
                 )
                 req = MobileLoginRequest(
                     email=email, password=password,
@@ -379,6 +383,7 @@ async def test_concurrent_block_and_login_never_leaves_blocked_user_with_session
                     session_querier=session_queries.AsyncQuerier(conn),
                     device_querier=device_queries.AsyncQuerier(conn),
                     face_embedding_service=MagicMock(),
+                    refresh_token_querier=refresh_token_queries.AsyncQuerier(conn),
                 )
                 await svc.block_user(redis=_FakeRedis(), user_id=user_id)
                 await conn.commit()
