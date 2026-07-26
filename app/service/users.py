@@ -11,9 +11,10 @@ from app.core.securite import (
     hash_password,
     verify_password,
     create_acces_mobile_token,
-    create_refresh_mobile_token,
-    decode_refresh_mobile_token,
-    Get_expiry_time,
+    create_raw_refresh_token,
+    hash_refresh_token,
+    encrypt_refresh_cache_payload,
+    decrypt_refresh_cache_payload,
 )
 from app.core.config import settings
 from app.infra.redis import RedisClient
@@ -31,7 +32,8 @@ import json
 from db.generated import user as user_queries
 from db.generated import devices as device_queries
 from db.generated import session as session_queries
-from db.generated.models import User, UserDevice
+from db.generated.models import User, UserDevice, RefreshToken
+from db.generated import refresh_token as refresh_token_queries
 from app.core.logger import logger
 from app.service.face_embedding import FaceImagePayload, FaceEmbeddingService
 from app.schema.internal.single_face_match import ClosestUserMatch
@@ -42,19 +44,23 @@ class AuthService:
     user_querier: user_queries.AsyncQuerier
     device_querier: device_queries.AsyncQuerier
     session_querier: session_queries.AsyncQuerier
+    refresh_token_querier: refresh_token_queries.AsyncQuerier
     SESSION_LIMIT = settings.MOBILE_SESSION_LIMIT
     REDIS_SESSION_TTL = settings.MOBILE_SESSION_TTL_SECONDS
+    REFRESH_GRACE_SECONDS = settings.MOBILE_REFRESH_TOKEN_REUSE_GRACE_SECONDS
 
     def __init__(
         self,
         user_querier: user_queries.AsyncQuerier,
         device_querier: device_queries.AsyncQuerier,
         session_querier: session_queries.AsyncQuerier,
+        refresh_token_querier: refresh_token_queries.AsyncQuerier,
         face_embedding_service: FaceEmbeddingService,
     ):
         self.user_querier = user_querier
         self.device_querier = device_querier
         self.session_querier = session_querier
+        self.refresh_token_querier = refresh_token_querier
         self.face_embedding_service = face_embedding_service
 
     async def _ensure_device_for_login(
@@ -310,8 +316,14 @@ class AuthService:
             )
 
         access_token = create_acces_mobile_token(str(session.id))
-        refresh_token = create_refresh_mobile_token(str(session.id))
-        expiry = Get_expiry_time()
+
+        raw_refresh_token = create_raw_refresh_token()
+        await self.refresh_token_querier.create_refresh_token(
+            session_id=session.id,
+            family_id=uuid.uuid4(),
+            token_hash=hash_refresh_token(raw_refresh_token),
+        )
+        expiry = settings.MOBILE_ACCESS_TOKEN_TTL_SECONDS
         logger.info("session_created session_id=%s user_id=%s", session.id, user_id)
 
         await SessionService.cache_session_for_auth(
@@ -327,28 +339,90 @@ class AuthService:
 
         return MobileAuthResponse(
             access_token=access_token,
-            refresh_token=refresh_token,
+            refresh_token=raw_refresh_token,
             session_id=str(session.id),
             expires_in=expiry,
             user_id=user_id,
             is_new_user=is_new_user,
         )
+
+    async def _handle_used_refresh_token(
+        self,
+        redis: RedisClient,
+        row: RefreshToken,
+        token_hash: str,
+    ) -> MobileAuthResponse:
+        """A `used=True` refresh token was presented. Returns a replayed
+        response if this is a benign grace-window retry with a cached
+        result, or raises if it's outside the grace window (theft) or
+        inside the grace window with no cached replay available (a used
+        token with nothing to replay is never treated as valid).
+        """
+        within_grace = (
+            row.used_at is not None
+            and (datetime.now(timezone.utc) - row.used_at)
+            <= timedelta(seconds=AuthService.REFRESH_GRACE_SECONDS)
+        )
+
+        if within_grace:
+            cache_key = f"refresh_retry:{token_hash}"
+            cached = await redis.get(cache_key)
+            if cached:
+                try:
+                    decrypted = decrypt_refresh_cache_payload(cached)
+                except Exception:
+                    # tampered, corrupted, or wrong key — treat exactly
+                    # like a cache miss, never trust an undecryptable value
+                    raise AppException.unauthorized("Invalid refresh token")
+                session_for_check = await self.session_querier.get_session_by_id(id=row.session_id)
+                if not session_for_check:
+                    raise AppException.unauthorized("Session not found")
+                user_for_check = await self.user_querier.get_user_by_id(id=session_for_check.user_id)
+                if not user_for_check or user_for_check.blocked:
+                    raise AppException.forbidden("User is blocked")
+                return MobileAuthResponse.model_validate_json(decrypted)
+            raise AppException.unauthorized("Invalid refresh token")
+
+        logger.warning(
+            "refresh_token_reuse_detected family_id=%s session_id=%s",
+            row.family_id, row.session_id,
+        )
+        session_for_revoke = await self.session_querier.get_session_by_id(id=row.session_id)
+        if session_for_revoke:
+            await self.session_querier.delete_session_by_id(
+                id=row.session_id, user_id=session_for_revoke.user_id
+            )
+            await SessionService.delete_session_cache(redis, row.session_id)
+        raise AppException.unauthorized(
+            "Refresh token reuse detected; session revoked"
+        )
+
     async def refresh_token(
         self,
         redis: RedisClient,
         refresh_token: str,
     ) -> MobileAuthResponse:
-        payload = decode_refresh_mobile_token(refresh_token)
-        session_id = payload.get("session_id")
+        token_hash = hash_refresh_token(refresh_token)
 
-        if not session_id:
+        row = await self.refresh_token_querier.get_refresh_token_by_hash_for_update(
+            token_hash=token_hash
+        )
+        if not row:
             raise AppException.unauthorized("Invalid refresh token")
 
-        session = await self.session_querier.get_session_by_id(id=uuid.UUID(session_id))
+        if row.used:
+            return await self._handle_used_refresh_token(redis, row, token_hash)
 
+        claimed = await self.refresh_token_querier.mark_refresh_token_used(id=row.id)
+        if claimed is None:
+            # Not expected to be reachable — the row lock above already
+            # serializes concurrent access to this row.
+            raise AppException.unauthorized("Invalid refresh token")
+        row = claimed
+
+        session = await self.session_querier.get_session_by_id(id=row.session_id)
         if not session:
             raise AppException.unauthorized("Session not found")
-
         if session.expires_at < datetime.now(timezone.utc):
             raise AppException.unauthorized("Session expired")
 
@@ -358,17 +432,29 @@ class AuthService:
         if user.blocked:
             raise AppException.forbidden("User is blocked")
 
-        new_access_token = create_acces_mobile_token(session_id)
-        new_refresh_token = create_refresh_mobile_token(session_id)
-        expiry = Get_expiry_time()
+        new_access_token = create_acces_mobile_token(str(session.id))
+        new_raw_refresh_token = create_raw_refresh_token()
+        await self.refresh_token_querier.create_refresh_token(
+            session_id=session.id,
+            family_id=row.family_id,
+            token_hash=hash_refresh_token(new_raw_refresh_token),
+        )
 
-        return MobileAuthResponse(
+        response = MobileAuthResponse(
             access_token=new_access_token,
-            refresh_token=new_refresh_token,
-            session_id=session_id,
-            expires_in=expiry,
+            refresh_token=new_raw_refresh_token,
+            session_id=str(session.id),
+            expires_in=settings.MOBILE_ACCESS_TOKEN_TTL_SECONDS,
             user_id=session.user_id,
         )
+
+        await redis.set(
+            f"refresh_retry:{token_hash}",
+            encrypt_refresh_cache_payload(response.model_dump_json()),
+            expire=AuthService.REFRESH_GRACE_SECONDS,
+        )
+
+        return response
 
     async def logout(
         self,
@@ -377,8 +463,8 @@ class AuthService:
         session_id: str,
     ) -> dict[str, str]:
         sid = uuid.UUID(session_id)
-        await SessionService.delete_session_cache(redis, sid)
         await self.session_querier.delete_session_by_id(id=sid, user_id=uuid.UUID(user_id))
+        await SessionService.delete_session_cache(redis, sid)
 
         return {"message": "Logged out successfully"}
 
@@ -421,17 +507,14 @@ class AuthService:
 
         return user
 
-    async def validate_session(
-        self,
-        redis: RedisClient,
-        session_id: str,
-    ) -> bool:
+    async def validate_session(self, redis: RedisClient, session_id: str) -> bool:
         session = await self.session_querier.get_session_by_id(id=uuid.UUID(session_id))
-
         if not session:
             return False
-
         if session.expires_at < datetime.now(timezone.utc):
+            return False
+        user = await self.user_querier.get_user_by_id(id=session.user_id)
+        if not user or user.blocked:
             return False
         return True
 
@@ -566,35 +649,18 @@ class AuthService:
         except Exception as exc:
             logger.warning("Failed to clean up orphaned avatar %s: %s", avatar_key, exc)
 
-    async def delete_user(self, *, redis: RedisClient, user_id: uuid.UUID) -> User:
-        try:
-            existing = await self.user_querier.get_user_by_id(id=user_id)
-            if not existing:
-                raise AppException.not_found("User not found")
-
-            sessions = self.session_querier.list_sessions_by_user(user_id=user_id)
-            async for s in sessions:
-                await SessionService.delete_session_cache(redis=redis, session_id=s.id)
-            await self.session_querier.delete_all_user_sessions(user_id=user_id)
-
-            await self.user_querier.delete_user(id=user_id)
-
-            return existing
-        except Exception as exc:
-            logger.error("Failed to delete user: %s", exc)
-            raise DBException.handle(exc)
-
     async def block_user(self, *, redis: RedisClient, user_id: uuid.UUID) -> User:
         try:
+            locked = await self.user_querier.get_user_by_id_for_update(id=user_id)
+            if not locked:
+                raise AppException.not_found("User not found")
             user = await self.user_querier.set_user_blocked(blocked=True, id=user_id)
             if not user:
-                raise AppException.not_found("User not found")
-
-            sessions = self.session_querier.list_sessions_by_user(user_id=user_id)
-            async for s in sessions:
-                await SessionService.delete_session_cache(redis, s.id)
+                raise AppException.internal_error("Failed to block user")
+            session_ids = [s.id async for s in self.session_querier.list_sessions_by_user(user_id=user_id)]
             await self.session_querier.delete_all_user_sessions(user_id=user_id)
-
+            for sid in session_ids:
+                await SessionService.delete_session_cache(redis, sid)
             return user
         except Exception as exc:
             logger.error("Failed to block user: %s", exc)
@@ -608,6 +674,27 @@ class AuthService:
             return user
         except Exception as exc:
             logger.error("Failed to unblock user: %s", exc)
+            raise DBException.handle(exc)
+
+    async def delete_user(self, *, redis: RedisClient, user_id: uuid.UUID) -> User:
+        try:
+            existing = await self.user_querier.get_user_by_id_for_update(id=user_id)
+            if not existing:
+                raise AppException.not_found("User not found")
+
+            session_ids = [
+                s.id
+                async for s in self.session_querier.list_sessions_by_user(user_id=user_id)
+            ]
+            await self.session_querier.delete_all_user_sessions(user_id=user_id)
+            await self.user_querier.delete_user(id=user_id)
+
+            for sid in session_ids:
+                await SessionService.delete_session_cache(redis=redis, session_id=sid)
+
+            return existing
+        except Exception as exc:
+            logger.error("Failed to delete user: %s", exc)
             raise DBException.handle(exc)
 
     async def find_closest_user(self, *, embedding_literal: str) -> ClosestUserMatch | None:
@@ -625,10 +712,17 @@ class AuthService:
         max_requests: int,
         window_seconds: int,
     ) -> None:
-        """Enforce rate limiting using Redis INCR + EXPIRE."""
-        current_count = await redis.incr(key)
-        if current_count == 1:
-            await redis.expire(key, window_seconds)
+        """Enforce rate limiting using Redis INCR + EXPIRE. Fails open if Redis is unavailable."""
+        try:
+            current_count = await redis.incr(key)
+            if current_count == 1:
+                await redis.expire(key, window_seconds)
+        except HTTPException:
+            raise
+        except Exception:
+            logger.warning("check_rate_limit: redis unavailable, failing open for key=%s", key)
+            return
+
         if current_count > max_requests:
             raise AppException.too_many_requests(
                 "Too many requests. Please try again later.",
