@@ -27,17 +27,23 @@ def mock_redis() -> AsyncMock:
     return AsyncMock()
 
 @pytest.fixture
+def mock_refresh_token_querier() -> AsyncMock:
+    return AsyncMock()
+
+@pytest.fixture
 def auth_service(
     mock_user_querier: AsyncMock,
     mock_device_querier: AsyncMock,
     mock_session_querier: AsyncMock,
     mock_face_embedding_service: AsyncMock,
+    mock_refresh_token_querier: AsyncMock,
 ) -> AuthService:
     return AuthService(
         user_querier=mock_user_querier,
         device_querier=mock_device_querier,
         session_querier=mock_session_querier,
         face_embedding_service=mock_face_embedding_service,
+        refresh_token_querier=mock_refresh_token_querier,
     )
 
 @pytest.mark.asyncio
