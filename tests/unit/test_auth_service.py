@@ -151,6 +151,17 @@ def face_service() -> AsyncMock:
     svc.compute_average_embedding = AsyncMock(return_value=[0.1] * 512)
     return svc
 
+@pytest.fixture
+def refresh_token_querier() -> AsyncMock:
+    from db.generated import refresh_token as refresh_token_queries
+    q = MagicMock(spec=refresh_token_queries.AsyncQuerier)
+    q.get_refresh_token_by_hash_for_update = AsyncMock(return_value=None)
+    q.get_refresh_token_by_jti = AsyncMock(return_value=None)
+    q.create_refresh_token = AsyncMock()
+    q.revoke_refresh_token = AsyncMock()
+    q.revoke_all_user_refresh_tokens = AsyncMock()
+    q.mark_refresh_token_used = AsyncMock()
+    return q
 
 @pytest.fixture
 def redis() -> AsyncMock:
@@ -169,12 +180,14 @@ def auth_service(
     device_querier: AsyncMock,
     session_querier: AsyncMock,
     face_service: AsyncMock,
+    refresh_token_querier: AsyncMock,
 ) -> AuthService:
     return AuthService(
         user_querier=user_querier,
         device_querier=device_querier,
         session_querier=session_querier,
         face_embedding_service=face_service,
+        refresh_token_querier=refresh_token_querier,
     )
 
 
@@ -190,6 +203,7 @@ class TestRegisterNewUser:
         auth_service: AuthService,
         user_querier: AsyncMock,
         redis: AsyncMock,
+        refresh_token_querier: AsyncMock,
     ) -> None:
         new_user = _make_user()
         user_querier.get_user_by_email.return_value = None
@@ -207,6 +221,7 @@ class TestRegisterNewUser:
         auth_service: AuthService,
         user_querier: AsyncMock,
         redis: AsyncMock,
+        refresh_token_querier: AsyncMock,
     ) -> None:
         user_querier.get_user_by_email.return_value = None
 
@@ -413,19 +428,49 @@ class TestRefreshToken:
         auth_service: AuthService,
         user_querier: AsyncMock,
         session_querier: AsyncMock,
+        refresh_token_querier: AsyncMock,
         redis: AsyncMock,
     ) -> None:
-        from app.core.securite import create_refresh_mobile_token
+        from app.core.securite import (
+            create_raw_refresh_token,
+            hash_refresh_token,
+            decrypt_refresh_cache_payload,
+        )
 
         session = _make_session()
         session_querier.get_session_by_id.return_value = session
         user_querier.get_user_by_id.return_value = _make_user(user_id=session.user_id)
 
-        refresh_token = create_refresh_mobile_token(str(session.id))
-        result = await auth_service.refresh_token(redis, refresh_token)
+        raw_token = create_raw_refresh_token()
+        token_hash = hash_refresh_token(raw_token)
+
+        row = MagicMock()
+        row.id = uuid.uuid4()
+        row.used = False
+        row.used_at = None
+        row.family_id = uuid.uuid4()
+        row.session_id = session.id
+        refresh_token_querier.get_refresh_token_by_hash_for_update.return_value = row
+        refresh_token_querier.mark_refresh_token_used.return_value = row
+
+        result = await auth_service.refresh_token(redis, raw_token)
 
         assert result.access_token
         assert result.refresh_token
+        refresh_token_querier.mark_refresh_token_used.assert_called_once_with(id=row.id)
+        refresh_token_querier.create_refresh_token.assert_called_once()
+
+        # Verify the grace-window cache was written under the expected key,
+        # encrypted (not plaintext), and that it decrypts back to the response.
+        redis.set.assert_called_once()
+        call_args = redis.set.call_args
+        cache_key = call_args.args[0] if call_args.args else call_args.kwargs.get("key")
+        cache_value = call_args.args[1] if len(call_args.args) > 1 else call_args.kwargs.get("value")
+
+        assert cache_key == f"refresh_retry:{token_hash}"
+        assert "access_token" not in cache_value  # plaintext JSON would contain this literal key; encrypted payload must not
+        decrypted = decrypt_refresh_cache_payload(cache_value)
+        assert result.access_token in decrypted
 
     @pytest.mark.asyncio
     async def test_expired_session_raises_401(
@@ -433,19 +478,28 @@ class TestRefreshToken:
         auth_service: AuthService,
         user_querier: AsyncMock,
         session_querier: AsyncMock,
+        refresh_token_querier: AsyncMock,
         redis: AsyncMock,
     ) -> None:
-        from app.core.securite import create_refresh_mobile_token
+        from app.core.securite import create_raw_refresh_token
 
         past_session = _make_session(
             expires_at=datetime.now(timezone.utc) - timedelta(days=1)
         )
         session_querier.get_session_by_id.return_value = past_session
 
-        refresh_token = create_refresh_mobile_token(str(past_session.id))
+        raw_token = create_raw_refresh_token()
+        row = MagicMock()
+        row.id = uuid.uuid4()
+        row.used = False
+        row.used_at = None
+        row.family_id = uuid.uuid4()
+        row.session_id = past_session.id
+        refresh_token_querier.get_refresh_token_by_hash_for_update.return_value = row
+        refresh_token_querier.mark_refresh_token_used.return_value = row
 
         with pytest.raises(HTTPException) as exc_info:
-            await auth_service.refresh_token(redis, refresh_token)
+            await auth_service.refresh_token(redis, raw_token)
         assert exc_info.value.status_code == 401
 
     @pytest.mark.asyncio
@@ -454,9 +508,10 @@ class TestRefreshToken:
         auth_service: AuthService,
         user_querier: AsyncMock,
         session_querier: AsyncMock,
+        refresh_token_querier: AsyncMock,
         redis: AsyncMock,
     ) -> None:
-        from app.core.securite import create_refresh_mobile_token
+        from app.core.securite import create_raw_refresh_token
 
         session = _make_session()
         session_querier.get_session_by_id.return_value = session
@@ -464,18 +519,30 @@ class TestRefreshToken:
             user_id=session.user_id, blocked=True
         )
 
-        refresh_token = create_refresh_mobile_token(str(session.id))
+        raw_token = create_raw_refresh_token()
+        row = MagicMock()
+        row.id = uuid.uuid4()
+        row.used = False
+        row.used_at = None
+        row.family_id = uuid.uuid4()
+        row.session_id = session.id
+        refresh_token_querier.get_refresh_token_by_hash_for_update.return_value = row
+        refresh_token_querier.mark_refresh_token_used.return_value = row
 
         with pytest.raises(HTTPException) as exc_info:
-            await auth_service.refresh_token(redis, refresh_token)
+            await auth_service.refresh_token(redis, raw_token)
         assert exc_info.value.status_code == 403
 
     @pytest.mark.asyncio
     async def test_invalid_refresh_token_raises_401(
         self,
         auth_service: AuthService,
+        refresh_token_querier: AsyncMock,
         redis: AsyncMock,
     ) -> None:
+        # Ensure the querier returns None so the token is rejected
+        refresh_token_querier.get_refresh_token_by_hash_for_update.return_value = None
+
         with pytest.raises(HTTPException) as exc_info:
             await auth_service.refresh_token(redis, "completely.invalid.token")
         assert exc_info.value.status_code == 401
@@ -576,3 +643,462 @@ class TestBlockedUserRaceCondition:
             await auth_service.mobile_login(redis, _make_login_request())
 
         assert exc_info.value.status_code == 401
+
+# ===========================================================================
+# 7. check_rate_limit fail-open behavior
+# ===========================================================================
+
+
+class TestCheckRateLimitFailOpen:
+    @pytest.mark.asyncio
+    async def test_redis_outage_does_not_block_login(
+        self,
+        auth_service: AuthService,
+        user_querier: AsyncMock,
+        redis: AsyncMock,
+    ) -> None:
+        """A Redis failure during rate-limit checking must not prevent
+        login from proceeding — it should fail open, not crash the request."""
+        user = _make_user(password="Correctpass1!")
+        user_querier.get_user_by_email.return_value = user
+        user_querier.get_user_by_id_for_update.return_value = user
+
+        redis.incr = AsyncMock(side_effect=ConnectionError("redis unreachable"))
+
+        result = await auth_service.mobile_login(
+            redis, _make_login_request(password="Correctpass1!")
+        )
+
+        assert result.access_token  # login succeeded despite Redis being down
+
+    @pytest.mark.asyncio
+    async def test_real_rate_limit_rejection_still_raises(
+        self,
+        auth_service: AuthService,
+        redis: AsyncMock,
+    ) -> None:
+        """Confirm the fail-open except clause doesn't accidentally swallow
+        the actual 429 rejection — only infra failures should be caught."""
+        redis.incr = AsyncMock(return_value=999)  # way over any reasonable limit
+
+        with pytest.raises(HTTPException) as exc_info:
+            await auth_service.check_rate_limit(redis, "rate:test:key", max_requests=5, window_seconds=60)
+        assert exc_info.value.status_code == 429
+
+
+# ===========================================================================
+# 8. block_user — lock ordering and session purge
+# ===========================================================================
+
+
+class TestBlockUser:
+    @pytest.mark.asyncio
+    async def test_takes_lock_before_mutating(
+        self,
+        auth_service: AuthService,
+        user_querier: AsyncMock,
+        session_querier: AsyncMock,
+        redis: AsyncMock,
+    ) -> None:
+        """block_user must call get_user_by_id_for_update (the lock) before
+        set_user_blocked — this is what serializes it against mobile_login."""
+        target = _make_user()
+        user_querier.get_user_by_id_for_update.return_value = target
+        user_querier.set_user_blocked.return_value = _make_user(
+            user_id=target.id, blocked=True
+        )
+
+        call_order = []
+        user_querier.get_user_by_id_for_update.side_effect = (
+            lambda *a, **kw: call_order.append("lock") or target
+        )
+        user_querier.set_user_blocked.side_effect = (
+            lambda *a, **kw: call_order.append("mutate") or _make_user(user_id=target.id, blocked=True)
+        )
+
+        await auth_service.block_user(redis=redis, user_id=target.id)
+
+        assert call_order == ["lock", "mutate"]
+
+    @pytest.mark.asyncio
+    async def test_purges_all_sessions_and_invalidates_cache(
+        self,
+        auth_service: AuthService,
+        user_querier: AsyncMock,
+        session_querier: AsyncMock,
+        redis: AsyncMock,
+    ) -> None:
+        target = _make_user()
+        user_querier.get_user_by_id_for_update.return_value = target
+        user_querier.set_user_blocked.return_value = _make_user(
+            user_id=target.id, blocked=True
+        )
+
+        session_ids = [uuid.uuid4(), uuid.uuid4()]
+
+        async def _sessions(*, user_id):
+            for sid in session_ids:
+                s = MagicMock()
+                s.id = sid
+                yield s
+
+        session_querier.list_sessions_by_user = MagicMock(side_effect=_sessions)
+
+        await auth_service.block_user(redis=redis, user_id=target.id)
+
+        session_querier.delete_all_user_sessions.assert_called_once_with(user_id=target.id)
+        assert redis.delete.call_count == len(session_ids)
+
+    @pytest.mark.asyncio
+    async def test_missing_user_raises_404(
+        self,
+        auth_service: AuthService,
+        user_querier: AsyncMock,
+        redis: AsyncMock,
+    ) -> None:
+        user_querier.get_user_by_id_for_update.return_value = None
+
+        with pytest.raises(HTTPException) as exc_info:
+            await auth_service.block_user(redis=redis, user_id=uuid.uuid4())
+        assert exc_info.value.status_code == 404
+
+
+# ===========================================================================
+# 9. unblock_user
+# ===========================================================================
+
+
+class TestUnblockUser:
+    @pytest.mark.asyncio
+    async def test_unblocks_successfully(
+        self,
+        auth_service: AuthService,
+        user_querier: AsyncMock,
+    ) -> None:
+        target_id = uuid.uuid4()
+        user_querier.set_user_blocked.return_value = _make_user(
+            user_id=target_id, blocked=False
+        )
+
+        result = await auth_service.unblock_user(user_id=target_id)
+
+        assert result.blocked is False
+        user_querier.set_user_blocked.assert_called_once_with(blocked=False, id=target_id)
+
+    @pytest.mark.asyncio
+    async def test_missing_user_raises_404(
+        self,
+        auth_service: AuthService,
+        user_querier: AsyncMock,
+    ) -> None:
+        user_querier.set_user_blocked.return_value = None
+
+        with pytest.raises(HTTPException) as exc_info:
+            await auth_service.unblock_user(user_id=uuid.uuid4())
+        assert exc_info.value.status_code == 404
+
+
+# ===========================================================================
+# 10. delete_user — lock ordering and session purge (same shape as block_user)
+# ===========================================================================
+
+
+class TestDeleteUser:
+    @pytest.mark.asyncio
+    async def test_takes_lock_before_deleting(
+        self,
+        auth_service: AuthService,
+        user_querier: AsyncMock,
+        session_querier: AsyncMock,
+        redis: AsyncMock,
+    ) -> None:
+        target = _make_user()
+
+        call_order = []
+        user_querier.get_user_by_id_for_update.side_effect = (
+            lambda *a, **kw: call_order.append("lock") or target
+        )
+        user_querier.delete_user.side_effect = (
+            lambda *a, **kw: call_order.append("delete")
+        )
+
+        await auth_service.delete_user(redis=redis, user_id=target.id)
+
+        assert call_order == ["lock", "delete"]
+
+    @pytest.mark.asyncio
+    async def test_purges_all_sessions_and_invalidates_cache(
+        self,
+        auth_service: AuthService,
+        user_querier: AsyncMock,
+        session_querier: AsyncMock,
+        redis: AsyncMock,
+    ) -> None:
+        target = _make_user()
+        user_querier.get_user_by_id_for_update.return_value = target
+
+        session_ids = [uuid.uuid4(), uuid.uuid4(), uuid.uuid4()]
+
+        async def _sessions(*, user_id):
+            for sid in session_ids:
+                s = MagicMock()
+                s.id = sid
+                yield s
+
+        session_querier.list_sessions_by_user = MagicMock(side_effect=_sessions)
+
+        await auth_service.delete_user(redis=redis, user_id=target.id)
+
+        session_querier.delete_all_user_sessions.assert_called_once_with(user_id=target.id)
+        assert redis.delete.call_count == len(session_ids)
+
+    @pytest.mark.asyncio
+    async def test_missing_user_raises_404(
+        self,
+        auth_service: AuthService,
+        user_querier: AsyncMock,
+        redis: AsyncMock,
+    ) -> None:
+        user_querier.get_user_by_id_for_update.return_value = None
+
+        with pytest.raises(HTTPException) as exc_info:
+            await auth_service.delete_user(redis=redis, user_id=uuid.uuid4())
+        assert exc_info.value.status_code == 404
+
+
+# ===========================================================================
+# 11. Refresh token — grace window, §4.1a blocked re-check, encryption
+# ===========================================================================
+
+
+class TestRefreshTokenGraceWindow:
+    @pytest.mark.asyncio
+    async def test_used_token_within_grace_replays_cached_response(
+        self,
+        auth_service: AuthService,
+        user_querier: AsyncMock,
+        session_querier: AsyncMock,
+        refresh_token_querier: AsyncMock,
+        redis: AsyncMock,
+    ) -> None:
+        """A used-but-within-grace token with a valid cached response should
+        replay it (idempotent retry), not treat it as new or as theft."""
+        from app.core.securite import (
+            create_raw_refresh_token,
+            encrypt_refresh_cache_payload,
+        )
+        from app.schema.response.mobile.auth import MobileAuthResponse
+
+        session = _make_session()
+        session_querier.get_session_by_id.return_value = session
+        user_querier.get_user_by_id.return_value = _make_user(
+            user_id=session.user_id, blocked=False
+        )
+
+        raw_token = create_raw_refresh_token()
+        cached_response = MobileAuthResponse(
+            access_token="cached-access-token",
+            refresh_token="cached-refresh-token",
+            session_id=str(session.id),
+            expires_in=900,
+            user_id=session.user_id,
+        )
+        redis.get.return_value = encrypt_refresh_cache_payload(
+            cached_response.model_dump_json()
+        )
+
+        row = MagicMock()
+        row.id = uuid.uuid4()
+        row.used = True
+        row.used_at = datetime.now(timezone.utc) - timedelta(seconds=5)  # within grace
+        row.family_id = uuid.uuid4()
+        row.session_id = session.id
+        refresh_token_querier.get_refresh_token_by_hash_for_update.return_value = row
+
+        result = await auth_service.refresh_token(redis, raw_token)
+
+        assert result.access_token == "cached-access-token"
+        # must NOT have re-rotated — no new token row created for a replay
+        refresh_token_querier.create_refresh_token.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_used_token_within_grace_but_blocked_user_raises_403(
+        self,
+        auth_service: AuthService,
+        user_querier: AsyncMock,
+        session_querier: AsyncMock,
+        refresh_token_querier: AsyncMock,
+        redis: AsyncMock,
+    ) -> None:
+        """§4.1a fix: even with a valid cached replay, a user blocked since
+        the original rotation must be rejected, not silently replayed."""
+        from app.core.securite import (
+            create_raw_refresh_token,
+            encrypt_refresh_cache_payload,
+        )
+        from app.schema.response.mobile.auth import MobileAuthResponse
+
+        session = _make_session()
+        session_querier.get_session_by_id.return_value = session
+        user_querier.get_user_by_id.return_value = _make_user(
+            user_id=session.user_id, blocked=True  # blocked since original rotation
+        )
+
+        raw_token = create_raw_refresh_token()
+        cached_response = MobileAuthResponse(
+            access_token="cached-access-token",
+            refresh_token="cached-refresh-token",
+            session_id=str(session.id),
+            expires_in=900,
+            user_id=session.user_id,
+        )
+        redis.get.return_value = encrypt_refresh_cache_payload(
+            cached_response.model_dump_json()
+        )
+
+        row = MagicMock()
+        row.id = uuid.uuid4()
+        row.used = True
+        row.used_at = datetime.now(timezone.utc) - timedelta(seconds=5)
+        row.family_id = uuid.uuid4()
+        row.session_id = session.id
+        refresh_token_querier.get_refresh_token_by_hash_for_update.return_value = row
+
+        with pytest.raises(HTTPException) as exc_info:
+            await auth_service.refresh_token(redis, raw_token)
+        assert exc_info.value.status_code == 403
+
+    @pytest.mark.asyncio
+    async def test_used_token_within_grace_but_cache_miss_raises_401(
+        self,
+        auth_service: AuthService,
+        refresh_token_querier: AsyncMock,
+        redis: AsyncMock,
+    ) -> None:
+        """Regression test for the fall-through bug: a used token within
+        grace but with NO cached replay (Redis eviction/failure) must be
+        rejected outright, never silently re-rotated into new tokens."""
+        from app.core.securite import create_raw_refresh_token
+
+        raw_token = create_raw_refresh_token()
+        redis.get.return_value = None  # cache miss
+
+        row = MagicMock()
+        row.id = uuid.uuid4()
+        row.used = True
+        row.used_at = datetime.now(timezone.utc) - timedelta(seconds=5)  # within grace
+        row.family_id = uuid.uuid4()
+        row.session_id = uuid.uuid4()
+        refresh_token_querier.get_refresh_token_by_hash_for_update.return_value = row
+
+        with pytest.raises(HTTPException) as exc_info:
+            await auth_service.refresh_token(redis, raw_token)
+        assert exc_info.value.status_code == 401
+        refresh_token_querier.create_refresh_token.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_used_token_outside_grace_revokes_session(
+        self,
+        auth_service: AuthService,
+        session_querier: AsyncMock,
+        refresh_token_querier: AsyncMock,
+        redis: AsyncMock,
+    ) -> None:
+        """Reuse outside the grace window is treated as theft — the entire
+        session must be revoked."""
+        from app.core.securite import create_raw_refresh_token
+
+        raw_token = create_raw_refresh_token()
+        session = _make_session()
+        session_querier.get_session_by_id.return_value = session
+
+        row = MagicMock()
+        row.id = uuid.uuid4()
+        row.used = True
+        row.used_at = datetime.now(timezone.utc) - timedelta(seconds=120)  # well outside grace
+        row.family_id = uuid.uuid4()
+        row.session_id = session.id
+        refresh_token_querier.get_refresh_token_by_hash_for_update.return_value = row
+
+        with pytest.raises(HTTPException) as exc_info:
+            await auth_service.refresh_token(redis, raw_token)
+
+        assert exc_info.value.status_code == 401
+        session_querier.delete_session_by_id.assert_called_once_with(
+            id=session.id, user_id=session.user_id
+        )
+        redis.delete.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_corrupted_cache_value_treated_as_cache_miss(
+        self,
+        auth_service: AuthService,
+        refresh_token_querier: AsyncMock,
+        redis: AsyncMock,
+    ) -> None:
+        """A cached value that fails to decrypt (tampering, corruption,
+        wrong key) must be rejected, never trusted or crash the request."""
+        from app.core.securite import create_raw_refresh_token
+
+        raw_token = create_raw_refresh_token()
+        redis.get.return_value = "not-valid-encrypted-base64-data!!"
+
+        row = MagicMock()
+        row.id = uuid.uuid4()
+        row.used = True
+        row.used_at = datetime.now(timezone.utc) - timedelta(seconds=5)
+        row.family_id = uuid.uuid4()
+        row.session_id = uuid.uuid4()
+        refresh_token_querier.get_refresh_token_by_hash_for_update.return_value = row
+
+        with pytest.raises(HTTPException) as exc_info:
+            await auth_service.refresh_token(redis, raw_token)
+        assert exc_info.value.status_code == 401
+
+    @pytest.mark.asyncio
+    async def test_new_rotation_caches_encrypted_not_plaintext(
+        self,
+        auth_service: AuthService,
+        user_querier: AsyncMock,
+        session_querier: AsyncMock,
+        refresh_token_querier: AsyncMock,
+        redis: AsyncMock,
+    ) -> None:
+        """The replay cache must never contain the raw token/response as
+        plaintext JSON — this is the fix for the Redis-plaintext-secret gap."""
+        from app.core.securite import (
+            create_raw_refresh_token,
+            hash_refresh_token,
+            decrypt_refresh_cache_payload,
+        )
+
+        session = _make_session()
+        session_querier.get_session_by_id.return_value = session
+        user_querier.get_user_by_id.return_value = _make_user(user_id=session.user_id)
+
+        raw_token = create_raw_refresh_token()
+        token_hash = hash_refresh_token(raw_token)
+
+        row = MagicMock()
+        row.id = uuid.uuid4()
+        row.used = False
+        row.used_at = None
+        row.family_id = uuid.uuid4()
+        row.session_id = session.id
+        refresh_token_querier.get_refresh_token_by_hash_for_update.return_value = row
+        refresh_token_querier.mark_refresh_token_used.return_value = row
+
+        result = await auth_service.refresh_token(redis, raw_token)
+
+        redis.set.assert_called_once()
+        call_args = redis.set.call_args
+        cache_key = call_args.args[0] if call_args.args else call_args.kwargs.get("key")
+        cache_value = call_args.args[1] if len(call_args.args) > 1 else call_args.kwargs.get("value")
+
+        assert cache_key == f"refresh_retry:{token_hash}"
+        # plaintext JSON would contain this literal substring; encrypted payload must not
+        assert "access_token" not in cache_value
+        assert result.access_token not in cache_value
+
+        decrypted = decrypt_refresh_cache_payload(cache_value)
+        assert result.access_token in decrypted
