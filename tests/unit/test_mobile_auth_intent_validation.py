@@ -11,6 +11,7 @@ import json
 import logging
 import uuid
 from datetime import datetime, timezone
+from unittest.mock import AsyncMock
 
 import pytest
 from fastapi import HTTPException
@@ -217,8 +218,7 @@ def _patch_token_helpers(monkeypatch: pytest.MonkeyPatch) -> None:
 
     monkeypatch.setattr(SessionService, "cache_session_for_auth", _noop_cache_session_for_auth)
     monkeypatch.setattr(users_module, "create_acces_mobile_token", lambda _: "access")
-    monkeypatch.setattr(users_module, "create_refresh_mobile_token", lambda _: "refresh")
-    monkeypatch.setattr(users_module, "Get_expiry_time", lambda: 3600)
+    monkeypatch.setattr(users_module, "create_raw_refresh_token", lambda: "refresh")
 
 
 def test_login_with_unknown_email_is_rejected() -> None:
@@ -229,6 +229,7 @@ def test_login_with_unknown_email_is_rejected() -> None:
         device_querier=FakeDeviceQuerier(),
         session_querier=FakeSessionQuerier(),
         face_embedding_service=FakeFaceEmbeddingService(),
+        refresh_token_querier=AsyncMock(),
     )
 
     req = MobileLoginRequest(
@@ -253,6 +254,7 @@ def test_register_with_existing_email_is_rejected() -> None:
         device_querier=FakeDeviceQuerier(),
         session_querier=FakeSessionQuerier(),
         face_embedding_service=FakeFaceEmbeddingService(),
+        refresh_token_querier=AsyncMock(),
     )
 
     req = MobileRegisterRequest(
@@ -279,6 +281,7 @@ def test_login_with_correct_credentials_succeeds(
         device_querier=FakeDeviceQuerier(),
         session_querier=FakeSessionQuerier(),
         face_embedding_service=FakeFaceEmbeddingService(),
+        refresh_token_querier=AsyncMock(),
     )
 
     req = MobileLoginRequest(
@@ -307,6 +310,7 @@ def test_register_with_new_email_succeeds(
         device_querier=FakeDeviceQuerier(),
         session_querier=FakeSessionQuerier(),
         face_embedding_service=FakeFaceEmbeddingService(),
+        refresh_token_querier=AsyncMock(),
     )
 
     req = MobileRegisterRequest(
@@ -333,6 +337,7 @@ def test_register_then_login_same_device_succeeds(
         device_querier=FakeDeviceQuerier(),
         session_querier=FakeSessionQuerier(),
         face_embedding_service=FakeFaceEmbeddingService(),
+        refresh_token_querier=AsyncMock(),
     )
 
     _patch_token_helpers(monkeypatch)
@@ -386,6 +391,7 @@ def test_login_with_wrong_password_fails() -> None:
         device_querier=FakeDeviceQuerier(),
         session_querier=FakeSessionQuerier(),
         face_embedding_service=FakeFaceEmbeddingService(),
+        refresh_token_querier=AsyncMock(),
     )
 
     req = MobileLoginRequest(
@@ -415,6 +421,7 @@ def test_login_logs_correctly(
         device_querier=FakeDeviceQuerier(),
         session_querier=FakeSessionQuerier(),
         face_embedding_service=FakeFaceEmbeddingService(),
+        refresh_token_querier=AsyncMock(),
     )
 
     req = MobileLoginRequest(
@@ -460,6 +467,7 @@ def test_register_concurrent_signup_integrity_error() -> None:
         device_querier=FakeDeviceQuerier(),
         session_querier=FakeSessionQuerier(),
         face_embedding_service=FakeFaceEmbeddingService(),
+        refresh_token_querier=AsyncMock(),
     )
 
     verify_req = RegisterVerifyRequest(
@@ -504,6 +512,7 @@ def test_session_device_id_matches_surrogate_pk_not_physical_id(
         device_querier=device_querier,
         session_querier=session_querier,
         face_embedding_service=FakeFaceEmbeddingService(),
+        refresh_token_querier=AsyncMock(),
     )
 
     physical_id = uuid.uuid4()
@@ -543,6 +552,7 @@ def test_relogin_on_existing_device_succeeds_even_at_session_cap(
         device_querier=device_querier,
         session_querier=session_querier,
         face_embedding_service=FakeFaceEmbeddingService(),
+        refresh_token_querier=AsyncMock(),
     )
 
     _patch_token_helpers(monkeypatch)
@@ -599,6 +609,7 @@ def test_same_physical_device_id_reuses_device_row(
         device_querier=device_querier,
         session_querier=session_querier,
         face_embedding_service=FakeFaceEmbeddingService(),
+        refresh_token_querier=AsyncMock(),
     )
 
     _patch_token_helpers(monkeypatch)

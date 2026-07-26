@@ -8,6 +8,7 @@ from collections.abc import AsyncIterator
 import logging
 import uuid
 from datetime import datetime, timezone
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -133,6 +134,7 @@ def test_mobile_register_logs_without_plaintext_email(
         device_querier=FakeDeviceQuerier(),
         session_querier=FakeSessionQuerier(session),
         face_embedding_service=FakeFaceEmbeddingService(),
+        refresh_token_querier=MagicMock(),
     )
 
     req = MobileRegisterRequest(
@@ -148,8 +150,7 @@ def test_mobile_register_logs_without_plaintext_email(
 
     monkeypatch.setattr(SessionService, "cache_session_for_auth", _noop_cache_session_for_auth)
     monkeypatch.setattr(users_module, "create_acces_mobile_token", lambda _: "access")
-    monkeypatch.setattr(users_module, "create_refresh_mobile_token", lambda _: "refresh")
-    monkeypatch.setattr(users_module, "Get_expiry_time", lambda: 3600)
+    monkeypatch.setattr(users_module, "create_raw_refresh_token", lambda: "refresh")
 
     asyncio.run(service.mobile_register(FakeRedis(), req))
 
