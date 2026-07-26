@@ -31,7 +31,7 @@ from db.generated import upload_request_groups as upload_request_group_queries
 from db.generated import upload_request_photos as upload_request_photo_queries
 from db.generated import upload_requests as upload_request_queries
 from db.generated import user as user_queries
-
+from db.generated import refresh_token as refresh_token_queries
 from db.generated import events as event_queries
 from db.generated import event_participant as participant_queries
 from db.generated import notifications as notification_queries
@@ -72,11 +72,10 @@ class Container:
         self.event_querier = event_queries.AsyncQuerier(conn)
         self.participant_querier = participant_queries.AsyncQuerier(conn)
         self.stats_querier = stats_queries.AsyncQuerier(conn)
+        self.refresh_token_querier = refresh_token_queries.AsyncQuerier(conn)
 
-        # services
-        self.session_service = SessionService()
-        self.session_service.init(
-            session=self.session_querier,
+        self.session_service = SessionService(
+            session_querier=self.session_querier,
             redis=self.redis,
         )
 
@@ -90,6 +89,7 @@ class Container:
             user_querier=self.user_querier,
             device_querier=self.device_querier,
             session_querier=self.session_querier,
+            refresh_token_querier=self.refresh_token_querier,
             face_embedding_service=self.face_embedding_service,
         )
 
