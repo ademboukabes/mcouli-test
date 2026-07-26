@@ -1,6 +1,7 @@
 import asyncio
 import uuid
 from typing import Any
+from unittest.mock import MagicMock
 
 import pytest
 from fastapi import HTTPException
@@ -65,6 +66,7 @@ def test_rate_limiting_triggered_after_max_attempts() -> None:
         device_querier=FakeDeviceQuerier(),
         session_querier=FakeSessionQuerier(),
         face_embedding_service=FakeFaceEmbeddingService(),
+        refresh_token_querier=MagicMock(),
     )
 
     # Stub session creation to avoid database / redis dependencies
