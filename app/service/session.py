@@ -13,7 +13,8 @@ class MobileSessionCache(BaseModel):
     session_id: uuid.UUID
     user_id: uuid.UUID
     email: str
-    expires_at: datetime
+    idle_expires_at: datetime
+    absolute_expires_at: datetime
     blocked: bool
     last_active: datetime
 
@@ -33,7 +34,8 @@ class SessionService:
         session_id: uuid.UUID,
         user_id: uuid.UUID,
         email: str,
-        expires_at: datetime,
+        idle_expires_at: datetime,
+        absolute_expires_at: datetime,
         blocked: bool,
         ttl: int,
         last_active: datetime,
@@ -43,7 +45,8 @@ class SessionService:
             session_id=session_id,
             user_id=user_id,
             email=email,
-            expires_at=expires_at,
+            idle_expires_at=idle_expires_at,
+            absolute_expires_at=absolute_expires_at,
             blocked=blocked,
             last_active=last_active,
         )
@@ -90,12 +93,6 @@ class SessionService:
             if session is None:
                 raise AppException.not_found("session not found")
             return session
-        except Exception as e:
-            raise DBExceptionImpl.handle(e)
-
-    async def delete_expired_sessions(self) -> None:
-        try:
-            await self.session_querier.delete_expired_sessions()
         except Exception as e:
             raise DBExceptionImpl.handle(e)
 
