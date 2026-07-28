@@ -44,6 +44,7 @@ class Settings(BaseSettings):
     # Mobile access/refresh token lifetimes
     MOBILE_ACCESS_TOKEN_TTL_SECONDS: int = 900
     MOBILE_REFRESH_TOKEN_REUSE_GRACE_SECONDS: int = 30
+    MOBILE_SESSION_ABSOLUTE_DAYS: int = 30
 
     # Mobile auth validation defaults
     MOBILE_AUTH_PASSWORD_MIN_LEN: int = 8
