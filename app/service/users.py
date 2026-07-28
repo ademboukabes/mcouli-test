@@ -294,14 +294,15 @@ class AuthService:
 
         device = await self._ensure_device_for_login(user_id, req)
 
-        expires_at = datetime.now(timezone.utc) + timedelta(
-            days=settings.MOBILE_SESSION_DAYS
-        )
+        now = datetime.now(timezone.utc)
+        idle_expires_at = now + timedelta(days=settings.MOBILE_SESSION_DAYS)
+        absolute_expires_at = now + timedelta(days=settings.MOBILE_SESSION_ABSOLUTE_DAYS)
 
         session = await self.session_querier.upsert_session(
             user_id=user_id,
             device_id=device.id,
-            expires_at=expires_at,
+            idle_expires_at=idle_expires_at,
+            absolute_expires_at=absolute_expires_at,
         )
         if not session:
             raise AppException.internal_error("Failed to create session")
@@ -331,7 +332,8 @@ class AuthService:
             session_id=session.id,
             user_id=user_id,
             email=user.email or "",
-            expires_at=session.expires_at,
+            idle_expires_at=session.idle_expires_at,
+            absolute_expires_at=session.absolute_expires_at,
             blocked=user.blocked,
             ttl=AuthService.REDIS_SESSION_TTL,
             last_active=session.last_active,
@@ -423,7 +425,8 @@ class AuthService:
         session = await self.session_querier.get_session_by_id(id=row.session_id)
         if not session:
             raise AppException.unauthorized("Session not found")
-        if session.expires_at < datetime.now(timezone.utc):
+        now = datetime.now(timezone.utc)
+        if session.idle_expires_at < now or session.absolute_expires_at < now:
             raise AppException.unauthorized("Session expired")
 
         user = await self.user_querier.get_user_by_id(id=session.user_id)
@@ -511,7 +514,8 @@ class AuthService:
         session = await self.session_querier.get_session_by_id(id=uuid.UUID(session_id))
         if not session:
             return False
-        if session.expires_at < datetime.now(timezone.utc):
+        now = datetime.now(timezone.utc)
+        if session.idle_expires_at < now or session.absolute_expires_at < now:
             return False
         user = await self.user_querier.get_user_by_id(id=session.user_id)
         if not user or user.blocked:
