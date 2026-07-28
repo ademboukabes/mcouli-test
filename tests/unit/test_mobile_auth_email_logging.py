@@ -1,13 +1,14 @@
-
 # Test doubles intentionally implement only the AuthService methods exercised here.
 # They do not subclass the generated queriers, so mypy would otherwise flag each
 # constructor injection as an arg-type mismatch.
 # mypy: disable-error-code=arg-type
 
 import asyncio
+from collections.abc import AsyncIterator
 import logging
 import uuid
 from datetime import datetime, timezone
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -26,8 +27,10 @@ class FakeUser:
 
 
 class FakeDevice:
-    is_invalid_token = False
-    is_active = True
+    def __init__(self) -> None:
+        self.id = uuid.uuid4()
+        self.is_invalid_token = False
+        self.is_active = True
 
 
 class FakeSession:
@@ -50,6 +53,11 @@ class FakeUserQuerier:
 
 
 class FakeDeviceQuerier:
+    async def get_device_by_physical_id(
+        self, *, user_id: uuid.UUID, physical_device_id: uuid.UUID
+    ) -> FakeDevice | None:
+        return None
+
     async def get_device_by_id_any(self, id: uuid.UUID) -> FakeDevice | None:
         return None
 
@@ -64,8 +72,20 @@ class FakeSessionQuerier:
     def __init__(self, session: FakeSession) -> None:
         self._session = session
 
-    async def count_user_sessions(self, user_id: uuid.UUID) -> int:
-        return 0
+
+    async def lock_user_sessions(self, *, user_id: str) -> None:
+        return None
+
+    async def evict_overflow_sessions(
+        self, *, user_id: uuid.UUID, id: uuid.UUID, session_limit: int
+    ) -> AsyncIterator[uuid.UUID]:
+        return
+        yield  # pragma: no cover
+
+    async def get_session_by_device_for_user(
+        self, *, device_id: uuid.UUID, user_id: uuid.UUID
+    ) -> FakeSession | None:
+        return None
 
     async def upsert_session(
         self,
@@ -95,6 +115,7 @@ class FakeRedis:
     async def set(self, key: str, value: str, expire: int) -> None:
         return None
 
+
 class FakeFaceEmbeddingService:
     pass
 
@@ -113,6 +134,7 @@ def test_mobile_register_logs_without_plaintext_email(
         device_querier=FakeDeviceQuerier(),
         session_querier=FakeSessionQuerier(session),
         face_embedding_service=FakeFaceEmbeddingService(),
+        refresh_token_querier=MagicMock(),
     )
 
     req = MobileRegisterRequest(
@@ -120,7 +142,7 @@ def test_mobile_register_logs_without_plaintext_email(
         password="ValidPass@123",
         device_name="Pixel 8",
         device_type="android",
-        device_id=uuid.uuid4(),
+        physical_device_id=uuid.uuid4(),
     )
 
     async def _noop_cache_session_for_auth(**_: object) -> None:
@@ -128,8 +150,7 @@ def test_mobile_register_logs_without_plaintext_email(
 
     monkeypatch.setattr(SessionService, "cache_session_for_auth", _noop_cache_session_for_auth)
     monkeypatch.setattr(users_module, "create_acces_mobile_token", lambda _: "access")
-    monkeypatch.setattr(users_module, "create_refresh_mobile_token", lambda _: "refresh")
-    monkeypatch.setattr(users_module, "Get_expiry_time", lambda: 3600)
+    monkeypatch.setattr(users_module, "create_raw_refresh_token", lambda: "refresh")
 
     asyncio.run(service.mobile_register(FakeRedis(), req))
 
@@ -137,4 +158,3 @@ def test_mobile_register_logs_without_plaintext_email(
     assert req.email not in caplog.text
     assert "user@example.com" not in caplog.text
     assert "mobile_register attempt" in caplog.text
-

@@ -7,8 +7,8 @@ from app.core.exceptions import AppException
 from uuid import UUID
 
 from app.container import get_container, Container
-from app.core.config import settings
 from app.core.constant import AuditEventType
+from app.deps.client_ip import get_client_ip
 from app.deps.token_auth import MobileUserSchema, get_current_mobile_user
 from app.deps.rate_limit import RateLimiter
 
@@ -25,27 +25,13 @@ from app.schema.response.mobile.auth import MeResponse, DeviceSchema, MobileAuth
 
 router = APIRouter(prefix="/auth")
 
-
-def _get_client_ip(request: Request) -> str | None:
-    if settings.TRUST_PROXY_HEADERS:
-        forwarded_for = request.headers.get("x-forwarded-for")
-        if forwarded_for:
-            return forwarded_for.split(",", maxsplit=1)[0].strip() or None
-
-        real_ip = request.headers.get("x-real-ip")
-        if real_ip:
-            return real_ip.strip() or None
-
-    return request.client.host if request.client else None
-
-
 @router.post("/register", response_model=RegisterPendingResponse, dependencies=[Depends(RateLimiter(requests=5, window=60))])
 async def mobile_register(
     req: MobileRegisterRequest,
     request: Request,
     container: Container = Depends(get_container),
 ) -> RegisterPendingResponse:
-    client_ip = _get_client_ip(request)
+    client_ip = get_client_ip(request)
     result = await container.auth_service.mobile_register(container.redis, req, client_ip=client_ip)
     return result
 
@@ -56,7 +42,7 @@ async def mobile_register_resend_otp(
     request: Request,
     container: Container = Depends(get_container),
 ) -> RegisterPendingResponse:
-    client_ip = _get_client_ip(request)
+    client_ip = get_client_ip(request)
     result = await container.auth_service.mobile_register_resend_otp(container.redis, req.email, client_ip=client_ip)
     return result
 
@@ -67,7 +53,7 @@ async def mobile_register_verify(
     request: Request,
     container: Container = Depends(get_container),
 ) -> MobileAuthResponse:
-    client_ip = _get_client_ip(request)
+    client_ip = get_client_ip(request)
     result = await container.auth_service.verify_mobile_register(container.redis, req, client_ip=client_ip)
     await container.audit_service.create_record(
         event_type=AuditEventType.USER_SIGNUP,
@@ -83,7 +69,7 @@ async def mobile_login(
     request: Request,
     container: Container = Depends(get_container),
 ) -> MobileAuthResponse:
-    client_ip = _get_client_ip(request)
+    client_ip = get_client_ip(request)
     result = await container.auth_service.mobile_login(container.redis, req, client_ip=client_ip)
     await container.audit_service.create_record(
         event_type=AuditEventType.USER_LOGIN,
@@ -93,7 +79,11 @@ async def mobile_login(
     return result
 
 
-@router.post("/refresh", response_model=MobileAuthResponse)
+@router.post(
+    "/refresh",
+    response_model=MobileAuthResponse,
+    dependencies=[Depends(RateLimiter(requests=10, window=60))],
+)
 async def refresh_token(
     req: RefreshTokenRequest,
     container: Container = Depends(get_container),
@@ -206,7 +196,8 @@ async def get_me(
             session_id=sessions_objs.id,
             device_id=sessions_objs.device_id,
             last_active=sessions_objs.last_active,
-            expires_at=sessions_objs.expires_at,
+            idle_expires_at=sessions_objs.idle_expires_at,
+            absolute_expires_at=sessions_objs.absolute_expires_at,
         )
 
     return MeResponse(

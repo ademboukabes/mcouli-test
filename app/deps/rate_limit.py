@@ -1,34 +1,27 @@
 from fastapi import Request, HTTPException
 from typing import Callable
 
+from app.deps.client_ip import get_client_ip
 from app.infra.redis import RedisClient
-from app.core.config import settings
-
-def _get_client_ip(request: Request) -> str:
-    if settings.TRUST_PROXY_HEADERS:
-        forwarded_for = request.headers.get("x-forwarded-for")
-        if forwarded_for:
-            return forwarded_for.split(",", maxsplit=1)[0].strip()
-        real_ip = request.headers.get("x-real-ip")
-        if real_ip:
-            return real_ip.strip()
-    return request.client.host if request.client else "127.0.0.1"
-
+from app.core.logger import logger
 
 def RateLimiter(requests: int, window: int) -> Callable:
     async def _rate_limit_dependency(request: Request) -> None:
-        client_ip = _get_client_ip(request)
-        # For simplicity, IP based rate limit on the endpoint
+        client_ip = get_client_ip(request) or "127.0.0.1"
         path = request.url.path
         key = f"rate_limit:{path}:{client_ip}"
 
         redis = RedisClient.get_instance()
 
-        # Increment request count
-        current = await redis.incr(key)
-        if current == 1:
-            # Set expiry for the window if it's the first request
-            await redis.expire(key, window)
+        try:
+            current = await redis.incr(key)
+            if current == 1:
+                await redis.expire(key, window)
+        except HTTPException:
+            raise
+        except Exception:
+            logger.warning("rate_limit: redis unavailable, failing open for key=%s", key)
+            return
 
         if current > requests:
             raise HTTPException(status_code=429, detail="Too Many Requests")

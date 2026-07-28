@@ -1,6 +1,7 @@
 import asyncio
 import uuid
 from typing import Any
+from unittest.mock import MagicMock
 
 import pytest
 from fastapi import HTTPException
@@ -35,11 +36,15 @@ class FakeUser:
         self.hashed_password = hash_password("ValidPass@123")
         self.blocked = False
 
-
 class FakeUserQuerier:
-    async def get_user_by_email(self, email: str) -> FakeUser:
-        return FakeUser()
+    def __init__(self) -> None:
+        self._user = FakeUser()
 
+    async def get_user_by_email(self, email: str) -> FakeUser:
+        return self._user
+
+    async def get_user_by_id_for_update(self, id: uuid.UUID) -> FakeUser:
+        return self._user
 
 class FakeDeviceQuerier:
     pass
@@ -61,6 +66,7 @@ def test_rate_limiting_triggered_after_max_attempts() -> None:
         device_querier=FakeDeviceQuerier(),
         session_querier=FakeSessionQuerier(),
         face_embedding_service=FakeFaceEmbeddingService(),
+        refresh_token_querier=MagicMock(),
     )
 
     # Stub session creation to avoid database / redis dependencies
@@ -81,7 +87,7 @@ def test_rate_limiting_triggered_after_max_attempts() -> None:
         password="ValidPass@123",
         device_name="Pixel 8",
         device_type="android",
-        device_id=uuid.uuid4(),
+        physical_device_id=uuid.uuid4(),
     )
 
     # Call mobile_login 5 times (which is the default max limit in settings)

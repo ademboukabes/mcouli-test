@@ -89,9 +89,11 @@ async def test_blocked_user_access(client):
         session_id=session_id,
         user_id=user_id,
         email="blocked@test.com",
-        expires_at=datetime.now(timezone.utc) + timedelta(hours=1),
+        idle_expires_at=datetime.now(timezone.utc) + timedelta(days=7),
+        absolute_expires_at=datetime.now(timezone.utc) + timedelta(days=30),
         blocked=True,
         ttl=3600,
+        last_active=datetime.now(timezone.utc)
     )
 
     payload = {
@@ -127,9 +129,11 @@ async def test_rate_limiting(client):
         session_id=session_id,
         user_id=user_id,
         email="rate@test.com",
-        expires_at=datetime.now(timezone.utc) + timedelta(hours=1),
+        idle_expires_at=datetime.now(timezone.utc) + timedelta(days=7),
+        absolute_expires_at=datetime.now(timezone.utc) + timedelta(days=30),
         blocked=False,
         ttl=3600,
+        last_active=datetime.now(timezone.utc)
     )
 
     payload = {
@@ -158,3 +162,88 @@ async def test_rate_limiting(client):
             await redis._client.delete("rate_limit:/user/photos:testclient")
         except Exception:
             pass
+
+async def test_fast_path_rejects_idle_expired_cached_session(client):
+    """Cached session past idle timeout but before absolute → 401."""
+    async with engine.begin() as conn:
+        uq = user_queries.AsyncQuerier(conn)
+        user = await uq.create_user(
+            email=f"idle-expired-{uuid.uuid4()}@test.com",
+            hashed_password="hash"
+        )
+        user_id = user.id
+        session_id = uuid.uuid4()
+
+    redis = RedisClient.get_instance()
+    now = datetime.now(timezone.utc)
+    await SessionService.cache_session_for_auth(
+        redis=redis,
+        session_id=session_id,
+        user_id=user_id,
+        email="idle@test.com",
+        idle_expires_at=now - timedelta(hours=1),      # expired
+        absolute_expires_at=now + timedelta(days=30),  # still valid
+        blocked=False,
+        ttl=3600,
+        last_active=now - timedelta(hours=2),
+    )
+
+    payload = {
+        "session_id": str(session_id),
+        "exp": datetime.now(timezone.utc) + timedelta(hours=1),
+    }
+    token = jwt.encode(payload, settings.jwt_secret, algorithm="HS256")
+
+    try:
+        response = await client.get(
+            "/user/photos",
+            headers={"Authorization": f"Bearer {token}"}
+        )
+        assert response.status_code == 401
+        assert "expired" in response.json()["detail"].lower()
+    finally:
+        async with engine.begin() as conn:
+            await conn.execute(text("DELETE FROM users WHERE id = :uid"), {"uid": user_id})
+
+
+async def test_fast_path_rejects_absolute_expired_cached_session(client):
+    """Cached session past absolute timeout but before idle → 401."""
+    async with engine.begin() as conn:
+        uq = user_queries.AsyncQuerier(conn)
+        user = await uq.create_user(
+            email=f"abs-expired-{uuid.uuid4()}@test.com",
+            hashed_password="hash"
+        )
+        user_id = user.id
+        session_id = uuid.uuid4()
+
+    redis = RedisClient.get_instance()
+    now = datetime.now(timezone.utc)
+    await SessionService.cache_session_for_auth(
+        redis=redis,
+        session_id=session_id,
+        user_id=user_id,
+        email="abs@test.com",
+        idle_expires_at=now + timedelta(days=7),       # still valid
+        absolute_expires_at=now - timedelta(hours=1),  # expired
+        blocked=False,
+        ttl=3600,
+        last_active=now - timedelta(hours=2),
+    )
+
+    payload = {
+        "session_id": str(session_id),
+        "exp": datetime.now(timezone.utc) + timedelta(hours=1),
+    }
+    token = jwt.encode(payload, settings.jwt_secret, algorithm="HS256")
+
+    try:
+        response = await client.get(
+            "/user/photos",
+            headers={"Authorization": f"Bearer {token}"}
+        )
+        assert response.status_code == 401
+        assert "expired" in response.json()["detail"].lower()
+    finally:
+        async with engine.begin() as conn:
+            await conn.execute(text("DELETE FROM users WHERE id = :uid"), {"uid": user_id})

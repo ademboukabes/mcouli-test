@@ -1,15 +1,17 @@
 import base64
 import hashlib
+import os
 from datetime import datetime, timedelta, timezone
+import secrets
 from typing import Any, Literal
 import jwt
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from passlib.context import CryptContext
 from pydantic import BaseModel, ConfigDict
 import pyotp
 from app.core.config import settings
 from app.core.exceptions import AppException
 from app.core.logger import logger
-
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 
@@ -56,25 +58,12 @@ def decode_access_mobile_token(token: str) -> dict[str, Any]:
         raise AppException.unauthorized("Invalid token")
 
 
-def create_refresh_mobile_token(session_id: str) -> str:
-    payload: dict[str, Any] = {
-        "session_id": session_id,
-        "exp": int(
-            (datetime.now(timezone.utc) + timedelta(seconds=Get_expiry_time() * 4)).timestamp()
-        ),
-    }
-    return jwt.encode(payload, key=settings.jwt_secret, algorithm=settings.jwt_algorithm)
+def create_raw_refresh_token() -> str:
+    return secrets.token_urlsafe(32)
 
 
-def decode_refresh_mobile_token(token: str) -> dict[str, Any]:
-    try:
-        payload = jwt.decode(token, key=settings.jwt_secret, algorithms=[settings.jwt_algorithm])
-        return payload
-    except jwt.ExpiredSignatureError:
-        raise AppException.unauthorized("Token has expired")
-    except jwt.InvalidTokenError:
-        raise AppException.unauthorized("Invalid token")
-
+def hash_refresh_token(raw_token: str) -> str:
+    return hashlib.sha256(raw_token.encode("utf-8")).hexdigest()
 
 def create_totp_secret() -> str:
     return pyotp.random_base32()
@@ -100,6 +89,26 @@ def generate_Acces_token_stuff(user_id: str, role: str) -> str:
     }
     return jwt.encode(payload, key=settings.jwt_secret, algorithm=settings.jwt_algorithm)
 
+def _get_refresh_cache_aesgcm() -> AESGCM:
+    key = base64.b64decode(settings.encryption_key)
+    return AESGCM(key)
+
+def encrypt_refresh_cache_payload(plaintext: str) -> str:
+    """Encrypt a JSON string for storage in Redis. Returns a base64 string
+    safe to store directly (nonce + ciphertext packed together)."""
+    aes = _get_refresh_cache_aesgcm()
+    nonce = os.urandom(12)
+    ciphertext = aes.encrypt(nonce, plaintext.encode("utf-8"), None)
+    return base64.b64encode(nonce + ciphertext).decode("utf-8")
+
+def decrypt_refresh_cache_payload(encoded: str) -> str:
+    """Reverse of encrypt_refresh_cache_payload. Raises on tampering or
+    wrong key — treat any exception as 'cache miss'."""
+    aes = _get_refresh_cache_aesgcm()
+    raw = base64.b64decode(encoded)
+    nonce, ciphertext = raw[:12], raw[12:]
+    plaintext = aes.decrypt(nonce, ciphertext, None)
+    return plaintext.decode("utf-8")
 
 
 # class EmbeddingCrypto:

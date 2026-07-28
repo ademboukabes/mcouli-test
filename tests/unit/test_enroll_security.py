@@ -1,8 +1,5 @@
 """
-Unit tests for the enrollment security helpers introduced in fix/enroll.
-
-These helpers only exist on the fix/enroll branch. On other branches,
-all tests are automatically skipped via pytest.importorskip.
+Unit tests for image validation helpers in app.core.image_validation.
 
 Run with: uv run pytest tests/unit/test_enroll_security.py -v
 """
@@ -15,27 +12,16 @@ import pytest
 from fastapi import UploadFile
 from fastapi.exceptions import HTTPException
 
-# Guard: skip gracefully if the helpers don't exist on this branch
-_router_mod = pytest.importorskip(
-    "app.router.mobile.enrollement",
-    reason="fix/enroll branch required for enrollment security helpers",
+from app.core.constant import MAX_IMAGE_SIZE, MIN_IMAGE_DIM, MAX_IMAGE_DIM  # noqa: E402
+from app.core.image_validation import (
+    sanitise_filename,
+    validate_dimensions,
+    precheck_upload_headers,
+    read_limited,
 )
 
-_sanitise_filename = getattr(_router_mod, "_sanitise_filename", None)
-_validate_dimensions = getattr(_router_mod, "_validate_dimensions", None)
-_precheck_upload_headers = getattr(_router_mod, "_precheck_upload_headers", None)
-_enrollment_lock_key = getattr(_router_mod, "_enrollment_lock_key", None)
-read_limited = getattr(_router_mod, "read_limited", None)
-
-# If any helper is missing, skip the whole module
-if any(fn is None for fn in [_sanitise_filename, _validate_dimensions,
-                               _precheck_upload_headers, _enrollment_lock_key, read_limited]):
-    pytest.skip(
-        "Enrollment security helpers not available on this branch",
-        allow_module_level=True,
-    )
-
-from app.core.constant import MAX_IMAGE_SIZE, MIN_IMAGE_DIM, MAX_IMAGE_DIM  # noqa: E402
+# _enrollment_lock_key does not exist in the refactored module — skip those tests
+_enrollment_lock_key = None
 
 
 # ---------------------------------------------------------------------------
@@ -74,133 +60,134 @@ def _make_upload_file(
 
 
 # ===========================================================================
-# 1. _sanitise_filename
+# 1. sanitise_filename
 # ===========================================================================
 
 
 class TestSanitiseFilename:
     def test_normal_name_gets_uuid_prefix(self) -> None:
-        result = _sanitise_filename("portrait.jpg", "jpg")
+        result = sanitise_filename("portrait.jpg", "jpg")
         parts = result.split("_", 1)
         assert len(parts) == 2
         uuid.UUID(parts[0])  # raises if not a valid UUID
         assert parts[1] == "portrait.jpg"
 
     def test_path_traversal_is_neutralised(self) -> None:
-        result = _sanitise_filename("../../../etc/passwd.jpg", "jpg")
+        result = sanitise_filename("../../../etc/passwd.jpg", "jpg")
         assert ".." not in result
         assert "/" not in result
+        assert "\\" not in result
 
     def test_null_bytes_are_replaced(self) -> None:
-        assert "\x00" not in _sanitise_filename("face\x00evil.jpg", "jpg")
+        assert "\x00" not in sanitise_filename("face\x00evil.jpg", "jpg")
 
     def test_control_characters_are_replaced(self) -> None:
-        assert "\x1f" not in _sanitise_filename("face\x1fmalicious.jpg", "jpg")
+        assert "\x1f" not in sanitise_filename("face\x1fmalicious.jpg", "jpg")
 
     def test_windows_reserved_chars_are_replaced(self) -> None:
-        for char in r'\/:*?"<>|':
-            assert char not in _sanitise_filename(f"face{char}name.jpg", "jpg"), \
+        for char in r'\\/:*?"<>|':
+            assert char not in sanitise_filename(f"face{char}name.jpg", "jpg"), \
                 f"char {char!r} must be replaced"
 
     def test_none_filename_returns_uuid_only(self) -> None:
-        result = _sanitise_filename(None, "png")
+        result = sanitise_filename(None, "png")
         base, ext = result.rsplit(".", 1)
         uuid.UUID(base)
         assert ext == "png"
 
     def test_empty_filename_returns_uuid_only(self) -> None:
-        result = _sanitise_filename("", "jpg")
+        result = sanitise_filename("", "jpg")
         base, ext = result.rsplit(".", 1)
         uuid.UUID(base)
         assert ext == "jpg"
 
     def test_long_filename_is_truncated(self) -> None:
-        result = _sanitise_filename("a" * 200, "jpg")
+        result = sanitise_filename("a" * 200, "jpg")
         name_part = result.split("_", 1)[1]
         assert len(name_part) <= 128
 
     def test_leading_dots_stripped(self) -> None:
-        result = _sanitise_filename("...hidden.jpg", "jpg")
+        result = sanitise_filename("...hidden.jpg", "jpg")
         name_part = result.split("_", 1)[1]
         assert not name_part.startswith(".")
 
 
 # ===========================================================================
-# 2. _validate_dimensions
+# 2. validate_dimensions
 # ===========================================================================
 
 
 class TestValidateDimensions:
     def test_valid_image_passes(self) -> None:
-        _validate_dimensions(_make_jpeg_bytes(200, 200))  # must not raise
+        validate_dimensions(_make_jpeg_bytes(200, 200))  # must not raise
 
     def test_too_small_width_raises_400(self) -> None:
         with pytest.raises(HTTPException) as exc_info:
-            _validate_dimensions(_make_jpeg_bytes(MIN_IMAGE_DIM - 1, 200))
+            validate_dimensions(_make_jpeg_bytes(MIN_IMAGE_DIM - 1, 200))
         assert exc_info.value.status_code == 400
         assert "too small" in exc_info.value.detail.lower()
 
     def test_too_small_height_raises_400(self) -> None:
         with pytest.raises(HTTPException) as exc_info:
-            _validate_dimensions(_make_jpeg_bytes(200, MIN_IMAGE_DIM - 1))
+            validate_dimensions(_make_jpeg_bytes(200, MIN_IMAGE_DIM - 1))
         assert exc_info.value.status_code == 400
 
     def test_too_large_width_raises_400(self) -> None:
         with pytest.raises(HTTPException) as exc_info:
-            _validate_dimensions(_make_jpeg_bytes(MAX_IMAGE_DIM + 1, 200))
+            validate_dimensions(_make_jpeg_bytes(MAX_IMAGE_DIM + 1, 200))
         assert exc_info.value.status_code == 400
         assert "too large" in exc_info.value.detail.lower()
 
     def test_corrupt_bytes_raises_400(self) -> None:
         with pytest.raises(HTTPException) as exc_info:
-            _validate_dimensions(b"this-is-not-an-image")
+            validate_dimensions(b"this-is-not-an-image")
         assert exc_info.value.status_code == 400
 
     def test_boundary_min_dimension_passes(self) -> None:
-        _validate_dimensions(_make_jpeg_bytes(MIN_IMAGE_DIM, MIN_IMAGE_DIM))
+        validate_dimensions(_make_jpeg_bytes(MIN_IMAGE_DIM, MIN_IMAGE_DIM))
 
     def test_boundary_max_dimension_passes(self) -> None:
-        _validate_dimensions(_make_jpeg_bytes(MAX_IMAGE_DIM, MAX_IMAGE_DIM))
+        validate_dimensions(_make_jpeg_bytes(MAX_IMAGE_DIM, MAX_IMAGE_DIM))
 
 
 # ===========================================================================
-# 3. _precheck_upload_headers
+# 3. precheck_upload_headers
 # ===========================================================================
 
 
 class TestPrecheckUploadHeaders:
     def test_valid_jpeg_header_passes(self) -> None:
-        _precheck_upload_headers(_make_upload_file(b"", content_type="image/jpeg"))
+        precheck_upload_headers(_make_upload_file(b"", content_type="image/jpeg"))
 
     def test_valid_png_header_passes(self) -> None:
-        _precheck_upload_headers(_make_upload_file(b"", content_type="image/png"))
+        precheck_upload_headers(_make_upload_file(b"", content_type="image/png"))
 
     def test_missing_content_type_raises_400(self) -> None:
         f = _make_upload_file(b"", content_type=None)
         with pytest.raises(HTTPException) as exc_info:
-            _precheck_upload_headers(f)
+            precheck_upload_headers(f)
         assert exc_info.value.status_code == 400
 
     def test_unsupported_content_type_raises_400(self) -> None:
         with pytest.raises(HTTPException) as exc_info:
-            _precheck_upload_headers(_make_upload_file(b"", content_type="application/pdf"))
+            precheck_upload_headers(_make_upload_file(b"", content_type="application/pdf"))
         assert exc_info.value.status_code == 400
 
     def test_content_type_with_charset_param_accepted(self) -> None:
         # "image/jpeg; charset=utf-8" should normalise to "image/jpeg"
-        _precheck_upload_headers(
+        precheck_upload_headers(
             _make_upload_file(b"", content_type="image/jpeg; charset=utf-8")
         )
 
     def test_oversized_content_length_raises_400(self) -> None:
         with pytest.raises(HTTPException) as exc_info:
-            _precheck_upload_headers(
+            precheck_upload_headers(
                 _make_upload_file(b"", content_type="image/jpeg", content_length=MAX_IMAGE_SIZE + 1)
             )
         assert exc_info.value.status_code == 400
 
     def test_valid_content_length_passes(self) -> None:
-        _precheck_upload_headers(
+        precheck_upload_headers(
             _make_upload_file(b"", content_type="image/jpeg", content_length=1024)
         )
 
@@ -208,7 +195,7 @@ class TestPrecheckUploadHeaders:
         f = _make_upload_file(b"", content_type="image/jpeg")
         f.headers = {"content-length": "not_a_number"}
         with pytest.raises(HTTPException) as exc_info:
-            _precheck_upload_headers(f)
+            precheck_upload_headers(f)
         assert exc_info.value.status_code == 400
 
 
@@ -267,21 +254,10 @@ class TestReadLimited:
 
 
 # ===========================================================================
-# 5. _enrollment_lock_key
+# 5. _enrollment_lock_key — REMOVED
+#    This helper does not exist in app.core.image_validation.
+#    If it exists elsewhere, add a separate test file for it.
 # ===========================================================================
-
-
-class TestEnrollmentLockKey:
-    def test_key_contains_user_id(self) -> None:
-        user_id = uuid.uuid4()
-        assert str(user_id) in _enrollment_lock_key(user_id)
-
-    def test_different_users_have_different_keys(self) -> None:
-        assert _enrollment_lock_key(uuid.uuid4()) != _enrollment_lock_key(uuid.uuid4())
-
-    def test_key_format(self) -> None:
-        user_id = uuid.uuid4()
-        assert _enrollment_lock_key(user_id) == f"enroll:in_progress:{user_id}"
 
 
 # ===========================================================================

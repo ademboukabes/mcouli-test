@@ -14,6 +14,7 @@ from sqlalchemy import text
 from app.service.users import AuthService
 from app.service.face_embedding import FaceImagePayload
 from db.generated import user as user_queries
+from db.generated import refresh_token as refresh_token_queries
 
 
 # ===========================================================================
@@ -50,6 +51,7 @@ def auth_service(mock_face_embedding: AsyncMock, db_conn) -> AuthService:
         session_querier=session_queries.AsyncQuerier(db_conn),
         device_querier=device_queries.AsyncQuerier(db_conn),
         face_embedding_service=mock_face_embedding,
+        refresh_token_querier=refresh_token_queries.AsyncQuerier(db_conn),
     )
 
 
