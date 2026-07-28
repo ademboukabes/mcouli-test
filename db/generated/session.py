@@ -24,12 +24,6 @@ WHERE user_id = :p1
 """
 
 
-DELETE_EXPIRED_SESSIONS = """-- name: delete_expired_sessions \\:exec
-DELETE FROM user_sessions
-WHERE expires_at < NOW()
-"""
-
-
 DELETE_SESSION_BY_DEVICE = """-- name: delete_session_by_device \\:exec
 DELETE FROM user_sessions
 WHERE device_id = :p1
@@ -63,21 +57,21 @@ RETURNING outer_s.id
 
 
 GET_SESSION_BY_DEVICE_FOR_USER = """-- name: get_session_by_device_for_user \\:one
-SELECT id, user_id, device_id, created_at, last_active, expires_at
+SELECT id, user_id, device_id, created_at, last_active, idle_expires_at, absolute_expires_at
 FROM user_sessions
 WHERE device_id = :p1 AND user_id = :p2
 """
 
 
 GET_SESSION_BY_ID = """-- name: get_session_by_id \\:one
-SELECT id, user_id, device_id, created_at, last_active, expires_at
+SELECT id, user_id, device_id, created_at, last_active, idle_expires_at, absolute_expires_at
 FROM user_sessions
 WHERE id = :p1
 """
 
 
 LIST_SESSIONS_BY_USER = """-- name: list_sessions_by_user \\:many
-SELECT id, user_id, device_id, created_at, last_active, expires_at
+SELECT id, user_id, device_id, created_at, last_active, idle_expires_at, absolute_expires_at
 FROM user_sessions
 WHERE user_id = :p1
 """
@@ -90,7 +84,8 @@ SELECT pg_advisory_xact_lock(hashtext(:p1\\:\\:text)\\:\\:bigint)
 
 UPDATE_SESSION_ACTIVITY = """-- name: update_session_activity \\:exec
 UPDATE user_sessions
-SET last_active = NOW()
+SET last_active = NOW(),
+    idle_expires_at = :p2
 WHERE id = :p1
 """
 
@@ -99,20 +94,22 @@ UPSERT_SESSION = """-- name: upsert_session \\:one
 INSERT INTO user_sessions (
     user_id,
     device_id,
-    expires_at
+    idle_expires_at,
+    absolute_expires_at
 ) VALUES (
-    :p1, :p2, :p3
+    :p1, :p2, :p3, :p4
 )
 ON CONFLICT (user_id, device_id)
 DO UPDATE SET
     last_active = NOW(),
-    expires_at = EXCLUDED.expires_at
+    idle_expires_at = EXCLUDED.idle_expires_at
 RETURNING
     id,
     user_id,
     device_id,
     last_active,
-    expires_at,
+    idle_expires_at,
+    absolute_expires_at,
     created_at
 """
 
@@ -123,7 +120,8 @@ class UpsertSessionRow:
     user_id: uuid.UUID
     device_id: uuid.UUID
     last_active: datetime.datetime
-    expires_at: datetime.datetime
+    idle_expires_at: datetime.datetime
+    absolute_expires_at: datetime.datetime
     created_at: datetime.datetime
 
 
@@ -139,9 +137,6 @@ class AsyncQuerier:
 
     async def delete_all_user_sessions(self, *, user_id: uuid.UUID) -> None:
         await self._conn.execute(sqlalchemy.text(DELETE_ALL_USER_SESSIONS), {"p1": user_id})
-
-    async def delete_expired_sessions(self) -> None:
-        await self._conn.execute(sqlalchemy.text(DELETE_EXPIRED_SESSIONS))
 
     async def delete_session_by_device(self, *, device_id: uuid.UUID, user_id: uuid.UUID) -> None:
         await self._conn.execute(sqlalchemy.text(DELETE_SESSION_BY_DEVICE), {"p1": device_id, "p2": user_id})
@@ -164,7 +159,8 @@ class AsyncQuerier:
             device_id=row[2],
             created_at=row[3],
             last_active=row[4],
-            expires_at=row[5],
+            idle_expires_at=row[5],
+            absolute_expires_at=row[6],
         )
 
     async def get_session_by_id(self, *, id: uuid.UUID) -> Optional[models.UserSession]:
@@ -177,7 +173,8 @@ class AsyncQuerier:
             device_id=row[2],
             created_at=row[3],
             last_active=row[4],
-            expires_at=row[5],
+            idle_expires_at=row[5],
+            absolute_expires_at=row[6],
         )
 
     async def list_sessions_by_user(self, *, user_id: uuid.UUID) -> AsyncIterator[models.UserSession]:
@@ -189,17 +186,23 @@ class AsyncQuerier:
                 device_id=row[2],
                 created_at=row[3],
                 last_active=row[4],
-                expires_at=row[5],
+                idle_expires_at=row[5],
+                absolute_expires_at=row[6],
             )
 
     async def lock_user_sessions(self, *, user_id: str) -> None:
         await self._conn.execute(sqlalchemy.text(LOCK_USER_SESSIONS), {"p1": user_id})
 
-    async def update_session_activity(self, *, id: uuid.UUID) -> None:
-        await self._conn.execute(sqlalchemy.text(UPDATE_SESSION_ACTIVITY), {"p1": id})
+    async def update_session_activity(self, *, id: uuid.UUID, idle_expires_at: datetime.datetime) -> None:
+        await self._conn.execute(sqlalchemy.text(UPDATE_SESSION_ACTIVITY), {"p1": id, "p2": idle_expires_at})
 
-    async def upsert_session(self, *, user_id: uuid.UUID, device_id: uuid.UUID, expires_at: datetime.datetime) -> Optional[UpsertSessionRow]:
-        row = (await self._conn.execute(sqlalchemy.text(UPSERT_SESSION), {"p1": user_id, "p2": device_id, "p3": expires_at})).first()
+    async def upsert_session(self, *, user_id: uuid.UUID, device_id: uuid.UUID, idle_expires_at: datetime.datetime, absolute_expires_at: datetime.datetime) -> Optional[UpsertSessionRow]:
+        row = (await self._conn.execute(sqlalchemy.text(UPSERT_SESSION), {
+            "p1": user_id,
+            "p2": device_id,
+            "p3": idle_expires_at,
+            "p4": absolute_expires_at,
+        })).first()
         if row is None:
             return None
         return UpsertSessionRow(
@@ -207,6 +210,7 @@ class AsyncQuerier:
             user_id=row[1],
             device_id=row[2],
             last_active=row[3],
-            expires_at=row[4],
-            created_at=row[5],
+            idle_expires_at=row[4],
+            absolute_expires_at=row[5],
+            created_at=row[6],
         )
