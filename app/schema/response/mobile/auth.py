@@ -13,7 +13,13 @@ class SessionSchema(BaseModel):
     session_id: uuid.UUID
     device_id: uuid.UUID
     last_active: datetime
-    expires_at: datetime
+    idle_expires_at: datetime
+    absolute_expires_at: datetime
+
+class MobileUserSchema(BaseModel):
+    user_id: uuid.UUID
+    email: str
+    session_id: uuid.UUID
 
 class UserSchema(BaseModel):
     id: uuid.UUID
@@ -25,7 +31,6 @@ class MeResponse(BaseModel):
     user: UserSchema
     devices: List[DeviceSchema]
     sessions: Optional[SessionSchema]
-
 
 class RegisterPendingResponse(BaseModel):
     message: str
