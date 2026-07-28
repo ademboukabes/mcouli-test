@@ -170,16 +170,18 @@ class FakeSessionQuerier:
         *,
         user_id: uuid.UUID,
         device_id: uuid.UUID,
-        expires_at: datetime,
+        idle_expires_at: datetime,
+        absolute_expires_at: datetime,
     ) -> FakeSession:
         key = (user_id, device_id)
         existing = self._sessions.get(key)
         if existing:
-            existing.expires_at = expires_at
+            existing.idle_expires_at = idle_expires_at
             existing.last_active = datetime.now(timezone.utc)
             return existing
         session = FakeSession(user_id=user_id, device_id=device_id)
-        session.expires_at = expires_at
+        session.idle_expires_at = idle_expires_at
+        session.absolute_expires_at = absolute_expires_at
         self._sessions[key] = session
         return session
 
