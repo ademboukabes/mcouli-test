@@ -196,7 +196,8 @@ async def get_me(
             session_id=sessions_objs.id,
             device_id=sessions_objs.device_id,
             last_active=sessions_objs.last_active,
-            expires_at=sessions_objs.expires_at,
+            idle_expires_at=sessions_objs.idle_expires_at,
+            absolute_expires_at=sessions_objs.absolute_expires_at,
         )
 
     return MeResponse(
