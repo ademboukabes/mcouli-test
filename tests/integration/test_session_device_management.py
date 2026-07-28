@@ -195,7 +195,8 @@ async def test_revoke_device_cascades_delete_session_real_db(
         session = await session_querier.upsert_session(
             user_id=user_id,
             device_id=device.id,
-            expires_at=datetime.now(timezone.utc) + timedelta(days=1),
+            idle_expires_at=datetime.now(timezone.utc) + timedelta(days=7),
+            absolute_expires_at=datetime.now(timezone.utc) + timedelta(days=30),
         )
         assert session is not None
         session_id = session.id
@@ -265,7 +266,8 @@ async def test_concurrent_new_device_logins_settle_at_cap_real_db(
     await session_queries.AsyncQuerier(db_conn).upsert_session(
         user_id=user_id,
         device_id=pre_seed_device.id,
-        expires_at=datetime.now(timezone.utc) + timedelta(days=7),
+        idle_expires_at=datetime.now(timezone.utc) + timedelta(days=7),
+        absolute_expires_at=datetime.now(timezone.utc) + timedelta(days=30),
     )
 
     # CRITICAL: Commit the setup transaction so the user/device/session rows
