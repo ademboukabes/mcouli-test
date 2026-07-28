@@ -48,13 +48,15 @@ def _make_session(
     *,
     session_id: uuid.UUID | None = None,
     user_id: uuid.UUID | None = None,
-    expires_at: datetime | None = None,
+    idle_expires_at: datetime | None = None,
+    absolute_expires_at: datetime | None = None,
 ) -> MagicMock:
     s = MagicMock()
     s.id = session_id or uuid.uuid4()
     s.user_id = user_id or uuid.uuid4()
     s.device_id = uuid.uuid4()
-    s.expires_at = expires_at or datetime.now(timezone.utc) + timedelta(days=30)
+    s.idle_expires_at = idle_expires_at or datetime.now(timezone.utc) + timedelta(days=7)
+    s.absolute_expires_at = absolute_expires_at or datetime.now(timezone.utc) + timedelta(days=30)
     s.last_active = datetime.now(timezone.utc)
     return s
 
@@ -484,7 +486,8 @@ class TestRefreshToken:
         from app.core.securite import create_raw_refresh_token
 
         past_session = _make_session(
-            expires_at=datetime.now(timezone.utc) - timedelta(days=1)
+            idle_expires_at=datetime.now(timezone.utc) - timedelta(days=1),
+            absolute_expires_at=datetime.now(timezone.utc) - timedelta(days=1)
         )
         session_querier.get_session_by_id.return_value = past_session
 
@@ -546,6 +549,76 @@ class TestRefreshToken:
         with pytest.raises(HTTPException) as exc_info:
             await auth_service.refresh_token(redis, "completely.invalid.token")
         assert exc_info.value.status_code == 401
+
+        @pytest.mark.asyncio
+        async def test_refresh_rejects_idle_expired_session(
+            self,
+            auth_service: AuthService,
+            user_querier: AsyncMock,
+            session_querier: AsyncMock,
+            refresh_token_querier: AsyncMock,
+            redis: AsyncMock,
+        ) -> None:
+            """Idle timeout expired but absolute still valid → refresh must reject."""
+            from app.core.securite import create_raw_refresh_token
+
+            now = datetime.now(timezone.utc)
+            session = _make_session(
+                idle_expires_at=now - timedelta(hours=1),      # expired
+                absolute_expires_at=now + timedelta(days=30),  # valid
+            )
+            session_querier.get_session_by_id.return_value = session
+            user_querier.get_user_by_id.return_value = _make_user(user_id=session.user_id)
+
+            raw_token = create_raw_refresh_token()
+            row = MagicMock()
+            row.id = uuid.uuid4()
+            row.used = False
+            row.used_at = None
+            row.family_id = uuid.uuid4()
+            row.session_id = session.id
+            refresh_token_querier.get_refresh_token_by_hash_for_update.return_value = row
+            refresh_token_querier.mark_refresh_token_used.return_value = row
+
+            with pytest.raises(HTTPException) as exc_info:
+                await auth_service.refresh_token(redis, raw_token)
+            assert exc_info.value.status_code == 401
+            assert "expired" in exc_info.value.detail.lower()
+
+        @pytest.mark.asyncio
+        async def test_refresh_rejects_absolute_expired_session(
+            self,
+            auth_service: AuthService,
+            user_querier: AsyncMock,
+            session_querier: AsyncMock,
+            refresh_token_querier: AsyncMock,
+            redis: AsyncMock,
+        ) -> None:
+            """Absolute timeout expired but idle still valid → refresh must reject."""
+            from app.core.securite import create_raw_refresh_token
+
+            now = datetime.now(timezone.utc)
+            session = _make_session(
+                idle_expires_at=now + timedelta(days=7),       # valid
+                absolute_expires_at=now - timedelta(hours=1),  # expired
+            )
+            session_querier.get_session_by_id.return_value = session
+            user_querier.get_user_by_id.return_value = _make_user(user_id=session.user_id)
+
+            raw_token = create_raw_refresh_token()
+            row = MagicMock()
+            row.id = uuid.uuid4()
+            row.used = False
+            row.used_at = None
+            row.family_id = uuid.uuid4()
+            row.session_id = session.id
+            refresh_token_querier.get_refresh_token_by_hash_for_update.return_value = row
+            refresh_token_querier.mark_refresh_token_used.return_value = row
+
+            with pytest.raises(HTTPException) as exc_info:
+                await auth_service.refresh_token(redis, raw_token)
+            assert exc_info.value.status_code == 401
+            assert "expired" in exc_info.value.detail.lower()
 
 
 # ===========================================================================
@@ -1102,3 +1175,40 @@ class TestRefreshTokenGraceWindow:
 
         decrypted = decrypt_refresh_cache_payload(cache_value)
         assert result.access_token in decrypted
+
+class TestValidateSession:
+    @pytest.mark.asyncio
+    async def test_validate_session_false_when_idle_expired(
+        self,
+        auth_service: AuthService,
+        session_querier: AsyncMock,
+        user_querier: AsyncMock,
+    ) -> None:
+        now = datetime.now(timezone.utc)
+        session = _make_session(
+            idle_expires_at=now - timedelta(hours=1),
+            absolute_expires_at=now + timedelta(days=30),
+        )
+        session_querier.get_session_by_id.return_value = session
+        user_querier.get_user_by_id.return_value = _make_user(user_id=session.user_id)
+
+        result = await auth_service.validate_session(AsyncMock(), str(session.id))
+        assert result is False
+
+    @pytest.mark.asyncio
+    async def test_validate_session_false_when_absolute_expired(
+        self,
+        auth_service: AuthService,
+        session_querier: AsyncMock,
+        user_querier: AsyncMock,
+    ) -> None:
+        now = datetime.now(timezone.utc)
+        session = _make_session(
+            idle_expires_at=now + timedelta(days=7),
+            absolute_expires_at=now - timedelta(hours=1),
+        )
+        session_querier.get_session_by_id.return_value = session
+        user_querier.get_user_by_id.return_value = _make_user(user_id=session.user_id)
+
+        result = await auth_service.validate_session(AsyncMock(), str(session.id))
+        assert result is False
