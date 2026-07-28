@@ -291,4 +291,5 @@ class UserSession:
     device_id: uuid.UUID
     created_at: datetime.datetime
     last_active: datetime.datetime
-    expires_at: datetime.datetime
+    idle_expires_at: datetime.datetime
+    absolute_expires_at: datetime.datetime
