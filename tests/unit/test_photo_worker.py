@@ -4,7 +4,6 @@ from unittest.mock import AsyncMock, patch, MagicMock
 
 import pytest
 
-from app.schema.internal.single_face_match import BBoxPayload
 from app.service.face_embedding import DetectedFace, FaceImagePayload
 from app.worker.photo_worker.main import PhotoWorker
 from app.worker.photo_worker.schema.event import PhotoProcessEvent
@@ -93,10 +92,10 @@ def sample_event():
 async def test_handle_message_success_no_faces(photo_worker, sample_event, mock_face_service, mock_pj_querier, mock_photo_querier):
     photo_worker._load_image = AsyncMock(return_value=FaceImagePayload(filename="test.jpg", content_type="image/jpeg", bytes=b"data"))
     mock_face_service.detect_faces.return_value = []
-    
+
     with patch("app.worker.photo_worker.main.NatsClient.publish") as mock_publish:
         await photo_worker.handle_message(sample_event.model_dump_json().encode("utf-8"))
-        
+
         mock_pj_querier.create_processing_job.assert_called_once()
         mock_pj_querier.update_processing_job_status.assert_any_call(id=mock_pj_querier.create_processing_job.return_value.id, status="completed")
         mock_photo_querier.update_photo_status.assert_called_once_with(id=sample_event.photo_id, status="approved")
@@ -109,10 +108,10 @@ async def test_handle_message_success_single_face(photo_worker, sample_event, mo
     photo_worker._load_image = AsyncMock(return_value=FaceImagePayload(filename="test.jpg", content_type="image/jpeg", bytes=b"data"))
     face = DetectedFace(bbox=(0, 0, 100, 100), embedding=[0.1] * 512)
     mock_face_service.detect_faces.return_value = [face]
-    
+
     with patch("app.worker.photo_worker.main.NatsClient.publish") as mock_publish:
         await photo_worker.handle_message(sample_event.model_dump_json().encode("utf-8"))
-        
+
         mock_pj_querier.update_processing_job_status.assert_any_call(id=mock_pj_querier.create_processing_job.return_value.id, status="completed")
         mock_single_face_service.process_detected_face.assert_called_once()
         assert mock_publish.call_count == 2
@@ -124,10 +123,10 @@ async def test_handle_message_success_group_face(photo_worker, sample_event, moc
     face1 = DetectedFace(bbox=(0, 0, 100, 100), embedding=[0.1] * 512)
     face2 = DetectedFace(bbox=(100, 100, 200, 200), embedding=[0.2] * 512)
     mock_face_service.detect_faces.return_value = [face1, face2]
-    
-    with patch("app.worker.photo_worker.main.NatsClient.publish") as mock_publish:
+
+    with patch("app.worker.photo_worker.main.NatsClient.publish"):
         await photo_worker.handle_message(sample_event.model_dump_json().encode("utf-8"))
-        
+
         mock_pj_querier.update_processing_job_status.assert_any_call(id=mock_pj_querier.create_processing_job.return_value.id, status="completed")
         assert mock_photo_face_querier.insert_photo_face_with_approval.call_count == 2
         assert mock_notification_service.create_notification.call_count == 2
@@ -160,9 +159,9 @@ async def test_minio_retry_logic(photo_worker):
             Exception("Timeout"),
             (b"image_data", "test.jpg", "image/jpeg"),
         ]
-        
+
         payload = await photo_worker._load_image("minio://images/test.jpg")
-        
+
         assert payload["bytes"] == b"image_data"
         assert mock_bucket_get.call_count == 3
         assert mock_sleep.call_count == 2
