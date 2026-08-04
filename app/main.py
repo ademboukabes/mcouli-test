@@ -138,7 +138,7 @@ def read_root() -> dict[str, str]:
 
 
 @app.get("/health", tags=["ops"])
-async def health_check() -> dict:
+async def health_check() -> dict | JSONResponse:
     """Liveness + readiness probe. Returns 503 if Postgres or Redis is unreachable."""
     from fastapi.responses import JSONResponse
     from sqlalchemy import text
@@ -153,7 +153,7 @@ async def health_check() -> dict:
 
     try:
         # We need to call .ping() on the underlying redis-py client
-        await RedisClient.get_instance()._client.ping()
+        await RedisClient.get_instance()._client.ping()  # type: ignore[misc]
     except Exception as e:
         logger.warning(f"Healthcheck Redis failed: {e}")
         errors.append("redis")
