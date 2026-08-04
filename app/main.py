@@ -137,9 +137,30 @@ def read_root() -> dict[str, str]:
     return {"Hello": "World"}
 
 
-@app.get("/health")
-def health_check() -> dict[str, str]:
-    return {"status": "healthy"}
+@app.get("/health", tags=["ops"])
+async def health_check(response: Response) -> dict:
+    """Liveness + readiness probe. Returns 503 if Postgres or Redis is unreachable."""
+    from sqlalchemy import text
+    from app.infra.redis import RedisClient
+
+    errors: list[str] = []
+    try:
+        async with engine.connect() as conn:
+            await conn.execute(text("SELECT 1"))
+    except Exception:
+        errors.append("postgres")
+
+    try:
+        # We need to call .ping() on the underlying redis-py client
+        await RedisClient.get_instance()._client.ping()  # type: ignore[misc]
+    except Exception as e:
+        logger.warning(f"Healthcheck Redis failed: {e}")
+        errors.append("redis")
+
+    if errors:
+        response.status_code = 503
+        return {"status": "unhealthy", "failing": errors}
+    return {"status": "ok"}
 
 
 app.include_router(mobile_router)
