@@ -138,9 +138,8 @@ def read_root() -> dict[str, str]:
 
 
 @app.get("/health", tags=["ops"])
-async def health_check() -> dict | JSONResponse:
+async def health_check(response: Response) -> dict:
     """Liveness + readiness probe. Returns 503 if Postgres or Redis is unreachable."""
-    from fastapi.responses import JSONResponse
     from sqlalchemy import text
     from app.infra.redis import RedisClient
 
@@ -159,7 +158,8 @@ async def health_check() -> dict | JSONResponse:
         errors.append("redis")
 
     if errors:
-        return JSONResponse(status_code=503, content={"status": "unhealthy", "failing": errors})
+        response.status_code = 503
+        return {"status": "unhealthy", "failing": errors}
     return {"status": "ok"}
 
 
