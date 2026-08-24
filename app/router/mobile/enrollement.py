@@ -139,12 +139,19 @@ async def enroll_face(
 
         lock_key = _enrollment_lock_key(user.user_id)
         lock_value = str(uuid.uuid4())
-        lock_acquired = await container.redis.set(
-            lock_key,
-            lock_value,
-            expire=ENROLL_IN_PROGRESS_TTL_SECONDS,
-            nx=True,
-        )
+        try:
+            lock_acquired = await container.redis.set(
+                lock_key,
+                lock_value,
+                expire=ENROLL_IN_PROGRESS_TTL_SECONDS,
+                nx=True,
+            )
+        except Exception as exc:
+            logger.warning(
+                "enroll: redis unavailable, failing open (no duplicate-submission lock) for user %s: %s",
+                user.user_id, exc,
+            )
+            lock_acquired = True
         if not lock_acquired:
             raise AppException.conflict(
                 "Enrollment already in progress. Please wait for it to finish."
