@@ -16,7 +16,7 @@ ifneq ("$(wildcard .env)","")
     export
 endif
 
-.PHONY: dev migration-create m-up m-down gen get_db run-app run-workers lint staging-check-up staging-check-logs staging-check-down
+.PHONY: dev seed migration-create m-up m-down gen get_db run-app run-workers lint staging-check-up staging-check-logs staging-check-down test
 
 # Helper variable to call your new cleaning script
 CLEAN_SCHEMA = uv run python scripts/clean_schema.py db/schema.sql
@@ -85,3 +85,9 @@ staging-check-down:
 dev:
 	docker compose up -d
 	$(MAKE) -j 2 run-app run-workers
+
+seed:
+	uv run python scripts/seed.py
+
+test:
+	uv run pytest
