@@ -54,6 +54,9 @@ class Settings(BaseSettings):
     # Rate Limit Settings
     RATE_LIMIT_LOGIN_MAX_ATTEMPTS: int = 5
     RATE_LIMIT_LOGIN_WINDOW_SECONDS: int = 60
+    # In dev env, registration OTPs are fixed to this value and the email/NATS
+    # send is skipped, so mobile devs can verify without a real inbox.
+    DEV_OTP_BYPASS_CODE: str = "000000"
     TRUST_PROXY_HEADERS: bool = True
     # Admin list defaults
     ADMIN_USERS_DEFAULT_LIMIT: int = 20

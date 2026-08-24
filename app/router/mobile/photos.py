@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, Query
 from fastapi.responses import Response
 
 from app.container import Container, get_container
-from app.deps.token_auth import MobileUserSchema, get_current_mobile_user
+from app.deps.token_auth import MobileUserSchema, require_onboarded_mobile_user
 from app.deps.rate_limit import RateLimiter
 
 router = APIRouter(prefix="/photos")
@@ -17,7 +17,7 @@ async def list_my_photos(
     sort: Literal["asc", "desc"] = Query(default="desc"),
     limit: int = Query(default=50, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
-    current_user: MobileUserSchema = Depends(get_current_mobile_user),
+    current_user: MobileUserSchema = Depends(require_onboarded_mobile_user),
     container: Container = Depends(get_container),
 ) -> list[dict[str, object]]:
     photos = await container.user_photo_service.list_photos(
@@ -47,7 +47,7 @@ async def list_event_photos(
     sort: Literal["asc", "desc"] = Query(default="desc"),
     limit: int = Query(default=50, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
-    current_user: MobileUserSchema = Depends(get_current_mobile_user),
+    current_user: MobileUserSchema = Depends(require_onboarded_mobile_user),
     container: Container = Depends(get_container),
 ) -> dict[str, object]:
     photos = await container.user_photo_service.list_event_photos(
@@ -81,7 +81,7 @@ async def list_event_photos(
 @router.get("/{photo_id}/image")
 async def get_photo_image(
     photo_id: UUID,
-    current_user: MobileUserSchema = Depends(get_current_mobile_user),
+    current_user: MobileUserSchema = Depends(require_onboarded_mobile_user),
     container: Container = Depends(get_container),
 ) -> Response:
     data, filename, content_type = await container.user_photo_service.get_photo_bytes(

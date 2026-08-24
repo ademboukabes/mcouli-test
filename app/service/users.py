@@ -176,7 +176,6 @@ class AuthService:
             raise AppException.conflict("Email already in use; please login instead")
 
         hashed = hash_password(req.password)
-        otp = "".join(secrets.choice("0123456789") for _ in range(6))
 
         pending_key = f"pending_user:{req.email}"
         pending_data = {
@@ -185,10 +184,16 @@ class AuthService:
 
         # Save in Redis for 10 minutes (600 seconds)
         await redis.set(pending_key, json.dumps(pending_data), expire=600)
-        await redis.set(f"otp:{req.email}", otp, expire=600)
 
-        # Send to NATS
-        await NatsClient.publish("email.send_otp", json.dumps({"email": req.email, "otp": otp}).encode("utf-8"))
+        if settings.environment == "dev":
+            otp = settings.DEV_OTP_BYPASS_CODE
+            await redis.set(f"otp:{req.email}", otp, expire=600)
+            logger.info("dev OTP bypass active, otp=%s email=%s", otp, req.email)
+        else:
+            otp = "".join(secrets.choice("0123456789") for _ in range(6))
+            await redis.set(f"otp:{req.email}", otp, expire=600)
+            # Send to NATS
+            await NatsClient.publish("email.send_otp", json.dumps({"email": req.email, "otp": otp}).encode("utf-8"))
 
         logger.info("register success, OTP sent")
         return RegisterPendingResponse(
@@ -226,13 +231,16 @@ class AuthService:
         if not raw_data:
             raise AppException.not_found("No pending registration found for this email")
 
-        otp = "".join(secrets.choice("0123456789") for _ in range(6))
-
-        # Regenerate OTP with 10 mins TTL, without touching the pending_user TTL
-        await redis.set(f"otp:{email}", otp, expire=600)
-
-        # Send to NATS
-        await NatsClient.publish("email.send_otp", json.dumps({"email": email, "otp": otp}).encode("utf-8"))
+        if settings.environment == "dev":
+            otp = settings.DEV_OTP_BYPASS_CODE
+            await redis.set(f"otp:{email}", otp, expire=600)
+            logger.info("dev OTP bypass active, otp=%s email=%s", otp, email)
+        else:
+            otp = "".join(secrets.choice("0123456789") for _ in range(6))
+            # Regenerate OTP with 10 mins TTL, without touching the pending_user TTL
+            await redis.set(f"otp:{email}", otp, expire=600)
+            # Send to NATS
+            await NatsClient.publish("email.send_otp", json.dumps({"email": email, "otp": otp}).encode("utf-8"))
 
         logger.info("resend_otp success, new OTP sent to %s", email)
         return RegisterPendingResponse(
