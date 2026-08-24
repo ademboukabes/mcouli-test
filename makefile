@@ -87,7 +87,7 @@ dev:
 	$(MAKE) -j 2 run-app run-workers
 
 seed:
-	uv run python scripts/seed.py
+	PYTHONPATH=. uv run python scripts/seed.py
 
 test:
 	uv run pytest
