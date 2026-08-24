@@ -114,3 +114,24 @@ async def get_current_mobile_user(
         email=user.email or "",
         session_id=session.id,
     )
+
+
+async def require_onboarded_mobile_user(
+    current_user: Annotated[MobileUserSchema, Depends(get_current_mobile_user)],
+    container: Annotated[Container, Depends(get_container)],
+) -> MobileUserSchema:
+    """Gate for endpoints that require a completed face enrollment.
+    Auth (login/me/devices/etc.), /enroll, and /event/join stay reachable
+    via plain get_current_mobile_user so a new user can always finish
+    onboarding; everything else (photos, notifications, audits, /event/me)
+    depends on this instead.
+    """
+    user = await container.auth_service.user_querier.get_user_by_id(id=current_user.user_id)
+    if user is None:
+        raise HTTPException(status_code=401, detail="User not found")
+    if user.face_embedding is None:
+        raise HTTPException(
+            status_code=403,
+            detail="Complete face enrollment before accessing this resource",
+        )
+    return current_user

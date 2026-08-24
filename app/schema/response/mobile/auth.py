@@ -26,6 +26,7 @@ class UserSchema(BaseModel):
     email: str
     name: str | None
     avatar_url: str | None
+    is_onboarded: bool
 
 class MeResponse(BaseModel):
     user: UserSchema

@@ -206,6 +206,7 @@ async def get_me(
             email=user.email,
             name=user.display_name,
             avatar_url="/user/auth/me/avatar/image" if user.avatar_key else None,
+            is_onboarded=user.face_embedding is not None,
         ),
         devices=device_list,
         sessions=session_schema,
@@ -239,6 +240,7 @@ async def upload_avatar(
         email=user.email,
         name=user.display_name,
         avatar_url="/user/auth/me/avatar/image",
+        is_onboarded=user.face_embedding is not None,
     )
 
 
