@@ -36,6 +36,7 @@ async def list_my_photos(
             "taken_at": p.taken_at.isoformat() if p.taken_at else None,
             "day_number": p.day_number,
             "created_at": p.created_at.isoformat(),
+            "face_count": p.face_count,
         }
         for p in photos
     ]
@@ -72,6 +73,7 @@ async def list_event_photos(
                 "taken_at": p.taken_at.isoformat() if p.taken_at else None,
                 "day_number": p.day_number,
                 "created_at": p.created_at.isoformat(),
+                "face_count": p.face_count,
             }
             for p in photos
         ],

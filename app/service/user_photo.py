@@ -10,8 +10,12 @@ from app.service.staff_drive import StaffDriveService
 from db.generated import photo_approvals as photo_approval_queries
 from db.generated import photo_faces as photo_face_queries
 from db.generated import photos as photo_queries
-from db.generated.models import Photo
-from db.generated.photos import ListEventPhotosForUserParams, ListUserPhotosParams
+from db.generated.photos import (
+    ListEventPhotosForUserParams,
+    ListEventPhotosForUserRow,
+    ListUserPhotosParams,
+    ListUserPhotosRow,
+)
 
 
 class UserPhotoService:
@@ -36,8 +40,8 @@ class UserPhotoService:
         sort: str = "desc",
         limit: int = 50,
         offset: int = 0,
-    ) -> list[Photo]:
-        photos: list[Photo] = []
+    ) -> list[ListUserPhotosRow]:
+        photos: list[ListUserPhotosRow] = []
         async for photo in self._photo_querier.list_user_photos(
             ListUserPhotosParams(
                 user_id=user_id,
@@ -58,8 +62,8 @@ class UserPhotoService:
         sort: str = "desc",
         limit: int = 50,
         offset: int = 0,
-    ) -> list[Photo]:
-        photos: list[Photo] = []
+    ) -> list[ListEventPhotosForUserRow]:
+        photos: list[ListEventPhotosForUserRow] = []
         async for photo in self._photo_querier.list_event_photos_for_user(
             ListEventPhotosForUserParams(
                 user_id=user_id,

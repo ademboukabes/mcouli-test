@@ -26,7 +26,8 @@ WHERE id = $1
 RETURNING *;
 
 -- name: ListUserPhotos :many
-SELECT p.*
+SELECT p.*,
+  (SELECT COUNT(*) FROM photo_faces pf2 WHERE pf2.photo_id = p.id)::int AS face_count
 FROM photos p
 WHERE (
   EXISTS (
@@ -46,7 +47,8 @@ ORDER BY
 LIMIT $4 OFFSET $5;
 
 -- name: ListEventPhotosForUser :many
-SELECT p.*
+SELECT p.*,
+  (SELECT COUNT(*) FROM photo_faces pf2 WHERE pf2.photo_id = p.id)::int AS face_count
 FROM photos p
 WHERE p.event_id = $2
 AND p.status = 'approved'

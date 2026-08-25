@@ -62,7 +62,8 @@ SELECT id, event_id, uploaded_by, storage_key, taken_at, day_number, visibility,
 
 
 LIST_EVENT_PHOTOS_FOR_USER = """-- name: list_event_photos_for_user \\:many
-SELECT p.id, p.event_id, p.uploaded_by, p.storage_key, p.taken_at, p.day_number, p.visibility, p.status, p.created_at
+SELECT p.id, p.event_id, p.uploaded_by, p.storage_key, p.taken_at, p.day_number, p.visibility, p.status, p.created_at,
+  (SELECT COUNT(*) FROM photo_faces pf2 WHERE pf2.photo_id = p.id)\\:\\:int AS face_count
 FROM photos p
 WHERE p.event_id = :p2
 AND p.status = 'approved'
@@ -94,8 +95,23 @@ class ListEventPhotosForUserParams:
     offset: int
 
 
+@dataclasses.dataclass()
+class ListEventPhotosForUserRow:
+    id: uuid.UUID
+    event_id: uuid.UUID
+    uploaded_by: Optional[uuid.UUID]
+    storage_key: str
+    taken_at: Optional[datetime.datetime]
+    day_number: Optional[int]
+    visibility: str
+    status: Any
+    created_at: datetime.datetime
+    face_count: int
+
+
 LIST_USER_PHOTOS = """-- name: list_user_photos \\:many
-SELECT p.id, p.event_id, p.uploaded_by, p.storage_key, p.taken_at, p.day_number, p.visibility, p.status, p.created_at
+SELECT p.id, p.event_id, p.uploaded_by, p.storage_key, p.taken_at, p.day_number, p.visibility, p.status, p.created_at,
+  (SELECT COUNT(*) FROM photo_faces pf2 WHERE pf2.photo_id = p.id)\\:\\:int AS face_count
 FROM photos p
 WHERE (
   EXISTS (
@@ -123,6 +139,20 @@ class ListUserPhotosParams:
     column_3: Optional[Any]
     limit: int
     offset: int
+
+
+@dataclasses.dataclass()
+class ListUserPhotosRow:
+    id: uuid.UUID
+    event_id: uuid.UUID
+    uploaded_by: Optional[uuid.UUID]
+    storage_key: str
+    taken_at: Optional[datetime.datetime]
+    day_number: Optional[int]
+    visibility: str
+    status: Any
+    created_at: datetime.datetime
+    face_count: int
 
 
 UPDATE_PHOTO_STATUS = """-- name: update_photo_status \\:one
@@ -195,7 +225,7 @@ class AsyncQuerier:
             created_at=row[8],
         )
 
-    async def list_event_photos_for_user(self, arg: ListEventPhotosForUserParams) -> AsyncIterator[models.Photo]:
+    async def list_event_photos_for_user(self, arg: ListEventPhotosForUserParams) -> AsyncIterator[ListEventPhotosForUserRow]:
         result = await self._conn.stream(sqlalchemy.text(LIST_EVENT_PHOTOS_FOR_USER), {
             "p1": arg.user_id,
             "p2": arg.event_id,
@@ -204,7 +234,7 @@ class AsyncQuerier:
             "p5": arg.offset,
         })
         async for row in result:
-            yield models.Photo(
+            yield ListEventPhotosForUserRow(
                 id=row[0],
                 event_id=row[1],
                 uploaded_by=row[2],
@@ -214,9 +244,10 @@ class AsyncQuerier:
                 visibility=row[6],
                 status=row[7],
                 created_at=row[8],
+                face_count=row[9],
             )
 
-    async def list_user_photos(self, arg: ListUserPhotosParams) -> AsyncIterator[models.Photo]:
+    async def list_user_photos(self, arg: ListUserPhotosParams) -> AsyncIterator[ListUserPhotosRow]:
         result = await self._conn.stream(sqlalchemy.text(LIST_USER_PHOTOS), {
             "p1": arg.user_id,
             "p2": arg.column_2,
@@ -225,7 +256,7 @@ class AsyncQuerier:
             "p5": arg.offset,
         })
         async for row in result:
-            yield models.Photo(
+            yield ListUserPhotosRow(
                 id=row[0],
                 event_id=row[1],
                 uploaded_by=row[2],
@@ -235,6 +266,7 @@ class AsyncQuerier:
                 visibility=row[6],
                 status=row[7],
                 created_at=row[8],
+                face_count=row[9],
             )
 
     async def update_photo_status(self, *, id: uuid.UUID, status: Any) -> Optional[models.Photo]:
