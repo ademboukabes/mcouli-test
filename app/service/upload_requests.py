@@ -504,6 +504,34 @@ class UploadRequestsService:
         if photos:
             logger.info("Published %d photo process events", len(photos))
 
+    async def _publish_drive_sync_events(
+        self,
+        staged_photos: list[UploadRequestPhoto],
+        created_photos: list[Photo],
+    ) -> None:
+        # staged_photos and created_photos are built 1:1 in the same order by
+        # _approve_request_without_side_effects (and accumulated in lockstep
+        # across multiple calls for a group approval), so zipping them here
+        # is safe. Only direct-uploaded photos get synced — Drive-imported
+        # photos already live in Drive and syncing them back would be a
+        # pointless round trip.
+        count = 0
+        for staged_photo, created_photo in zip(staged_photos, created_photos):
+            if getattr(staged_photo, "source", "drive") != "direct":
+                continue
+            await self._publish_event(
+                subject=NatsSubjects.PHOTO_DRIVE_SYNC_REQUESTED,
+                payload={
+                    "photo_id": str(created_photo.id),
+                    "storage_key": created_photo.storage_key,
+                    "file_name": staged_photo.file_name,
+                    "mime_type": staged_photo.mime_type,
+                },
+            )
+            count += 1
+        if count:
+            logger.info("Published %d Drive sync events", count)
+
     async def _mark_group_import_failed(
         self,
         *,
@@ -1153,6 +1181,7 @@ class UploadRequestsService:
                 },
             )
             await self._publish_photo_process_events(created_photos)
+            await self._publish_drive_sync_events(staged_photos, created_photos)
             await self._audit(
                 AuditEventType.UPLOAD_REQUEST_APPROVED,
                 request_id=upload_request.id,
@@ -1285,6 +1314,7 @@ class UploadRequestsService:
                 },
             )
             await self._publish_photo_process_events(all_created_photos)
+            await self._publish_drive_sync_events(all_staged_photos, all_created_photos)
             await self._audit(
                 AuditEventType.UPLOAD_REQUEST_APPROVED,
                 group_id=upload_group.id,

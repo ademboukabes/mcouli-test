@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime, timezone
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -334,6 +334,52 @@ async def test_resume_direct_group_reissues_urls_for_pending_and_failed_only(
     photo, url = results[0]
     assert photo.id == failed_photo_id
     assert url == "https://minio.local/resumed"
+
+
+@pytest.mark.asyncio
+async def test_approve_request_publishes_drive_sync_event_for_direct_photo_only(
+    upload_requests_service,
+    mock_upload_request_querier,
+    mock_upload_request_photo_querier,
+    mock_photo_querier,
+    mock_staged_upload_storage,
+    mock_staff_user,
+):
+    from db.generated.models import Photo
+
+    request_id = uuid.uuid4()
+    event_id = uuid.uuid4()
+    photo_id = uuid.uuid4()
+
+    mock_upload_request_querier.get_upload_request_by_id.return_value = _make_request(
+        request_id, event_id, mock_staff_user.id, None,
+    )
+
+    async def _photos_iter(upload_request_id):
+        yield _make_photo(photo_id, request_id, transfer_status="uploaded", source="direct")
+
+    mock_upload_request_photo_querier.list_upload_request_photos_by_upload_request_id = _photos_iter
+    mock_staged_upload_storage.promote_to_final.return_value = "events/e1/p1.jpg"
+    mock_photo_querier.create_photo.return_value = Photo(
+        id=photo_id, event_id=event_id, uploaded_by=None, storage_key="events/e1/p1.jpg",
+        taken_at=None, day_number=None, visibility="private", status="pending",
+        created_at=datetime.now(timezone.utc), drive_file_id=None, drive_synced_at=None,
+    )
+    mock_upload_request_photo_querier.update_upload_request_photo_approval.return_value = _make_photo(
+        photo_id, request_id, source="direct", transfer_status="uploaded",
+    )
+    mock_upload_request_querier.approve_upload_request.return_value = _make_request(
+        request_id, event_id, mock_staff_user.id, None,
+    )
+
+    with patch("app.service.upload_requests.NatsClient.publish") as mock_publish:
+        await upload_requests_service.approve_request(
+            request_id=request_id, approved_by=mock_staff_user,
+        )
+
+    published_subjects = [call.args[0] for call in mock_publish.call_args_list]
+    from app.infra.nats import NatsSubjects
+    assert NatsSubjects.PHOTO_DRIVE_SYNC_REQUESTED in published_subjects
 
 
 @pytest.mark.asyncio
