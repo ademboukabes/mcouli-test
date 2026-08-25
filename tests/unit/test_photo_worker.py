@@ -1,4 +1,3 @@
-import json
 import uuid
 from unittest.mock import AsyncMock, patch, MagicMock
 
@@ -7,7 +6,6 @@ import pytest
 from app.service.face_embedding import DetectedFace, FaceImagePayload
 from app.worker.photo_worker.main import PhotoWorker
 from app.worker.photo_worker.schema.event import PhotoProcessEvent
-from app.infra.nats import NatsSubjects
 from db.generated import models
 
 
@@ -100,7 +98,10 @@ async def test_handle_message_success_no_faces(photo_worker, sample_event, mock_
         mock_pj_querier.update_processing_job_status.assert_any_call(id=mock_pj_querier.create_processing_job.return_value.id, status="completed")
         mock_photo_querier.update_photo_status.assert_called_once_with(id=sample_event.photo_id, status="approved")
         mock_photo_querier.update_photo_visibility.assert_called_once_with(id=sample_event.photo_id, visibility="public")
-        mock_publish.assert_called_with(NatsSubjects.FINAL_BUCKET_CLEANUP, json.dumps({"storage_keys": [sample_event.image_ref]}).encode("utf-8"))
+        # photo_worker no longer schedules immediate MinIO cleanup — that's
+        # now threshold-based (event_lifecycle worker, gated on event.end_date
+        # + Drive sync confirmation for direct uploads).
+        mock_publish.assert_not_called()
 
 
 @pytest.mark.asyncio
@@ -114,7 +115,8 @@ async def test_handle_message_success_single_face(photo_worker, sample_event, mo
 
         mock_pj_querier.update_processing_job_status.assert_any_call(id=mock_pj_querier.create_processing_job.return_value.id, status="completed")
         mock_single_face_service.process_detected_face.assert_called_once()
-        assert mock_publish.call_count == 2
+        # Only the audit event — cleanup is no longer scheduled by photo_worker.
+        assert mock_publish.call_count == 1
 
 
 @pytest.mark.asyncio

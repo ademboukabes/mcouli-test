@@ -113,10 +113,16 @@ class UserPhotoService:
         except Exception:
             logger.info("Photo %s not in bucket, trying Drive fallback", photo_id)
 
-        # Fallback: get drive_file_id from upload_request_photos
-        drive_file_id = await self._photo_querier.get_drive_file_id_for_photo(
-            final_storage_key=photo.storage_key,
-        )
+        # Fallback: photos.drive_file_id (set once drive_sync confirms an
+        # approved direct-upload photo has been synced) takes priority since
+        # it's the authoritative post-approval copy; upload_request_photos'
+        # drive_file_id (the original *source* file for Drive-imported
+        # photos) is the older path, kept for backward compatibility.
+        drive_file_id = photo.drive_file_id
+        if drive_file_id is None:
+            drive_file_id = await self._photo_querier.get_drive_file_id_for_photo(
+                final_storage_key=photo.storage_key,
+            )
         if drive_file_id is None:
             raise AppException.not_found("Photo no longer available")
 

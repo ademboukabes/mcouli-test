@@ -206,15 +206,6 @@ class PhotoWorker:
             logger.warning("Failed to publish audit for photo %s: %s", event.photo_id, exc)
 
     @staticmethod
-    async def _schedule_cleanup(image_ref: str) -> None:
-        payload = json.dumps({"storage_keys": [image_ref]}).encode("utf-8")
-        try:
-            await NatsClient.publish(NatsSubjects.FINAL_BUCKET_CLEANUP, payload)
-            logger.info("Scheduled cleanup for %s", image_ref)
-        except Exception as exc:
-            logger.warning("Failed to schedule cleanup for %s: %s", image_ref, exc)
-
-    @staticmethod
     def _parse_event(raw_data: bytes) -> PhotoProcessEvent | None:
         try:
             return PhotoProcessEvent.model_validate_json(raw_data)
