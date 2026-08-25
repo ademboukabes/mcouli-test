@@ -33,6 +33,7 @@ class EventService:
             name=req.name,
             event_code=code_created,
             event_date=req.event_date,
+            end_date=req.end_date,
             status=req.status or "draft",
             created_by=creator_id
         )

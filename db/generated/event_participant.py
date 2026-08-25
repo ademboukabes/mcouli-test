@@ -40,10 +40,11 @@ class GetEventParticipantsRow:
 
 
 GET_USER_EVENTS = """-- name: get_user_events \\:many
-SELECT 
-    e.id, 
-    e.name, 
-    e.event_date, 
+SELECT
+    e.id,
+    e.name,
+    e.event_date,
+    e.end_date,
     e.status,
     ep.joined_at
 FROM events e
@@ -58,6 +59,7 @@ class GetUserEventsRow:
     id: uuid.UUID
     name: str
     event_date: datetime.datetime
+    end_date: Optional[datetime.datetime]
     status: Any
     joined_at: datetime.datetime
 
@@ -164,8 +166,9 @@ class AsyncQuerier:
                 id=row[0],
                 name=row[1],
                 event_date=row[2],
-                status=row[3],
-                joined_at=row[4],
+                end_date=row[3],
+                status=row[4],
+                joined_at=row[5],
             )
 
     async def is_user_in_event(self, *, event_id: uuid.UUID, user_id: uuid.UUID) -> Optional[bool]:

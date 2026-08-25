@@ -10,6 +10,7 @@ class EventResponse(BaseModel):
     name: str
     event_code: str
     event_date: datetime
+    end_date: Optional[datetime] = None
     status: str
     created_by: uuid.UUID
     created_at: datetime
@@ -30,6 +31,7 @@ class UserEventResponse(BaseModel):
     id: uuid.UUID
     name: str
     event_date: datetime
+    end_date: Optional[datetime] = None
     status: str
     joined_at: datetime
 

@@ -34,6 +34,7 @@ class Settings(BaseSettings):
     POSTGRES_PORT: int = 5432
 
     PHOTO_APPROVAL_TIMEOUT_DAYS: int = 7
+    EVENT_LIFECYCLE_POLL_INTERVAL_SECONDS: int = 60
 
     # Mobile auth/session defaults
     MOBILE_SESSION_LIMIT: int = 3

@@ -74,6 +74,7 @@ class Event:
     created_by: uuid.UUID
     created_at: datetime.datetime
     archived_at: Optional[datetime.datetime]
+    end_date: Optional[datetime.datetime]
 
 
 @dataclasses.dataclass()
