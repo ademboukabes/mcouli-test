@@ -39,6 +39,10 @@ class Settings(BaseSettings):
     DIRECT_UPLOAD_STALE_PENDING_MINUTES: int = 45
     DIRECT_UPLOAD_RECONCILE_POLL_INTERVAL_SECONDS: int = 300
     DIRECT_UPLOAD_MAX_BATCH_SIZE: int = 200
+    # Dev/testing convenience: when true, a direct-upload group auto-approves
+    # itself the moment every photo in it has been confirmed uploaded, instead
+    # of waiting for a team lead to approve manually.
+    AUTO_APPROVE: bool = True
 
     # Mobile auth/session defaults
     MOBILE_SESSION_LIMIT: int = 3

@@ -364,6 +364,7 @@ async def test_approve_request_publishes_drive_sync_event_for_direct_photo_only(
         id=photo_id, event_id=event_id, uploaded_by=None, storage_key="events/e1/p1.jpg",
         taken_at=None, day_number=None, visibility="private", status="pending",
         created_at=datetime.now(timezone.utc), drive_file_id=None, drive_synced_at=None,
+        source="direct", storage_cleaned_at=None,
     )
     mock_upload_request_photo_querier.update_upload_request_photo_approval.return_value = _make_photo(
         photo_id, request_id, source="direct", transfer_status="uploaded",

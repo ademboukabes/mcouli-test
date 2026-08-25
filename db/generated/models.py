@@ -117,6 +117,8 @@ class Photo:
     created_at: datetime.datetime
     drive_file_id: Optional[str]
     drive_synced_at: Optional[datetime.datetime]
+    source: str
+    storage_cleaned_at: Optional[datetime.datetime]
 
 
 @dataclasses.dataclass()

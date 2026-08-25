@@ -4,9 +4,10 @@ INSERT INTO photos (
     storage_key,
     taken_at,
     day_number,
-    visibility
+    visibility,
+    source
 ) VALUES (
-    $1, $2, $3, $4, $5
+    $1, $2, $3, $4, $5, $6
 )
 RETURNING *;
 
@@ -89,5 +90,23 @@ LIMIT 1;
 UPDATE photos
 SET drive_file_id = $2,
     drive_synced_at = NOW()
+WHERE id = $1
+RETURNING *;
+
+-- name: ListPhotosDueForStorageCleanup :many
+SELECT p.*
+FROM photos p
+JOIN events e ON e.id = p.event_id
+WHERE p.status = 'approved'
+  AND p.storage_cleaned_at IS NULL
+  AND e.end_date IS NOT NULL
+  AND e.end_date <= NOW() - ($1 || ' days')::interval
+  AND (p.source != 'direct' OR p.drive_synced_at IS NOT NULL)
+ORDER BY e.end_date ASC
+LIMIT 500;
+
+-- name: MarkPhotoStorageCleaned :one
+UPDATE photos
+SET storage_cleaned_at = NOW()
 WHERE id = $1
 RETURNING *;

@@ -366,6 +366,7 @@ class UploadRequestsService:
                         taken_at=staged_photo.taken_at,
                         day_number=staged_photo.day_number,
                         visibility=staged_photo.visibility,
+                        source=getattr(staged_photo, "source", "drive"),
                     )
                 )
                 if created_photo is None:
@@ -753,7 +754,51 @@ class UploadRequestsService:
         )
         if confirmed is None:
             raise AppException.internal_error("Failed to confirm upload")
+
+        if settings.AUTO_APPROVE:
+            await self._maybe_auto_approve_group(
+                upload_request_id=confirmed.upload_request_id,
+                approved_by=requested_by,
+            )
+
         return confirmed
+
+    async def _maybe_auto_approve_group(
+        self,
+        *,
+        upload_request_id: uuid.UUID,
+        approved_by: StaffUser,
+    ) -> None:
+        upload_request = await self.upload_request_querier.get_upload_request_by_id(id=upload_request_id)
+        if upload_request is None or upload_request.group_id is None:
+            return
+        if self._status_value(upload_request.status) != "pending":
+            return
+
+        group_id = upload_request.group_id
+        request_ids: list[uuid.UUID] = []
+        async for req in self.upload_request_querier.list_upload_requests_by_group_id(group_id=group_id):
+            if self._status_value(req.status) != "pending":
+                continue
+            request_ids.append(req.id)
+        if not request_ids:
+            return
+
+        all_uploaded = True
+        async for photo in self.upload_request_photo_querier.list_upload_request_photos_by_upload_request_ids(
+            dollar_1=request_ids
+        ):
+            if getattr(photo, "transfer_status", "uploaded") != "uploaded":
+                all_uploaded = False
+                break
+        if not all_uploaded:
+            return
+
+        try:
+            await self.approve_group(group_id=group_id, approved_by=approved_by)
+            logger.info("auto_approve: group %s approved automatically", group_id)
+        except Exception:
+            logger.exception("auto_approve: failed to auto-approve group %s", group_id)
 
     async def fail_direct_upload(
         self,
