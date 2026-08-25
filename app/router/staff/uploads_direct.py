@@ -18,7 +18,7 @@ from app.schema.response.staff.uploads_direct import (
 from db.generated.models import StaffUser
 
 router = APIRouter(prefix="/uploads/direct")
-# this endpoint are for staff to upload images directly to the system, bypassing the mobile app. This is useful for bulk uploads or for users who cannot use the mobile app.
+# this endpoint are for staff to upload images directly to the system and very large files and they can resume and restart and retry .
 
 @router.post("/groups", response_model=UploadRequestGroupSchema)
 async def create_direct_group(
