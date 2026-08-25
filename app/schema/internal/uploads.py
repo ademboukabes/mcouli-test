@@ -8,3 +8,13 @@ class UploadPhotoInput:
     taken_at: datetime | None
     day_number: int | None
     visibility: str
+
+
+@dataclass(frozen=True)
+class DirectFileInput:
+    file_name: str
+    mime_type: str
+    size_bytes: int
+    taken_at: datetime | None
+    day_number: int | None
+    visibility: str

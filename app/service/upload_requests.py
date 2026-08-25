@@ -8,6 +8,7 @@ import uuid
 
 from sqlalchemy.exc import IntegrityError
 
+from app.core.config import settings
 from app.core.constant import AuditEventType
 from app.core.exceptions import AppException
 from app.core.logger import logger
@@ -17,7 +18,7 @@ from app.infra.google_drive import (
     GoogleDriveFileMetadata,
 )
 from app.infra.nats import NatsClient, NatsSubjects
-from app.schema.internal.uploads import UploadPhotoInput
+from app.schema.internal.uploads import DirectFileInput, UploadPhotoInput
 from app.service.audit import AuditService
 from app.service.staged_upload_storage import PreviewObject, StagedUploadStorageService
 from app.service.staff_drive import StaffDriveService
@@ -595,6 +596,141 @@ class UploadRequestsService:
             ).model_dump(mode="json"),
         )
         return UploadRequestGroupDetails(group=upload_group, requests=[])
+
+    async def create_direct_group(
+        self,
+        *,
+        event_id: uuid.UUID,
+        requested_by: StaffUser,
+    ) -> UploadRequestGroup:
+        try:
+            upload_group = await self.upload_request_group_querier.create_upload_request_group(
+                upload_request_group_queries.CreateUploadRequestGroupParams(
+                    event_id=event_id,
+                    folder_id=None,
+                    requested_by=requested_by.id,
+                    total_photo_count=0,
+                    batch_count=0,
+                    source="direct",
+                    processing_status="completed",
+                )
+            )
+        except IntegrityError as exc:
+            self._raise_integrity_error(exc)
+        if upload_group is None:
+            raise AppException.internal_error("Failed to create upload group")
+        return upload_group
+
+    async def register_direct_batch(
+        self,
+        *,
+        group_id: uuid.UUID,
+        files: Sequence[DirectFileInput],
+        requested_by: StaffUser,
+    ) -> list[tuple[UploadRequestPhoto, str]]:
+        if not files:
+            raise AppException.bad_request("At least one file is required")
+        if len(files) > settings.DIRECT_UPLOAD_MAX_BATCH_SIZE:
+            raise AppException.bad_request(
+                f"A batch can contain at most {settings.DIRECT_UPLOAD_MAX_BATCH_SIZE} files"
+            )
+        for file in files:
+            if file.mime_type not in self._allowed_mime_types:
+                raise AppException.image_format_error(f"Unsupported image format: {file.mime_type}")
+            if file.size_bytes <= 0 or file.size_bytes > self._max_photo_size_bytes:
+                raise AppException.bad_request(f"{file.file_name} exceeds maximum allowed size")
+
+        group = await self.upload_request_group_querier.get_upload_request_group_by_id(id=group_id)
+        if group is None:
+            raise AppException.not_found("Upload group not found")
+        self._ensure_group_access(current_staff_user=requested_by, upload_group=group)
+
+        upload_request = await self.upload_request_querier.create_upload_request(
+            upload_request_queries.CreateUploadRequestParams(
+                event_id=group.event_id,
+                group_id=group_id,
+                drive_file_id=None,
+                requested_by=requested_by.id,
+                photo_count=len(files),
+                source="direct",
+            )
+        )
+        if upload_request is None:
+            raise AppException.internal_error("Failed to create upload request")
+
+        results: list[tuple[UploadRequestPhoto, str]] = []
+        for file in files:
+            photo_id = uuid.uuid4()
+            storage_key, presigned_url = await self.staged_upload_storage.create_presigned_staging_upload(
+                upload_request_id=upload_request.id,
+                photo_id=photo_id,
+                file_name=file.file_name,
+                expires_seconds=settings.DIRECT_UPLOAD_PRESIGN_EXPIRES_SECONDS,
+            )
+            created_photo = await self.upload_request_photo_querier.create_direct_upload_request_photo(
+                upload_request_photo_queries.CreateDirectUploadRequestPhotoParams(
+                    upload_request_id=upload_request.id,
+                    file_name=file.file_name,
+                    mime_type=file.mime_type,
+                    size_bytes=file.size_bytes,
+                    staging_storage_key=storage_key,
+                    taken_at=file.taken_at,
+                    day_number=file.day_number,
+                    visibility=file.visibility,
+                )
+            )
+            if created_photo is None:
+                raise AppException.internal_error("Failed to register upload photo")
+            results.append((created_photo, presigned_url))
+
+        await self.upload_request_group_querier.increment_upload_request_group_counts(
+            id=group_id, total_photo_count=len(files),
+        )
+
+        return results
+
+    async def confirm_direct_upload(
+        self,
+        *,
+        photo_id: uuid.UUID,
+        requested_by: StaffUser,
+    ) -> UploadRequestPhoto:
+        photo = await self.upload_request_photo_querier.get_upload_request_photo_by_id(id=photo_id)
+        if photo is None:
+            raise AppException.not_found("Upload photo not found")
+
+        stat = await self.staged_upload_storage.stat_staging_object(photo.staging_storage_key)
+        if stat is None:
+            failed = await self.upload_request_photo_querier.fail_upload_request_photo_transfer(id=photo_id)
+            if failed is None:
+                raise AppException.internal_error("Failed to mark upload as failed")
+            raise AppException.bad_request(
+                "Upload did not complete — file not found in storage. Retry the upload."
+            )
+
+        confirmed = await self.upload_request_photo_querier.confirm_upload_request_photo_transfer(
+            id=photo_id,
+            size_bytes=stat.size,
+            mime_type=stat.content_type,
+        )
+        if confirmed is None:
+            raise AppException.internal_error("Failed to confirm upload")
+        return confirmed
+
+    async def fail_direct_upload(
+        self,
+        *,
+        photo_id: uuid.UUID,
+        requested_by: StaffUser,
+    ) -> UploadRequestPhoto:
+        photo = await self.upload_request_photo_querier.get_upload_request_photo_by_id(id=photo_id)
+        if photo is None:
+            raise AppException.not_found("Upload photo not found")
+
+        failed = await self.upload_request_photo_querier.fail_upload_request_photo_transfer(id=photo_id)
+        if failed is None:
+            raise AppException.internal_error("Failed to mark upload as failed")
+        return failed
 
     async def process_group_import(
         self,
