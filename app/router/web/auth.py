@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends
 from app.container import Container, get_container
 from fastapi import Response
 
+from app.core.config import settings
 from app.deps.cookie_auth import get_current_staff_user
 from app.deps.rate_limit import RateLimiter
 from app.schema.request.web.auth import WebAuthRequest
@@ -26,7 +27,7 @@ async def admin_login(
         key="access_token",
         value=authResponse.access_token,
         httponly=True,
-        secure=True,
+        secure=settings.environment != "dev",
         samesite="strict",
         max_age=60 * 60 * 24 * 7,
     )
