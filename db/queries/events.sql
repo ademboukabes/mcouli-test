@@ -1,6 +1,6 @@
 -- name: CreateEvent :one
-INSERT INTO events (name, event_code, event_date, status, created_by)
-VALUES ($1, $2, $3, $4, $5)
+INSERT INTO events (name, event_code, event_date, end_date, status, created_by)
+VALUES ($1, $2, $3, $4, $5, $6)
 RETURNING *;
 
 -- name: GetEventById :one
@@ -47,5 +47,21 @@ WHERE id = $1
 RETURNING *;
 
 -- name: DeleteEvent :exec
-DELETE FROM events 
+DELETE FROM events
 WHERE id = $1;
+
+-- name: ActivateDueEvents :many
+UPDATE events
+SET status = 'scheduled'::event_status
+WHERE status = 'draft'::event_status
+  AND event_date <= NOW()
+RETURNING id;
+
+-- name: ArchiveEndedEvents :many
+UPDATE events
+SET status = 'archived'::event_status,
+    archived_at = NOW()
+WHERE status = 'scheduled'::event_status
+  AND end_date IS NOT NULL
+  AND end_date <= NOW()
+RETURNING id;
