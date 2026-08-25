@@ -20,6 +20,7 @@ from app.schema.request.mobile.auth import (
     RefreshTokenRequest,
     UpdateDeviceTokenRequest,
     InactivateDeviceRequest,
+    UpdateProfileRequest,
 )
 from app.schema.response.mobile.auth import MeResponse, DeviceSchema, MobileAuthResponse, SessionSchema, UserSchema, RegisterPendingResponse
 
@@ -211,6 +212,25 @@ async def get_me(
         devices=device_list,
         sessions=session_schema,
     )
+
+@router.patch("/me/profile", response_model=UserSchema)
+async def update_profile(
+    req: UpdateProfileRequest,
+    current_user: MobileUserSchema = Depends(get_current_mobile_user),
+    container: Container = Depends(get_container),
+) -> UserSchema:
+    user = await container.auth_service.update_user(
+        user_id=current_user.user_id,
+        display_name=req.name.strip(),
+    )
+    return UserSchema(
+        id=user.id,
+        email=user.email,
+        name=user.display_name,
+        avatar_url="/user/auth/me/avatar/image" if user.avatar_key else None,
+        is_onboarded=user.face_embedding is not None,
+    )
+
 
 @router.post("/me/avatar", response_model=UserSchema)
 async def upload_avatar(

@@ -92,3 +92,7 @@ class UpdateDeviceTokenRequest(BaseModel):
 
 class InactivateDeviceRequest(BaseModel):
     device_id: UUID
+
+
+class UpdateProfileRequest(BaseModel):
+    name: str = Field(..., min_length=1, max_length=100)
