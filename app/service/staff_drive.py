@@ -209,6 +209,25 @@ class StaffDriveService:
             connection = await self._refresh_connection_access_token(connection)
         return self.decrypt(connection.access_token)
 
+    async def upload_to_system_drive(
+        self,
+        *,
+        file_name: str,
+        content_type: str,
+        data: bytes,
+    ) -> str:
+        """Upload bytes to the system/club Drive using the most recently
+        connected active staff Drive connection. Returns the Drive file id."""
+        access_token = await self.get_system_access_token()
+        metadata = await GoogleDriveClient.upload_file(
+            access_token=access_token,
+            file_name=file_name,
+            content_type=content_type,
+            data=data,
+            folder_id=settings.GOOGLE_CLUB_DRIVE_FOLDER_ID or None,
+        )
+        return metadata.id
+
     async def disconnect(self, staff_user_id: uuid.UUID) -> None:
         connection = await self.get_status(staff_user_id)
         if connection is None:

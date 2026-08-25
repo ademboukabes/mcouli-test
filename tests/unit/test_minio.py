@@ -8,6 +8,7 @@ from miniopy_async.error import S3Error
 from app.infra.minio import (
     Bucket,
     ImageBucket,
+    ObjectStat,
     WaSimBucket,
     init_minio_client,
 )
@@ -200,3 +201,45 @@ async def test_wa_sim_bucket_auto_name(mock_minio_client, mock_upload_file):
     # WaSimBucket generates 16 digit string
     assert len(object_name) == 16
     assert object_name.isdigit()
+
+
+@pytest.mark.asyncio
+async def test_presigned_put_url_calls_client_with_expiry(mock_minio_client):
+    Bucket.client = mock_minio_client
+    mock_minio_client.presigned_put_object = AsyncMock(return_value="https://minio.local/signed")
+    bucket = Bucket("test_bucket", "")
+
+    url = await bucket.presigned_put_url("staging/foo.jpg", expires_seconds=1800)
+
+    assert url == "https://minio.local/signed"
+    mock_minio_client.presigned_put_object.assert_awaited_once()
+    kwargs = mock_minio_client.presigned_put_object.call_args[1]
+    assert kwargs["object_name"] == "staging/foo.jpg"
+    assert kwargs["expires"].total_seconds() == 1800
+
+
+@pytest.mark.asyncio
+async def test_stat_returns_object_stat_when_present(mock_minio_client):
+    Bucket.client = mock_minio_client
+    stat_result = MagicMock(size=12345, content_type="image/jpeg")
+    mock_minio_client.stat_object = AsyncMock(return_value=stat_result)
+    bucket = Bucket("test_bucket", "")
+
+    result = await bucket.stat("staging/foo.jpg")
+
+    assert result == ObjectStat(size=12345, content_type="image/jpeg")
+
+
+@pytest.mark.asyncio
+async def test_stat_returns_none_when_object_missing(mock_minio_client):
+    Bucket.client = mock_minio_client
+    error = S3Error(
+        code="NoSuchKey", message="not found", resource="", request_id="",
+        host_id="", response=MagicMock(),
+    )
+    mock_minio_client.stat_object = AsyncMock(side_effect=error)
+    bucket = Bucket("test_bucket", "")
+
+    result = await bucket.stat("staging/missing.jpg")
+
+    assert result is None

@@ -35,6 +35,10 @@ class Settings(BaseSettings):
 
     PHOTO_APPROVAL_TIMEOUT_DAYS: int = 7
     EVENT_LIFECYCLE_POLL_INTERVAL_SECONDS: int = 60
+    DIRECT_UPLOAD_PRESIGN_EXPIRES_SECONDS: int = 1800
+    DIRECT_UPLOAD_STALE_PENDING_MINUTES: int = 45
+    DIRECT_UPLOAD_RECONCILE_POLL_INTERVAL_SECONDS: int = 300
+    DIRECT_UPLOAD_MAX_BATCH_SIZE: int = 200
 
     # Mobile auth/session defaults
     MOBILE_SESSION_LIMIT: int = 3
@@ -79,9 +83,20 @@ class Settings(BaseSettings):
     GOOGLE_CLIENT_ID: str = ""
     GOOGLE_CLIENT_SECRET: str = ""
     GOOGLE_REDIRECT_URI: str = ""
+    # drive.readonly alone can't write; drive.file alone can only see files
+    # the app itself created, which would break browsing/importing existing
+    # Drive folders. Both scopes together preserve the existing read/import
+    # flow and add write access for syncing approved direct uploads back to
+    # Drive. Existing staff connections keep their old readonly-only grant
+    # until they disconnect and reconnect through the consent screen.
     GOOGLE_OAUTH_SCOPES: str = (
-        "https://www.googleapis.com/auth/drive.readonly openid email profile"
+        "https://www.googleapis.com/auth/drive.readonly "
+        "https://www.googleapis.com/auth/drive.file openid email profile"
     )
+    # Folder ID (from the Drive URL) that approved direct-upload photos get
+    # synced into. Empty means uploads land in the connected account's Drive
+    # root instead of a specific folder.
+    GOOGLE_CLUB_DRIVE_FOLDER_ID: str = ""
 
     FACE_ENCRYPTION_KEY: str
     FIREBASE_CREDENTIALS_PATH: str

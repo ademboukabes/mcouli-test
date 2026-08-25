@@ -13,6 +13,50 @@ import sqlalchemy.ext.asyncio
 from db.generated import models
 
 
+CONFIRM_UPLOAD_REQUEST_PHOTO_TRANSFER = """-- name: confirm_upload_request_photo_transfer \\:one
+UPDATE upload_request_photos
+SET transfer_status = 'uploaded',
+    size_bytes = :p2,
+    mime_type = :p3
+WHERE id = :p1
+  AND transfer_status IN ('pending_upload', 'failed')
+RETURNING id, upload_request_id, drive_file_id, file_name, mime_type, size_bytes, staging_storage_key, final_storage_key, taken_at, day_number, visibility, status, created_at, source, transfer_status
+"""
+
+
+CREATE_DIRECT_UPLOAD_REQUEST_PHOTO = """-- name: create_direct_upload_request_photo \\:one
+INSERT INTO upload_request_photos (
+    upload_request_id,
+    drive_file_id,
+    file_name,
+    mime_type,
+    size_bytes,
+    staging_storage_key,
+    taken_at,
+    day_number,
+    visibility,
+    status,
+    source,
+    transfer_status
+) VALUES (
+    :p1, NULL, :p2, :p3, :p4, :p5, :p6, :p7, :p8, 'staged', 'direct', 'pending_upload'
+)
+RETURNING id, upload_request_id, drive_file_id, file_name, mime_type, size_bytes, staging_storage_key, final_storage_key, taken_at, day_number, visibility, status, created_at, source, transfer_status
+"""
+
+
+@dataclasses.dataclass()
+class CreateDirectUploadRequestPhotoParams:
+    upload_request_id: uuid.UUID
+    file_name: str
+    mime_type: str
+    size_bytes: int
+    staging_storage_key: str
+    taken_at: Optional[datetime.datetime]
+    day_number: Optional[int]
+    visibility: str
+
+
 CREATE_UPLOAD_REQUEST_PHOTO = """-- name: create_upload_request_photo \\:one
 INSERT INTO upload_request_photos (
     upload_request_id,
@@ -28,14 +72,14 @@ INSERT INTO upload_request_photos (
 ) VALUES (
     :p1, :p2, :p3, :p4, :p5, :p6, :p7, :p8, :p9, :p10
 )
-RETURNING id, upload_request_id, drive_file_id, file_name, mime_type, size_bytes, staging_storage_key, final_storage_key, taken_at, day_number, visibility, status, created_at
+RETURNING id, upload_request_id, drive_file_id, file_name, mime_type, size_bytes, staging_storage_key, final_storage_key, taken_at, day_number, visibility, status, created_at, source, transfer_status
 """
 
 
 @dataclasses.dataclass()
 class CreateUploadRequestPhotoParams:
     upload_request_id: uuid.UUID
-    drive_file_id: str
+    drive_file_id: Optional[str]
     file_name: str
     mime_type: str
     size_bytes: int
@@ -52,15 +96,35 @@ WHERE upload_request_id = :p1
 """
 
 
+FAIL_UPLOAD_REQUEST_PHOTO_TRANSFER = """-- name: fail_upload_request_photo_transfer \\:one
+UPDATE upload_request_photos
+SET transfer_status = 'failed'
+WHERE id = :p1
+  AND transfer_status IN ('pending_upload', 'failed')
+RETURNING id, upload_request_id, drive_file_id, file_name, mime_type, size_bytes, staging_storage_key, final_storage_key, taken_at, day_number, visibility, status, created_at, source, transfer_status
+"""
+
+
 GET_UPLOAD_REQUEST_PHOTO_BY_ID = """-- name: get_upload_request_photo_by_id \\:one
-SELECT id, upload_request_id, drive_file_id, file_name, mime_type, size_bytes, staging_storage_key, final_storage_key, taken_at, day_number, visibility, status, created_at
+SELECT id, upload_request_id, drive_file_id, file_name, mime_type, size_bytes, staging_storage_key, final_storage_key, taken_at, day_number, visibility, status, created_at, source, transfer_status
 FROM upload_request_photos
 WHERE id = :p1
 """
 
 
+LIST_STALE_PENDING_TRANSFER_PHOTOS = """-- name: list_stale_pending_transfer_photos \\:many
+SELECT id, upload_request_id, drive_file_id, file_name, mime_type, size_bytes, staging_storage_key, final_storage_key, taken_at, day_number, visibility, status, created_at, source, transfer_status
+FROM upload_request_photos
+WHERE source = 'direct'
+  AND transfer_status = 'pending_upload'
+  AND created_at <= NOW() - (:p1 || ' minutes')\\:\\:interval
+ORDER BY created_at ASC
+LIMIT 500
+"""
+
+
 LIST_UPLOAD_REQUEST_PHOTOS_BY_UPLOAD_REQUEST_ID = """-- name: list_upload_request_photos_by_upload_request_id \\:many
-SELECT id, upload_request_id, drive_file_id, file_name, mime_type, size_bytes, staging_storage_key, final_storage_key, taken_at, day_number, visibility, status, created_at
+SELECT id, upload_request_id, drive_file_id, file_name, mime_type, size_bytes, staging_storage_key, final_storage_key, taken_at, day_number, visibility, status, created_at, source, transfer_status
 FROM upload_request_photos
 WHERE upload_request_id = :p1
 ORDER BY created_at ASC
@@ -68,10 +132,19 @@ ORDER BY created_at ASC
 
 
 LIST_UPLOAD_REQUEST_PHOTOS_BY_UPLOAD_REQUEST_IDS = """-- name: list_upload_request_photos_by_upload_request_ids \\:many
-SELECT id, upload_request_id, drive_file_id, file_name, mime_type, size_bytes, staging_storage_key, final_storage_key, taken_at, day_number, visibility, status, created_at
+SELECT id, upload_request_id, drive_file_id, file_name, mime_type, size_bytes, staging_storage_key, final_storage_key, taken_at, day_number, visibility, status, created_at, source, transfer_status
 FROM upload_request_photos
 WHERE upload_request_id = ANY(:p1\\:\\:uuid[])
 ORDER BY created_at ASC
+"""
+
+
+RESET_UPLOAD_REQUEST_PHOTO_TRANSFER_TO_PENDING = """-- name: reset_upload_request_photo_transfer_to_pending \\:one
+UPDATE upload_request_photos
+SET transfer_status = 'pending_upload'
+WHERE id = :p1
+  AND transfer_status IN ('pending_upload', 'failed')
+RETURNING id, upload_request_id, drive_file_id, file_name, mime_type, size_bytes, staging_storage_key, final_storage_key, taken_at, day_number, visibility, status, created_at, source, transfer_status
 """
 
 
@@ -80,7 +153,7 @@ UPDATE upload_request_photos
 SET status = :p2,
     final_storage_key = :p3
 WHERE id = :p1
-RETURNING id, upload_request_id, drive_file_id, file_name, mime_type, size_bytes, staging_storage_key, final_storage_key, taken_at, day_number, visibility, status, created_at
+RETURNING id, upload_request_id, drive_file_id, file_name, mime_type, size_bytes, staging_storage_key, final_storage_key, taken_at, day_number, visibility, status, created_at, source, transfer_status
 """
 
 
@@ -88,13 +161,66 @@ UPDATE_UPLOAD_REQUEST_PHOTO_STATUS_BY_UPLOAD_REQUEST_ID = """-- name: update_upl
 UPDATE upload_request_photos
 SET status = :p2
 WHERE upload_request_id = :p1
-RETURNING id, upload_request_id, drive_file_id, file_name, mime_type, size_bytes, staging_storage_key, final_storage_key, taken_at, day_number, visibility, status, created_at
+RETURNING id, upload_request_id, drive_file_id, file_name, mime_type, size_bytes, staging_storage_key, final_storage_key, taken_at, day_number, visibility, status, created_at, source, transfer_status
 """
 
 
 class AsyncQuerier:
     def __init__(self, conn: sqlalchemy.ext.asyncio.AsyncConnection):
         self._conn = conn
+
+    async def confirm_upload_request_photo_transfer(self, *, id: uuid.UUID, size_bytes: int, mime_type: str) -> Optional[models.UploadRequestPhoto]:
+        row = (await self._conn.execute(sqlalchemy.text(CONFIRM_UPLOAD_REQUEST_PHOTO_TRANSFER), {"p1": id, "p2": size_bytes, "p3": mime_type})).first()
+        if row is None:
+            return None
+        return models.UploadRequestPhoto(
+            id=row[0],
+            upload_request_id=row[1],
+            drive_file_id=row[2],
+            file_name=row[3],
+            mime_type=row[4],
+            size_bytes=row[5],
+            staging_storage_key=row[6],
+            final_storage_key=row[7],
+            taken_at=row[8],
+            day_number=row[9],
+            visibility=row[10],
+            status=row[11],
+            created_at=row[12],
+            source=row[13],
+            transfer_status=row[14],
+        )
+
+    async def create_direct_upload_request_photo(self, arg: CreateDirectUploadRequestPhotoParams) -> Optional[models.UploadRequestPhoto]:
+        row = (await self._conn.execute(sqlalchemy.text(CREATE_DIRECT_UPLOAD_REQUEST_PHOTO), {
+            "p1": arg.upload_request_id,
+            "p2": arg.file_name,
+            "p3": arg.mime_type,
+            "p4": arg.size_bytes,
+            "p5": arg.staging_storage_key,
+            "p6": arg.taken_at,
+            "p7": arg.day_number,
+            "p8": arg.visibility,
+        })).first()
+        if row is None:
+            return None
+        return models.UploadRequestPhoto(
+            id=row[0],
+            upload_request_id=row[1],
+            drive_file_id=row[2],
+            file_name=row[3],
+            mime_type=row[4],
+            size_bytes=row[5],
+            staging_storage_key=row[6],
+            final_storage_key=row[7],
+            taken_at=row[8],
+            day_number=row[9],
+            visibility=row[10],
+            status=row[11],
+            created_at=row[12],
+            source=row[13],
+            transfer_status=row[14],
+        )
 
     async def create_upload_request_photo(self, arg: CreateUploadRequestPhotoParams) -> Optional[models.UploadRequestPhoto]:
         row = (await self._conn.execute(sqlalchemy.text(CREATE_UPLOAD_REQUEST_PHOTO), {
@@ -125,10 +251,34 @@ class AsyncQuerier:
             visibility=row[10],
             status=row[11],
             created_at=row[12],
+            source=row[13],
+            transfer_status=row[14],
         )
 
     async def delete_upload_request_photos_by_upload_request_id(self, *, upload_request_id: uuid.UUID) -> None:
         await self._conn.execute(sqlalchemy.text(DELETE_UPLOAD_REQUEST_PHOTOS_BY_UPLOAD_REQUEST_ID), {"p1": upload_request_id})
+
+    async def fail_upload_request_photo_transfer(self, *, id: uuid.UUID) -> Optional[models.UploadRequestPhoto]:
+        row = (await self._conn.execute(sqlalchemy.text(FAIL_UPLOAD_REQUEST_PHOTO_TRANSFER), {"p1": id})).first()
+        if row is None:
+            return None
+        return models.UploadRequestPhoto(
+            id=row[0],
+            upload_request_id=row[1],
+            drive_file_id=row[2],
+            file_name=row[3],
+            mime_type=row[4],
+            size_bytes=row[5],
+            staging_storage_key=row[6],
+            final_storage_key=row[7],
+            taken_at=row[8],
+            day_number=row[9],
+            visibility=row[10],
+            status=row[11],
+            created_at=row[12],
+            source=row[13],
+            transfer_status=row[14],
+        )
 
     async def get_upload_request_photo_by_id(self, *, id: uuid.UUID) -> Optional[models.UploadRequestPhoto]:
         row = (await self._conn.execute(sqlalchemy.text(GET_UPLOAD_REQUEST_PHOTO_BY_ID), {"p1": id})).first()
@@ -148,7 +298,30 @@ class AsyncQuerier:
             visibility=row[10],
             status=row[11],
             created_at=row[12],
+            source=row[13],
+            transfer_status=row[14],
         )
+
+    async def list_stale_pending_transfer_photos(self, *, dollar_1: Optional[str]) -> AsyncIterator[models.UploadRequestPhoto]:
+        result = await self._conn.stream(sqlalchemy.text(LIST_STALE_PENDING_TRANSFER_PHOTOS), {"p1": dollar_1})
+        async for row in result:
+            yield models.UploadRequestPhoto(
+                id=row[0],
+                upload_request_id=row[1],
+                drive_file_id=row[2],
+                file_name=row[3],
+                mime_type=row[4],
+                size_bytes=row[5],
+                staging_storage_key=row[6],
+                final_storage_key=row[7],
+                taken_at=row[8],
+                day_number=row[9],
+                visibility=row[10],
+                status=row[11],
+                created_at=row[12],
+                source=row[13],
+                transfer_status=row[14],
+            )
 
     async def list_upload_request_photos_by_upload_request_id(self, *, upload_request_id: uuid.UUID) -> AsyncIterator[models.UploadRequestPhoto]:
         result = await self._conn.stream(sqlalchemy.text(LIST_UPLOAD_REQUEST_PHOTOS_BY_UPLOAD_REQUEST_ID), {"p1": upload_request_id})
@@ -167,6 +340,8 @@ class AsyncQuerier:
                 visibility=row[10],
                 status=row[11],
                 created_at=row[12],
+                source=row[13],
+                transfer_status=row[14],
             )
 
     async def list_upload_request_photos_by_upload_request_ids(self, *, dollar_1: List[uuid.UUID]) -> AsyncIterator[models.UploadRequestPhoto]:
@@ -186,7 +361,31 @@ class AsyncQuerier:
                 visibility=row[10],
                 status=row[11],
                 created_at=row[12],
+                source=row[13],
+                transfer_status=row[14],
             )
+
+    async def reset_upload_request_photo_transfer_to_pending(self, *, id: uuid.UUID) -> Optional[models.UploadRequestPhoto]:
+        row = (await self._conn.execute(sqlalchemy.text(RESET_UPLOAD_REQUEST_PHOTO_TRANSFER_TO_PENDING), {"p1": id})).first()
+        if row is None:
+            return None
+        return models.UploadRequestPhoto(
+            id=row[0],
+            upload_request_id=row[1],
+            drive_file_id=row[2],
+            file_name=row[3],
+            mime_type=row[4],
+            size_bytes=row[5],
+            staging_storage_key=row[6],
+            final_storage_key=row[7],
+            taken_at=row[8],
+            day_number=row[9],
+            visibility=row[10],
+            status=row[11],
+            created_at=row[12],
+            source=row[13],
+            transfer_status=row[14],
+        )
 
     async def update_upload_request_photo_approval(self, *, id: uuid.UUID, status: str, final_storage_key: Optional[str]) -> Optional[models.UploadRequestPhoto]:
         row = (await self._conn.execute(sqlalchemy.text(UPDATE_UPLOAD_REQUEST_PHOTO_APPROVAL), {"p1": id, "p2": status, "p3": final_storage_key})).first()
@@ -206,6 +405,8 @@ class AsyncQuerier:
             visibility=row[10],
             status=row[11],
             created_at=row[12],
+            source=row[13],
+            transfer_status=row[14],
         )
 
     async def update_upload_request_photo_status_by_upload_request_id(self, *, upload_request_id: uuid.UUID, status: str) -> AsyncIterator[models.UploadRequestPhoto]:
@@ -225,4 +426,6 @@ class AsyncQuerier:
                 visibility=row[10],
                 status=row[11],
                 created_at=row[12],
+                source=row[13],
+                transfer_status=row[14],
             )

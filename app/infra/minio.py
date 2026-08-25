@@ -2,6 +2,8 @@ import io
 import random
 import string
 import uuid
+from dataclasses import dataclass
+from datetime import timedelta
 from fastapi import UploadFile
 from miniopy_async.commonconfig import CopySource
 from miniopy_async.error import S3Error
@@ -35,6 +37,12 @@ async def init_minio_client(
     for bucket_name in [IMAGES_BUCKET_NAME, DOCUMENTS_BUCKET_NAME, WA_SIM_BUCKET_NAME]:
         if not await Bucket.client.bucket_exists(bucket_name):
             await Bucket.client.make_bucket(bucket_name)
+
+@dataclass(frozen=True)
+class ObjectStat:
+    size: int
+    content_type: str
+
 
 class Bucket:
     bucket_name: str
@@ -129,6 +137,25 @@ class Bucket:
             ),
         )
         return target_object_name
+
+    async def presigned_put_url(self, object_name: str, *, expires_seconds: int) -> str:
+        return await self.client.presigned_put_object(
+            bucket_name=self.bucket_name,
+            object_name=self._object_path(object_name),
+            expires=timedelta(seconds=expires_seconds),
+        )
+
+    async def stat(self, object_name: str) -> ObjectStat | None:
+        try:
+            result = await self.client.stat_object(
+                bucket_name=self.bucket_name,
+                object_name=self._object_path(object_name),
+            )
+        except S3Error as e:
+            if e.code == "NoSuchKey":
+                return None
+            raise
+        return ObjectStat(size=result.size or 0, content_type=result.content_type or DEFAULT_CONTENT_TYPE)
 
 image_ext_content_type_map = {
     "apng": ["image/apng"],

@@ -20,7 +20,7 @@ SET status = 'approved',
     rejection_reason = NULL
 WHERE id = :p1
   AND status = 'pending'
-RETURNING id, event_id, drive_file_id, requested_by, approved_by, status, created_at, approved_at, photo_count, rejection_reason, group_id
+RETURNING id, event_id, drive_file_id, requested_by, approved_by, status, created_at, approved_at, photo_count, rejection_reason, group_id, source
 """
 
 
@@ -30,11 +30,12 @@ INSERT INTO upload_requests (
     group_id,
     drive_file_id,
     requested_by,
-    photo_count
+    photo_count,
+    source
 ) VALUES (
-    :p1, :p2, :p3, :p4, :p5
+    :p1, :p2, :p3, :p4, :p5, :p6
 )
-RETURNING id, event_id, drive_file_id, requested_by, approved_by, status, created_at, approved_at, photo_count, rejection_reason, group_id
+RETURNING id, event_id, drive_file_id, requested_by, approved_by, status, created_at, approved_at, photo_count, rejection_reason, group_id, source
 """
 
 
@@ -45,6 +46,7 @@ class CreateUploadRequestParams:
     drive_file_id: Optional[str]
     requested_by: uuid.UUID
     photo_count: int
+    source: str
 
 
 DELETE_UPLOAD_REQUEST = """-- name: delete_upload_request \\:exec
@@ -54,21 +56,21 @@ WHERE id = :p1
 
 
 GET_UPLOAD_REQUEST_BY_ID = """-- name: get_upload_request_by_id \\:one
-SELECT id, event_id, drive_file_id, requested_by, approved_by, status, created_at, approved_at, photo_count, rejection_reason, group_id
+SELECT id, event_id, drive_file_id, requested_by, approved_by, status, created_at, approved_at, photo_count, rejection_reason, group_id, source
 FROM upload_requests
 WHERE id = :p1
 """
 
 
 LIST_UPLOAD_REQUESTS = """-- name: list_upload_requests \\:many
-SELECT id, event_id, drive_file_id, requested_by, approved_by, status, created_at, approved_at, photo_count, rejection_reason, group_id
+SELECT id, event_id, drive_file_id, requested_by, approved_by, status, created_at, approved_at, photo_count, rejection_reason, group_id, source
 FROM upload_requests
 ORDER BY created_at DESC
 """
 
 
 LIST_UPLOAD_REQUESTS_BY_GROUP_ID = """-- name: list_upload_requests_by_group_id \\:many
-SELECT id, event_id, drive_file_id, requested_by, approved_by, status, created_at, approved_at, photo_count, rejection_reason, group_id
+SELECT id, event_id, drive_file_id, requested_by, approved_by, status, created_at, approved_at, photo_count, rejection_reason, group_id, source
 FROM upload_requests
 WHERE group_id = :p1
 ORDER BY created_at ASC
@@ -76,7 +78,7 @@ ORDER BY created_at ASC
 
 
 LIST_UPLOAD_REQUESTS_BY_REQUESTER = """-- name: list_upload_requests_by_requester \\:many
-SELECT id, event_id, drive_file_id, requested_by, approved_by, status, created_at, approved_at, photo_count, rejection_reason, group_id
+SELECT id, event_id, drive_file_id, requested_by, approved_by, status, created_at, approved_at, photo_count, rejection_reason, group_id, source
 FROM upload_requests
 WHERE requested_by = :p1
 ORDER BY created_at DESC
@@ -84,7 +86,7 @@ ORDER BY created_at DESC
 
 
 LIST_UPLOAD_REQUESTS_BY_REQUESTER_AND_STATUS = """-- name: list_upload_requests_by_requester_and_status \\:many
-SELECT id, event_id, drive_file_id, requested_by, approved_by, status, created_at, approved_at, photo_count, rejection_reason, group_id
+SELECT id, event_id, drive_file_id, requested_by, approved_by, status, created_at, approved_at, photo_count, rejection_reason, group_id, source
 FROM upload_requests
 WHERE requested_by = :p1
   AND status = :p2
@@ -93,7 +95,7 @@ ORDER BY created_at DESC
 
 
 LIST_UPLOAD_REQUESTS_BY_STATUS = """-- name: list_upload_requests_by_status \\:many
-SELECT id, event_id, drive_file_id, requested_by, approved_by, status, created_at, approved_at, photo_count, rejection_reason, group_id
+SELECT id, event_id, drive_file_id, requested_by, approved_by, status, created_at, approved_at, photo_count, rejection_reason, group_id, source
 FROM upload_requests
 WHERE status = :p1
 ORDER BY created_at DESC
@@ -108,7 +110,7 @@ SET status = 'rejected',
     rejection_reason = :p3
 WHERE id = :p1
   AND status = 'pending'
-RETURNING id, event_id, drive_file_id, requested_by, approved_by, status, created_at, approved_at, photo_count, rejection_reason, group_id
+RETURNING id, event_id, drive_file_id, requested_by, approved_by, status, created_at, approved_at, photo_count, rejection_reason, group_id, source
 """
 
 
@@ -132,6 +134,7 @@ class AsyncQuerier:
             photo_count=row[8],
             rejection_reason=row[9],
             group_id=row[10],
+            source=row[11],
         )
 
     async def create_upload_request(self, arg: CreateUploadRequestParams) -> Optional[models.UploadRequest]:
@@ -141,6 +144,7 @@ class AsyncQuerier:
             "p3": arg.drive_file_id,
             "p4": arg.requested_by,
             "p5": arg.photo_count,
+            "p6": arg.source,
         })).first()
         if row is None:
             return None
@@ -156,6 +160,7 @@ class AsyncQuerier:
             photo_count=row[8],
             rejection_reason=row[9],
             group_id=row[10],
+            source=row[11],
         )
 
     async def delete_upload_request(self, *, id: uuid.UUID) -> None:
@@ -177,6 +182,7 @@ class AsyncQuerier:
             photo_count=row[8],
             rejection_reason=row[9],
             group_id=row[10],
+            source=row[11],
         )
 
     async def list_upload_requests(self) -> AsyncIterator[models.UploadRequest]:
@@ -194,6 +200,7 @@ class AsyncQuerier:
                 photo_count=row[8],
                 rejection_reason=row[9],
                 group_id=row[10],
+                source=row[11],
             )
 
     async def list_upload_requests_by_group_id(self, *, group_id: Optional[uuid.UUID]) -> AsyncIterator[models.UploadRequest]:
@@ -211,6 +218,7 @@ class AsyncQuerier:
                 photo_count=row[8],
                 rejection_reason=row[9],
                 group_id=row[10],
+                source=row[11],
             )
 
     async def list_upload_requests_by_requester(self, *, requested_by: uuid.UUID) -> AsyncIterator[models.UploadRequest]:
@@ -228,6 +236,7 @@ class AsyncQuerier:
                 photo_count=row[8],
                 rejection_reason=row[9],
                 group_id=row[10],
+                source=row[11],
             )
 
     async def list_upload_requests_by_requester_and_status(self, *, requested_by: uuid.UUID, status: Any) -> AsyncIterator[models.UploadRequest]:
@@ -245,6 +254,7 @@ class AsyncQuerier:
                 photo_count=row[8],
                 rejection_reason=row[9],
                 group_id=row[10],
+                source=row[11],
             )
 
     async def list_upload_requests_by_status(self, *, status: Any) -> AsyncIterator[models.UploadRequest]:
@@ -262,6 +272,7 @@ class AsyncQuerier:
                 photo_count=row[8],
                 rejection_reason=row[9],
                 group_id=row[10],
+                source=row[11],
             )
 
     async def reject_upload_request(self, *, id: uuid.UUID, approved_by: Optional[uuid.UUID], rejection_reason: Optional[str]) -> Optional[models.UploadRequest]:
@@ -280,4 +291,5 @@ class AsyncQuerier:
             photo_count=row[8],
             rejection_reason=row[9],
             group_id=row[10],
+            source=row[11],
         )

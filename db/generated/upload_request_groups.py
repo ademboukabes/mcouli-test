@@ -20,7 +20,7 @@ SET status = 'approved',
     rejection_reason = NULL
 WHERE id = :p1
   AND status = 'pending'
-RETURNING id, event_id, folder_id, requested_by, approved_by, status, total_photo_count, batch_count, created_at, approved_at, rejection_reason, processing_status, processed_photo_count, failed_photo_count, error_message
+RETURNING id, event_id, folder_id, requested_by, approved_by, status, total_photo_count, batch_count, created_at, approved_at, rejection_reason, processing_status, processed_photo_count, failed_photo_count, error_message, source
 """
 
 
@@ -33,7 +33,7 @@ SET processing_status = 'completed',
     failed_photo_count = :p5,
     error_message = NULL
 WHERE id = :p1
-RETURNING id, event_id, folder_id, requested_by, approved_by, status, total_photo_count, batch_count, created_at, approved_at, rejection_reason, processing_status, processed_photo_count, failed_photo_count, error_message
+RETURNING id, event_id, folder_id, requested_by, approved_by, status, total_photo_count, batch_count, created_at, approved_at, rejection_reason, processing_status, processed_photo_count, failed_photo_count, error_message, source
 """
 
 
@@ -52,21 +52,25 @@ INSERT INTO upload_request_groups (
     folder_id,
     requested_by,
     total_photo_count,
-    batch_count
+    batch_count,
+    source,
+    processing_status
 ) VALUES (
-    :p1, :p2, :p3, :p4, :p5
+    :p1, :p2, :p3, :p4, :p5, :p6, :p7
 )
-RETURNING id, event_id, folder_id, requested_by, approved_by, status, total_photo_count, batch_count, created_at, approved_at, rejection_reason, processing_status, processed_photo_count, failed_photo_count, error_message
+RETURNING id, event_id, folder_id, requested_by, approved_by, status, total_photo_count, batch_count, created_at, approved_at, rejection_reason, processing_status, processed_photo_count, failed_photo_count, error_message, source
 """
 
 
 @dataclasses.dataclass()
 class CreateUploadRequestGroupParams:
     event_id: uuid.UUID
-    folder_id: str
+    folder_id: Optional[str]
     requested_by: uuid.UUID
     total_photo_count: int
     batch_count: int
+    source: str
+    processing_status: str
 
 
 DELETE_UPLOAD_REQUEST_GROUP = """-- name: delete_upload_request_group \\:exec
@@ -84,7 +88,7 @@ SET processing_status = 'failed',
     failed_photo_count = :p5,
     error_message = :p6
 WHERE id = :p1
-RETURNING id, event_id, folder_id, requested_by, approved_by, status, total_photo_count, batch_count, created_at, approved_at, rejection_reason, processing_status, processed_photo_count, failed_photo_count, error_message
+RETURNING id, event_id, folder_id, requested_by, approved_by, status, total_photo_count, batch_count, created_at, approved_at, rejection_reason, processing_status, processed_photo_count, failed_photo_count, error_message, source
 """
 
 
@@ -99,21 +103,30 @@ class FailUploadRequestGroupProcessingParams:
 
 
 GET_UPLOAD_REQUEST_GROUP_BY_ID = """-- name: get_upload_request_group_by_id \\:one
-SELECT id, event_id, folder_id, requested_by, approved_by, status, total_photo_count, batch_count, created_at, approved_at, rejection_reason, processing_status, processed_photo_count, failed_photo_count, error_message
+SELECT id, event_id, folder_id, requested_by, approved_by, status, total_photo_count, batch_count, created_at, approved_at, rejection_reason, processing_status, processed_photo_count, failed_photo_count, error_message, source
 FROM upload_request_groups
 WHERE id = :p1
 """
 
 
+INCREMENT_UPLOAD_REQUEST_GROUP_COUNTS = """-- name: increment_upload_request_group_counts \\:one
+UPDATE upload_request_groups
+SET total_photo_count = total_photo_count + :p2,
+    batch_count = batch_count + 1
+WHERE id = :p1
+RETURNING id, event_id, folder_id, requested_by, approved_by, status, total_photo_count, batch_count, created_at, approved_at, rejection_reason, processing_status, processed_photo_count, failed_photo_count, error_message, source
+"""
+
+
 LIST_UPLOAD_REQUEST_GROUPS = """-- name: list_upload_request_groups \\:many
-SELECT id, event_id, folder_id, requested_by, approved_by, status, total_photo_count, batch_count, created_at, approved_at, rejection_reason, processing_status, processed_photo_count, failed_photo_count, error_message
+SELECT id, event_id, folder_id, requested_by, approved_by, status, total_photo_count, batch_count, created_at, approved_at, rejection_reason, processing_status, processed_photo_count, failed_photo_count, error_message, source
 FROM upload_request_groups
 ORDER BY created_at DESC
 """
 
 
 LIST_UPLOAD_REQUEST_GROUPS_BY_REQUESTER = """-- name: list_upload_request_groups_by_requester \\:many
-SELECT id, event_id, folder_id, requested_by, approved_by, status, total_photo_count, batch_count, created_at, approved_at, rejection_reason, processing_status, processed_photo_count, failed_photo_count, error_message
+SELECT id, event_id, folder_id, requested_by, approved_by, status, total_photo_count, batch_count, created_at, approved_at, rejection_reason, processing_status, processed_photo_count, failed_photo_count, error_message, source
 FROM upload_request_groups
 WHERE requested_by = :p1
 ORDER BY created_at DESC
@@ -121,7 +134,7 @@ ORDER BY created_at DESC
 
 
 LIST_UPLOAD_REQUEST_GROUPS_BY_REQUESTER_AND_STATUS = """-- name: list_upload_request_groups_by_requester_and_status \\:many
-SELECT id, event_id, folder_id, requested_by, approved_by, status, total_photo_count, batch_count, created_at, approved_at, rejection_reason, processing_status, processed_photo_count, failed_photo_count, error_message
+SELECT id, event_id, folder_id, requested_by, approved_by, status, total_photo_count, batch_count, created_at, approved_at, rejection_reason, processing_status, processed_photo_count, failed_photo_count, error_message, source
 FROM upload_request_groups
 WHERE requested_by = :p1
   AND status = :p2
@@ -130,7 +143,7 @@ ORDER BY created_at DESC
 
 
 LIST_UPLOAD_REQUEST_GROUPS_BY_STATUS = """-- name: list_upload_request_groups_by_status \\:many
-SELECT id, event_id, folder_id, requested_by, approved_by, status, total_photo_count, batch_count, created_at, approved_at, rejection_reason, processing_status, processed_photo_count, failed_photo_count, error_message
+SELECT id, event_id, folder_id, requested_by, approved_by, status, total_photo_count, batch_count, created_at, approved_at, rejection_reason, processing_status, processed_photo_count, failed_photo_count, error_message, source
 FROM upload_request_groups
 WHERE status = :p1
 ORDER BY created_at DESC
@@ -145,7 +158,7 @@ SET status = 'rejected',
     rejection_reason = :p3
 WHERE id = :p1
   AND status = 'pending'
-RETURNING id, event_id, folder_id, requested_by, approved_by, status, total_photo_count, batch_count, created_at, approved_at, rejection_reason, processing_status, processed_photo_count, failed_photo_count, error_message
+RETURNING id, event_id, folder_id, requested_by, approved_by, status, total_photo_count, batch_count, created_at, approved_at, rejection_reason, processing_status, processed_photo_count, failed_photo_count, error_message, source
 """
 
 
@@ -155,7 +168,7 @@ SET processing_status = 'running',
     error_message = NULL
 WHERE id = :p1
   AND processing_status = 'pending'
-RETURNING id, event_id, folder_id, requested_by, approved_by, status, total_photo_count, batch_count, created_at, approved_at, rejection_reason, processing_status, processed_photo_count, failed_photo_count, error_message
+RETURNING id, event_id, folder_id, requested_by, approved_by, status, total_photo_count, batch_count, created_at, approved_at, rejection_reason, processing_status, processed_photo_count, failed_photo_count, error_message, source
 """
 
 
@@ -166,7 +179,7 @@ SET total_photo_count = :p2,
     processed_photo_count = :p4,
     failed_photo_count = :p5
 WHERE id = :p1
-RETURNING id, event_id, folder_id, requested_by, approved_by, status, total_photo_count, batch_count, created_at, approved_at, rejection_reason, processing_status, processed_photo_count, failed_photo_count, error_message
+RETURNING id, event_id, folder_id, requested_by, approved_by, status, total_photo_count, batch_count, created_at, approved_at, rejection_reason, processing_status, processed_photo_count, failed_photo_count, error_message, source
 """
 
 
@@ -203,6 +216,7 @@ class AsyncQuerier:
             processed_photo_count=row[12],
             failed_photo_count=row[13],
             error_message=row[14],
+            source=row[15],
         )
 
     async def complete_upload_request_group_processing(self, arg: CompleteUploadRequestGroupProcessingParams) -> Optional[models.UploadRequestGroup]:
@@ -231,6 +245,7 @@ class AsyncQuerier:
             processed_photo_count=row[12],
             failed_photo_count=row[13],
             error_message=row[14],
+            source=row[15],
         )
 
     async def create_upload_request_group(self, arg: CreateUploadRequestGroupParams) -> Optional[models.UploadRequestGroup]:
@@ -240,6 +255,8 @@ class AsyncQuerier:
             "p3": arg.requested_by,
             "p4": arg.total_photo_count,
             "p5": arg.batch_count,
+            "p6": arg.source,
+            "p7": arg.processing_status,
         })).first()
         if row is None:
             return None
@@ -259,6 +276,7 @@ class AsyncQuerier:
             processed_photo_count=row[12],
             failed_photo_count=row[13],
             error_message=row[14],
+            source=row[15],
         )
 
     async def delete_upload_request_group(self, *, id: uuid.UUID) -> None:
@@ -291,6 +309,7 @@ class AsyncQuerier:
             processed_photo_count=row[12],
             failed_photo_count=row[13],
             error_message=row[14],
+            source=row[15],
         )
 
     async def get_upload_request_group_by_id(self, *, id: uuid.UUID) -> Optional[models.UploadRequestGroup]:
@@ -313,6 +332,30 @@ class AsyncQuerier:
             processed_photo_count=row[12],
             failed_photo_count=row[13],
             error_message=row[14],
+            source=row[15],
+        )
+
+    async def increment_upload_request_group_counts(self, *, id: uuid.UUID, total_photo_count: int) -> Optional[models.UploadRequestGroup]:
+        row = (await self._conn.execute(sqlalchemy.text(INCREMENT_UPLOAD_REQUEST_GROUP_COUNTS), {"p1": id, "p2": total_photo_count})).first()
+        if row is None:
+            return None
+        return models.UploadRequestGroup(
+            id=row[0],
+            event_id=row[1],
+            folder_id=row[2],
+            requested_by=row[3],
+            approved_by=row[4],
+            status=row[5],
+            total_photo_count=row[6],
+            batch_count=row[7],
+            created_at=row[8],
+            approved_at=row[9],
+            rejection_reason=row[10],
+            processing_status=row[11],
+            processed_photo_count=row[12],
+            failed_photo_count=row[13],
+            error_message=row[14],
+            source=row[15],
         )
 
     async def list_upload_request_groups(self) -> AsyncIterator[models.UploadRequestGroup]:
@@ -334,6 +377,7 @@ class AsyncQuerier:
                 processed_photo_count=row[12],
                 failed_photo_count=row[13],
                 error_message=row[14],
+                source=row[15],
             )
 
     async def list_upload_request_groups_by_requester(self, *, requested_by: uuid.UUID) -> AsyncIterator[models.UploadRequestGroup]:
@@ -355,6 +399,7 @@ class AsyncQuerier:
                 processed_photo_count=row[12],
                 failed_photo_count=row[13],
                 error_message=row[14],
+                source=row[15],
             )
 
     async def list_upload_request_groups_by_requester_and_status(self, *, requested_by: uuid.UUID, status: Any) -> AsyncIterator[models.UploadRequestGroup]:
@@ -376,6 +421,7 @@ class AsyncQuerier:
                 processed_photo_count=row[12],
                 failed_photo_count=row[13],
                 error_message=row[14],
+                source=row[15],
             )
 
     async def list_upload_request_groups_by_status(self, *, status: Any) -> AsyncIterator[models.UploadRequestGroup]:
@@ -397,6 +443,7 @@ class AsyncQuerier:
                 processed_photo_count=row[12],
                 failed_photo_count=row[13],
                 error_message=row[14],
+                source=row[15],
             )
 
     async def reject_upload_request_group(self, *, id: uuid.UUID, approved_by: Optional[uuid.UUID], rejection_reason: Optional[str]) -> Optional[models.UploadRequestGroup]:
@@ -419,6 +466,7 @@ class AsyncQuerier:
             processed_photo_count=row[12],
             failed_photo_count=row[13],
             error_message=row[14],
+            source=row[15],
         )
 
     async def start_upload_request_group_processing(self, *, id: uuid.UUID) -> Optional[models.UploadRequestGroup]:
@@ -441,6 +489,7 @@ class AsyncQuerier:
             processed_photo_count=row[12],
             failed_photo_count=row[13],
             error_message=row[14],
+            source=row[15],
         )
 
     async def update_upload_request_group_import_progress(self, arg: UpdateUploadRequestGroupImportProgressParams) -> Optional[models.UploadRequestGroup]:
@@ -469,4 +518,5 @@ class AsyncQuerier:
             processed_photo_count=row[12],
             failed_photo_count=row[13],
             error_message=row[14],
+            source=row[15],
         )

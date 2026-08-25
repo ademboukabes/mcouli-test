@@ -35,6 +35,7 @@ class NatsSubjects(Enum):
     STAFF_UPLOAD_REQUEST_APPROVED = "staff.upload_request.approved"
     STAFF_UPLOAD_REQUEST_REJECTED = "staff.upload_request.rejected"
     PHOTO_PROCESS = "photo.process"
+    PHOTO_DRIVE_SYNC_REQUESTED = "photo.drive_sync.requested"
 
 
 class NatsClient:
