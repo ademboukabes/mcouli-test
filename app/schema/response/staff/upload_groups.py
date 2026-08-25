@@ -18,10 +18,11 @@ class UploadRequestGroupSchema(BaseModel):
 
     id: UUID
     event_id: UUID
-    folder_id: str
+    folder_id: str | None
     requested_by: UUID
     approved_by: UUID | None
     status: str
+    source: str
     processing_status: str
     total_photo_count: int
     batch_count: int
@@ -72,8 +73,9 @@ class UploadRequestGroupSummarySchema(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: UUID
     event_id: UUID
-    folder_id: str
+    folder_id: str | None
     status: str
+    source: str
     processing_status: str
     total_photo_count: int
     batch_count: int
