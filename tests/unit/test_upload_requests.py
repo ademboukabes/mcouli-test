@@ -122,6 +122,7 @@ async def test_create_request_success(
         rejection_reason=None,
         created_at=datetime.now(timezone.utc),
         approved_at=None,
+        source="drive",
     )
 
     mock_upload_request_photo_querier.create_upload_request_photo.return_value = UploadRequestPhoto(
@@ -138,6 +139,8 @@ async def test_create_request_success(
         visibility="public",
         status="staged",
         created_at=datetime.now(timezone.utc),
+        source="drive",
+        transfer_status="uploaded",
     )
 
     photos = [
@@ -191,7 +194,7 @@ async def test_create_request_duplicate_conflict(
     request_id = uuid.uuid4()
 
     mock_upload_request_querier.create_upload_request.return_value = UploadRequest(
-            id=request_id, event_id=event_id, group_id=None, drive_file_id=None, requested_by=mock_staff_user.id, photo_count=1, status="pending", approved_by=None, rejection_reason=None, created_at=datetime.now(timezone.utc), approved_at=None
+            id=request_id, event_id=event_id, group_id=None, drive_file_id=None, requested_by=mock_staff_user.id, photo_count=1, status="pending", approved_by=None, rejection_reason=None, created_at=datetime.now(timezone.utc), approved_at=None, source="drive"
         )
 
     # Simulate DB Conflict (Duplicate) on photo insert
@@ -225,7 +228,7 @@ async def test_create_group_from_folder(
     group_id = uuid.uuid4()
 
     mock_upload_request_group_querier.create_upload_request_group.return_value = UploadRequestGroup(
-            id=group_id, event_id=event_id, folder_id="folder_123", requested_by=mock_staff_user.id, total_photo_count=0, batch_count=0, processed_photo_count=0, failed_photo_count=0, processing_status="pending", error_message=None, created_at=datetime.now(timezone.utc), status="pending", approved_by=None, approved_at=None, rejection_reason=None
+            id=group_id, event_id=event_id, folder_id="folder_123", requested_by=mock_staff_user.id, total_photo_count=0, batch_count=0, processed_photo_count=0, failed_photo_count=0, processing_status="pending", error_message=None, created_at=datetime.now(timezone.utc), status="pending", approved_by=None, approved_at=None, rejection_reason=None, source="drive"
         )
 
     with patch("app.service.upload_requests.NatsClient.publish") as mock_publish:
@@ -249,7 +252,7 @@ async def test_process_group_import_no_images(
 ):
     group_id = uuid.uuid4()
     mock_upload_request_group_querier.start_upload_request_group_processing.return_value = UploadRequestGroup(
-            id=group_id, event_id=uuid.uuid4(), folder_id="folder_123", requested_by=mock_staff_user.id, total_photo_count=0, batch_count=0, processed_photo_count=0, failed_photo_count=0, processing_status="processing", error_message=None, created_at=datetime.now(timezone.utc), status="pending", approved_by=None, approved_at=None, rejection_reason=None
+            id=group_id, event_id=uuid.uuid4(), folder_id="folder_123", requested_by=mock_staff_user.id, total_photo_count=0, batch_count=0, processed_photo_count=0, failed_photo_count=0, processing_status="processing", error_message=None, created_at=datetime.now(timezone.utc), status="pending", approved_by=None, approved_at=None, rejection_reason=None, source="drive"
         )
     mock_staff_drive_service.staff_user_querier.get_staff_user_by_id.return_value = mock_staff_user
 
@@ -257,7 +260,7 @@ async def test_process_group_import_no_images(
     with patch("app.service.upload_requests.GoogleDriveClient.list_folder_files", return_value=[]):
         async def mock_get_group(*args, **kwargs):
             yield UploadRequestGroup(
-                    id=group_id, event_id=uuid.uuid4(), folder_id="folder_123", requested_by=mock_staff_user.id, total_photo_count=0, batch_count=0, processed_photo_count=0, failed_photo_count=0, processing_status="processing", error_message=None, created_at=datetime.now(timezone.utc), status="pending", approved_by=None, approved_at=None, rejection_reason=None
+                    id=group_id, event_id=uuid.uuid4(), folder_id="folder_123", requested_by=mock_staff_user.id, total_photo_count=0, batch_count=0, processed_photo_count=0, failed_photo_count=0, processing_status="processing", error_message=None, created_at=datetime.now(timezone.utc), status="pending", approved_by=None, approved_at=None, rejection_reason=None, source="drive"
                 )
         mock_upload_request_querier.list_upload_requests_by_group_id = mock_get_group
 
@@ -267,7 +270,7 @@ async def test_process_group_import_no_images(
         upload_requests_service.upload_request_photo_querier.list_upload_request_photos_by_upload_request_ids = mock_list_photos_by_ids
 
         mock_upload_request_group_querier.get_upload_request_group_by_id.return_value = UploadRequestGroup(
-                id=group_id, event_id=uuid.uuid4(), folder_id="folder_123", requested_by=mock_staff_user.id, total_photo_count=0, batch_count=0, processed_photo_count=0, failed_photo_count=0, processing_status="processing", error_message=None, created_at=datetime.now(timezone.utc), status="pending", approved_by=None, approved_at=None, rejection_reason=None
+                id=group_id, event_id=uuid.uuid4(), folder_id="folder_123", requested_by=mock_staff_user.id, total_photo_count=0, batch_count=0, processed_photo_count=0, failed_photo_count=0, processing_status="processing", error_message=None, created_at=datetime.now(timezone.utc), status="pending", approved_by=None, approved_at=None, rejection_reason=None, source="drive"
             )
 
         await upload_requests_service.process_group_import(
@@ -294,12 +297,12 @@ async def test_approve_request_without_side_effects(
     event_id = uuid.uuid4()
 
     mock_upload_request_querier.get_upload_request_by_id.return_value = UploadRequest(
-            id=request_id, event_id=event_id, group_id=None, drive_file_id=None, requested_by=uuid.uuid4(), photo_count=1, status="pending", approved_by=None, rejection_reason=None, created_at=datetime.now(timezone.utc), approved_at=None
+            id=request_id, event_id=event_id, group_id=None, drive_file_id=None, requested_by=uuid.uuid4(), photo_count=1, status="pending", approved_by=None, rejection_reason=None, created_at=datetime.now(timezone.utc), approved_at=None, source="drive"
         )
 
     async def mock_list_photos(*args, **kwargs):
         yield UploadRequestPhoto(
-            id=photo_id, upload_request_id=request_id, drive_file_id="drive_1", file_name="p.jpg", mime_type="image/jpeg", size_bytes=100, staging_storage_key="stage_key", final_storage_key=None, taken_at=None, day_number=None, visibility="public", status="staged", created_at=datetime.now(timezone.utc)
+            id=photo_id, upload_request_id=request_id, drive_file_id="drive_1", file_name="p.jpg", mime_type="image/jpeg", size_bytes=100, staging_storage_key="stage_key", final_storage_key=None, taken_at=None, day_number=None, visibility="public", status="staged", created_at=datetime.now(timezone.utc), source="drive", transfer_status="uploaded"
         )
     mock_upload_request_photo_querier.list_upload_request_photos_by_upload_request_id = mock_list_photos
 

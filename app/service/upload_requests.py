@@ -282,6 +282,7 @@ class UploadRequestsService:
                     drive_file_id=None,
                     requested_by=requested_by.id,
                     photo_count=len(photos),
+                    source="drive",
                 )
             )
         except IntegrityError as exc:
@@ -572,6 +573,8 @@ class UploadRequestsService:
                     requested_by=requested_by.id,
                     total_photo_count=0,
                     batch_count=0,
+                    source="drive",
+                    processing_status="pending",
                 )
             )
         except IntegrityError as exc:

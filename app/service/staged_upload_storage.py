@@ -5,7 +5,7 @@ from pathlib import Path
 import uuid
 
 from app.core.exceptions import AppException
-from app.infra.minio import Bucket, IMAGES_BUCKET_NAME
+from app.infra.minio import Bucket, IMAGES_BUCKET_NAME, ObjectStat
 
 
 @dataclass(frozen=True)
@@ -100,3 +100,22 @@ class StagedUploadStorageService:
     async def get_preview(self, storage_key: str) -> PreviewObject:
         data, file_name, content_type = await self.bucket.get(storage_key)
         return PreviewObject(data=data, file_name=file_name, content_type=content_type)
+
+    async def create_presigned_staging_upload(
+        self,
+        *,
+        upload_request_id: uuid.UUID,
+        photo_id: uuid.UUID,
+        file_name: str,
+        expires_seconds: int,
+    ) -> tuple[str, str]:
+        storage_key = self.build_staging_key(
+            upload_request_id=upload_request_id,
+            photo_id=photo_id,
+            file_name=file_name,
+        )
+        url = await self.bucket.presigned_put_url(storage_key, expires_seconds=expires_seconds)
+        return storage_key, url
+
+    async def stat_staging_object(self, storage_key: str) -> ObjectStat | None:
+        return await self.bucket.stat(storage_key)
