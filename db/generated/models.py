@@ -115,6 +115,8 @@ class Photo:
     visibility: str
     status: Any
     created_at: datetime.datetime
+    drive_file_id: Optional[str]
+    drive_synced_at: Optional[datetime.datetime]
 
 
 @dataclasses.dataclass()

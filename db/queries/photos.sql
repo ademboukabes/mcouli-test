@@ -84,3 +84,10 @@ SELECT urp.drive_file_id
 FROM upload_request_photos urp
 WHERE urp.final_storage_key = $1
 LIMIT 1;
+
+-- name: MarkPhotoDriveSynced :one
+UPDATE photos
+SET drive_file_id = $2,
+    drive_synced_at = NOW()
+WHERE id = $1
+RETURNING *;

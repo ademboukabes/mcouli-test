@@ -190,6 +190,67 @@ class GoogleDriveClient:
         )
 
     @staticmethod
+    async def upload_file(
+        *,
+        access_token: str,
+        file_name: str,
+        content_type: str,
+        data: bytes,
+        folder_id: str | None,
+    ) -> GoogleDriveFileMetadata:
+        boundary = "multai-drive-upload-boundary"
+        metadata: dict[str, object] = {"name": file_name}
+        if folder_id:
+            metadata["parents"] = [folder_id]
+
+        body = (
+            f"--{boundary}\r\n"
+            "Content-Type: application/json; charset=UTF-8\r\n\r\n"
+            f"{json.dumps(metadata)}\r\n"
+            f"--{boundary}\r\n"
+            f"Content-Type: {content_type}\r\n\r\n"
+        ).encode("utf-8") + data + f"\r\n--{boundary}--".encode("utf-8")
+
+        def _request() -> dict[str, object]:
+            url = (
+                "https://www.googleapis.com/upload/drive/v3/files"
+                "?uploadType=multipart&supportsAllDrives=true&fields=id,name,mimeType,size"
+            )
+            request = urllib.request.Request(
+                url,
+                data=body,
+                headers={
+                    "Authorization": f"Bearer {access_token}",
+                    "Content-Type": f"multipart/related; boundary={boundary}",
+                },
+                method="POST",
+            )
+            try:
+                with urllib.request.urlopen(request, timeout=60) as response:
+                    return json.loads(response.read().decode("utf-8"))
+            except urllib.error.HTTPError as exc:
+                details = exc.read().decode("utf-8", errors="ignore")
+                raise AppException.bad_request(
+                    f"Google Drive file upload failed: {details or exc.reason}"
+                ) from exc
+            except urllib.error.URLError as exc:
+                raise AppException.internal_error("Unable to reach Google APIs") from exc
+
+        result = await asyncio.to_thread(_request)
+        size_raw = result.get("size", "0")
+        try:
+            size_bytes = int(size_raw) if isinstance(size_raw, (str, int)) else len(data)
+        except (TypeError, ValueError):
+            size_bytes = len(data)
+
+        return GoogleDriveFileMetadata(
+            id=GoogleDriveClient._require_str(result, "id"),
+            name=GoogleDriveClient._require_str(result, "name"),
+            mime_type=GoogleDriveClient._require_str(result, "mimeType"),
+            size_bytes=size_bytes,
+        )
+
+    @staticmethod
     async def download_file(
         *,
         access_token: str,

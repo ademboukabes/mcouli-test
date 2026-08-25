@@ -83,9 +83,20 @@ class Settings(BaseSettings):
     GOOGLE_CLIENT_ID: str = ""
     GOOGLE_CLIENT_SECRET: str = ""
     GOOGLE_REDIRECT_URI: str = ""
+    # drive.readonly alone can't write; drive.file alone can only see files
+    # the app itself created, which would break browsing/importing existing
+    # Drive folders. Both scopes together preserve the existing read/import
+    # flow and add write access for syncing approved direct uploads back to
+    # Drive. Existing staff connections keep their old readonly-only grant
+    # until they disconnect and reconnect through the consent screen.
     GOOGLE_OAUTH_SCOPES: str = (
-        "https://www.googleapis.com/auth/drive.readonly openid email profile"
+        "https://www.googleapis.com/auth/drive.readonly "
+        "https://www.googleapis.com/auth/drive.file openid email profile"
     )
+    # Folder ID (from the Drive URL) that approved direct-upload photos get
+    # synced into. Empty means uploads land in the connected account's Drive
+    # root instead of a specific folder.
+    GOOGLE_CLUB_DRIVE_FOLDER_ID: str = ""
 
     FACE_ENCRYPTION_KEY: str
     FIREBASE_CREDENTIALS_PATH: str
