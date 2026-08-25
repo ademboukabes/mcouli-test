@@ -35,6 +35,11 @@ class Settings(BaseSettings):
 
     PHOTO_APPROVAL_TIMEOUT_DAYS: int = 7
     EVENT_LIFECYCLE_POLL_INTERVAL_SECONDS: int = 60
+    # How long after an event's end_date approved photos stay in MinIO before
+    # being cleaned up. Direct-uploaded photos additionally require a
+    # confirmed Drive sync before cleanup is eligible (see
+    # ListPhotosDueForStorageCleanup) — MinIO is their only copy until then.
+    PHOTO_STORAGE_RETENTION_DAYS_AFTER_EVENT_END: int = 20
     DIRECT_UPLOAD_PRESIGN_EXPIRES_SECONDS: int = 1800
     DIRECT_UPLOAD_STALE_PENDING_MINUTES: int = 45
     DIRECT_UPLOAD_RECONCILE_POLL_INTERVAL_SECONDS: int = 300

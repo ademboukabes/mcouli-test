@@ -281,16 +281,24 @@ async def test_image_load_failure_is_handled(
 
 
 # ── cleanup scheduling tests ──────────────────────────────────────────
+#
+# photo_worker no longer schedules immediate MinIO cleanup after processing.
+# Cleanup is now threshold-based (event_lifecycle worker, 20 days after
+# event.end_date, gated on Drive sync for direct-uploaded photos) — see
+# ListPhotosDueForStorageCleanup. Immediate cleanup right after processing
+# was a race: for direct uploads, MinIO is the only copy of the photo until
+# the async Drive sync completes, so deleting it immediately could destroy
+# the only copy before it was ever backed up.
 
 
 @pytest.mark.asyncio
-async def test_cleanup_scheduled_after_single_face(
+async def test_single_face_does_not_schedule_cleanup(
     worker: PhotoWorker,
     face_service: AsyncMock,
     single_face_service: AsyncMock,
     event: PhotoProcessEvent,
 ) -> None:
-    """After single face processing, both audit and cleanup events should be published."""
+    """After single face processing, only the audit event is published — no cleanup."""
     face_service.detect_faces = AsyncMock(return_value=[_make_face()])
 
     with (
@@ -304,23 +312,19 @@ async def test_cleanup_scheduled_after_single_face(
         await worker.handle_message(_event_bytes(event))
 
     from app.infra.nats import NatsSubjects
-    assert mock_nats.publish.call_count == 2
+    assert mock_nats.publish.call_count == 1
     audit_call = mock_nats.publish.call_args_list[0]
     assert audit_call.args[0] == NatsSubjects.AUDIT_EVENT
-    cleanup_call = mock_nats.publish.call_args_list[1]
-    assert cleanup_call.args[0] == NatsSubjects.FINAL_BUCKET_CLEANUP
-    cleanup_payload = json.loads(cleanup_call.args[1])
-    assert event.image_ref in cleanup_payload["storage_keys"]
 
 
 @pytest.mark.asyncio
-async def test_cleanup_scheduled_after_group_photo(
+async def test_group_photo_does_not_schedule_cleanup(
     worker: PhotoWorker,
     face_service: AsyncMock,
     photo_face_querier: AsyncMock,
     event: PhotoProcessEvent,
 ) -> None:
-    """After group photo processing, both audit and cleanup events should be published."""
+    """After group photo processing, only the audit event is published — no cleanup."""
     faces = [_make_face(), _make_face()]
     face_service.detect_faces = AsyncMock(return_value=faces)
     photo_face_querier.insert_photo_face_with_approval = AsyncMock(return_value=None)
@@ -336,20 +340,18 @@ async def test_cleanup_scheduled_after_group_photo(
         await worker.handle_message(_event_bytes(event))
 
     from app.infra.nats import NatsSubjects
-    assert mock_nats.publish.call_count == 2
-    cleanup_call = mock_nats.publish.call_args_list[1]
-    assert cleanup_call.args[0] == NatsSubjects.FINAL_BUCKET_CLEANUP
-    cleanup_payload = json.loads(cleanup_call.args[1])
-    assert event.image_ref in cleanup_payload["storage_keys"]
+    assert mock_nats.publish.call_count == 1
+    audit_call = mock_nats.publish.call_args_list[0]
+    assert audit_call.args[0] == NatsSubjects.AUDIT_EVENT
 
 
 @pytest.mark.asyncio
-async def test_cleanup_scheduled_when_no_faces(
+async def test_no_cleanup_when_no_faces(
     worker: PhotoWorker,
     face_service: AsyncMock,
     event: PhotoProcessEvent,
 ) -> None:
-    """Even if no faces detected, cleanup should still be scheduled."""
+    """No faces detected: photo is marked public, but no cleanup is scheduled."""
     face_service.detect_faces = AsyncMock(return_value=[])
 
     with (
@@ -362,9 +364,7 @@ async def test_cleanup_scheduled_when_no_faces(
         )
         await worker.handle_message(_event_bytes(event))
 
-    mock_nats.publish.assert_called_once()
-    cleanup_payload = json.loads(mock_nats.publish.call_args.args[1])
-    assert event.image_ref in cleanup_payload["storage_keys"]
+    mock_nats.publish.assert_not_called()
 
 
 @pytest.mark.asyncio

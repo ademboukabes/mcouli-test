@@ -86,7 +86,6 @@ class PhotoWorker:
             await self._photo_querier.update_photo_status(id=event.photo_id, status="approved")
             await self._photo_querier.update_photo_visibility(id=event.photo_id, visibility="public")
             await self._update_job(job, "completed")
-            await self._schedule_cleanup(event.image_ref)
             return
 
         if len(faces) == 1:
@@ -96,7 +95,6 @@ class PhotoWorker:
 
         await self._update_job(job, "completed")
         await self._publish_audit(event, len(faces))
-        await self._schedule_cleanup(event.image_ref)
 
 
     async def _handle_single_face(self, event: PhotoProcessEvent, face: DetectedFace) -> None:
