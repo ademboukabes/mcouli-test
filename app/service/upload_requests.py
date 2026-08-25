@@ -338,6 +338,16 @@ class UploadRequestsService:
         if not staged_photos:
             raise AppException.bad_request("No staged photos found for this upload request")
 
+        not_transferred = [
+            p for p in staged_photos
+            if getattr(p, "transfer_status", "uploaded") != "uploaded"
+        ]
+        if not_transferred:
+            raise AppException.bad_request(
+                f"{len(not_transferred)} photo(s) have not finished uploading. "
+                "Resume or remove them before approving."
+            )
+
         finalized_storage_keys: list[str] = []
         created_photos: list[Photo] = []
         try:
@@ -731,6 +741,42 @@ class UploadRequestsService:
         if failed is None:
             raise AppException.internal_error("Failed to mark upload as failed")
         return failed
+
+    async def resume_direct_group(
+        self,
+        *,
+        group_id: uuid.UUID,
+        requested_by: StaffUser,
+    ) -> list[tuple[UploadRequestPhoto, str]]:
+        group = await self.upload_request_group_querier.get_upload_request_group_by_id(id=group_id)
+        if group is None:
+            raise AppException.not_found("Upload group not found")
+        self._ensure_group_access(current_staff_user=requested_by, upload_group=group)
+
+        request_ids: list[uuid.UUID] = []
+        async for req in self.upload_request_querier.list_upload_requests_by_group_id(group_id=group_id):
+            request_ids.append(req.id)
+
+        results: list[tuple[UploadRequestPhoto, str]] = []
+        async for photo in self.upload_request_photo_querier.list_upload_request_photos_by_upload_request_ids(
+            dollar_1=request_ids
+        ):
+            if getattr(photo, "transfer_status", "uploaded") not in ("pending_upload", "failed"):
+                continue
+            storage_key, presigned_url = await self.staged_upload_storage.create_presigned_staging_upload(
+                upload_request_id=photo.upload_request_id,
+                photo_id=photo.id,
+                file_name=photo.file_name,
+                expires_seconds=settings.DIRECT_UPLOAD_PRESIGN_EXPIRES_SECONDS,
+            )
+            reset_photo = await self.upload_request_photo_querier.reset_upload_request_photo_transfer_to_pending(
+                id=photo.id
+            )
+            if reset_photo is None:
+                continue
+            results.append((reset_photo, presigned_url))
+
+        return results
 
     async def process_group_import(
         self,

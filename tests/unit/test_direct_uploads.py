@@ -263,6 +263,80 @@ async def test_confirm_direct_upload_marks_failed_when_object_missing(
 
 
 @pytest.mark.asyncio
+async def test_approve_request_blocked_when_photo_not_fully_uploaded(
+    upload_requests_service,
+    mock_upload_request_querier,
+    mock_upload_request_photo_querier,
+    mock_staff_user,
+):
+    request_id = uuid.uuid4()
+    photo_id = uuid.uuid4()
+
+    mock_upload_request_querier.get_upload_request_by_id.return_value = _make_request(
+        request_id, uuid.uuid4(), mock_staff_user.id, None,
+    )
+    not_uploaded_photo = _make_photo(photo_id, request_id, transfer_status="pending_upload")
+
+    async def _photos_iter(upload_request_id):
+        yield not_uploaded_photo
+
+    mock_upload_request_photo_querier.list_upload_request_photos_by_upload_request_id = _photos_iter
+
+    with pytest.raises(Exception) as exc_info:
+        await upload_requests_service.approve_request(
+            request_id=request_id, approved_by=mock_staff_user,
+        )
+    assert "have not finished uploading" in str(exc_info.value)
+
+
+@pytest.mark.asyncio
+async def test_resume_direct_group_reissues_urls_for_pending_and_failed_only(
+    upload_requests_service,
+    mock_upload_request_group_querier,
+    mock_upload_request_querier,
+    mock_upload_request_photo_querier,
+    mock_staged_upload_storage,
+    mock_staff_user,
+):
+    group_id = uuid.uuid4()
+    event_id = uuid.uuid4()
+    request_id = uuid.uuid4()
+    failed_photo_id = uuid.uuid4()
+    uploaded_photo_id = uuid.uuid4()
+
+    mock_upload_request_group_querier.get_upload_request_group_by_id.return_value = _make_group(
+        group_id, event_id, mock_staff_user.id, total_photo_count=2, batch_count=1, failed_photo_count=1,
+    )
+
+    async def _requests_iter(group_id):
+        yield _make_request(request_id, event_id, mock_staff_user.id, group_id, photo_count=2)
+
+    mock_upload_request_querier.list_upload_requests_by_group_id = _requests_iter
+
+    failed_photo = _make_photo(failed_photo_id, request_id, file_name="fail.jpg", staging_storage_key="staging/fail.jpg", transfer_status="failed")
+    uploaded_photo = _make_photo(uploaded_photo_id, request_id, file_name="ok.jpg", staging_storage_key="staging/ok.jpg", transfer_status="uploaded")
+
+    async def _photos_iter(dollar_1):
+        for p in [failed_photo, uploaded_photo]:
+            yield p
+
+    mock_upload_request_photo_querier.list_upload_request_photos_by_upload_request_ids = _photos_iter
+    mock_staged_upload_storage.create_presigned_staging_upload.return_value = ("staging/fail.jpg", "https://minio.local/resumed")
+    mock_upload_request_photo_querier.reset_upload_request_photo_transfer_to_pending.return_value = _make_photo(
+        failed_photo_id, request_id, file_name="fail.jpg", transfer_status="pending_upload",
+    )
+
+    results = await upload_requests_service.resume_direct_group(
+        group_id=group_id, requested_by=mock_staff_user,
+    )
+
+    assert len(results) == 1
+    photo, url = results[0]
+    assert photo.id == failed_photo_id
+    assert url == "https://minio.local/resumed"
+
+
+@pytest.mark.asyncio
 async def test_fail_direct_upload_marks_transfer_failed(
     upload_requests_service,
     mock_upload_request_photo_querier,
