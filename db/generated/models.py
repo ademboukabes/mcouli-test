@@ -208,13 +208,14 @@ class UploadRequest:
     photo_count: int
     rejection_reason: Optional[str]
     group_id: Optional[uuid.UUID]
+    source: str
 
 
 @dataclasses.dataclass()
 class UploadRequestGroup:
     id: uuid.UUID
     event_id: uuid.UUID
-    folder_id: str
+    folder_id: Optional[str]
     requested_by: uuid.UUID
     approved_by: Optional[uuid.UUID]
     status: Any
@@ -227,13 +228,14 @@ class UploadRequestGroup:
     processed_photo_count: int
     failed_photo_count: int
     error_message: Optional[str]
+    source: str
 
 
 @dataclasses.dataclass()
 class UploadRequestPhoto:
     id: uuid.UUID
     upload_request_id: uuid.UUID
-    drive_file_id: str
+    drive_file_id: Optional[str]
     file_name: str
     mime_type: str
     size_bytes: int
@@ -244,6 +246,8 @@ class UploadRequestPhoto:
     visibility: str
     status: str
     created_at: datetime.datetime
+    source: str
+    transfer_status: str
 
 
 @dataclasses.dataclass()
