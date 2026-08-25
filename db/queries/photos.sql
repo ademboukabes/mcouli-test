@@ -30,7 +30,8 @@ RETURNING *;
 SELECT p.*,
   (SELECT COUNT(*) FROM photo_faces pf2 WHERE pf2.photo_id = p.id)::int AS face_count
 FROM photos p
-WHERE (
+WHERE p.status = 'approved'
+AND (
   EXISTS (
     SELECT 1 FROM photo_faces pf
     JOIN face_matches fm ON fm.photo_face_id = pf.id

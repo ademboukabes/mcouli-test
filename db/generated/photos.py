@@ -133,7 +133,8 @@ LIST_USER_PHOTOS = """-- name: list_user_photos \\:many
 SELECT p.id, p.event_id, p.uploaded_by, p.storage_key, p.taken_at, p.day_number, p.visibility, p.status, p.created_at, p.drive_file_id, p.drive_synced_at, p.source, p.storage_cleaned_at,
   (SELECT COUNT(*) FROM photo_faces pf2 WHERE pf2.photo_id = p.id)\\:\\:int AS face_count
 FROM photos p
-WHERE (
+WHERE p.status = 'approved'
+AND (
   EXISTS (
     SELECT 1 FROM photo_faces pf
     JOIN face_matches fm ON fm.photo_face_id = pf.id
