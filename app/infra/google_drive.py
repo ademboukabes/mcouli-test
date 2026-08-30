@@ -159,6 +159,53 @@ class GoogleDriveClient:
         )
 
     @staticmethod
+    async def create_folder(
+        *,
+        access_token: str,
+        name: str,
+        parent_id: str | None,
+    ) -> GoogleDriveFileMetadata:
+        metadata: dict[str, object] = {
+            "name": name,
+            "mimeType": GoogleDriveClient._drive_folder_mime_type,
+        }
+        if parent_id:
+            metadata["parents"] = [parent_id]
+
+        encoded = json.dumps(metadata).encode("utf-8")
+
+        def _request() -> dict[str, object]:
+            request = urllib.request.Request(
+                "https://www.googleapis.com/drive/v3/files?supportsAllDrives=true&fields=id,name,mimeType,size",
+                data=encoded,
+                headers={
+                    "Authorization": f"Bearer {access_token}",
+                    "Content-Type": "application/json",
+                },
+                method="POST",
+            )
+            try:
+                with urllib.request.urlopen(request, timeout=15) as response:
+                    return json.loads(response.read().decode("utf-8"))
+            except urllib.error.HTTPError as exc:
+                details = exc.read().decode("utf-8", errors="ignore")
+                raise AppException.bad_request(
+                    f"Google folder creation failed: {details or exc.reason}"
+                ) from exc
+            except urllib.error.URLError as exc:
+                raise AppException.internal_error(
+                    "Unable to reach Google APIs"
+                ) from exc
+
+        result = await asyncio.to_thread(_request)
+        return GoogleDriveFileMetadata(
+            id=GoogleDriveClient._require_str(result, "id"),
+            name=GoogleDriveClient._require_str(result, "name"),
+            mime_type=GoogleDriveClient._require_str(result, "mimeType"),
+            size_bytes=0,
+        )
+
+    @staticmethod
     async def get_file_metadata(
         *,
         access_token: str,
@@ -462,6 +509,8 @@ class GoogleDriveClient:
                     return json.loads(response.read().decode("utf-8"))
             except urllib.error.HTTPError as exc:
                 details = exc.read().decode("utf-8", errors="ignore")
+                if "invalid_grant" in details:
+                    raise AppException.unauthorized("invalid_grant") from exc
                 raise AppException.bad_request(
                     f"Google token exchange failed: {details or exc.reason}"
                 ) from exc

@@ -11,13 +11,16 @@ from app.infra.minio import Bucket, IMAGES_BUCKET_NAME, init_minio_client
 from app.infra.nats import NatsClient, NatsSubjects
 from app.infra.redis import RedisClient
 from app.service.staff_drive import StaffDriveService
+from db.generated import events as event_queries
 from db.generated import photos as photo_queries
 from db.generated import staff_drive_connections as drive_queries
 from db.generated import staff_user as staff_queries
+from fastapi import HTTPException
 
 
 class PhotoDriveSyncEvent(BaseModel):
     photo_id: uuid.UUID
+    event_id: uuid.UUID
     storage_key: str
     file_name: str
     mime_type: str
@@ -60,12 +63,27 @@ async def _handle_event(raw_data: bytes) -> None:
         )
         photo_querier = photo_queries.AsyncQuerier(conn)
 
+        event_querier = event_queries.AsyncQuerier(conn)
+        db_event = await event_querier.get_event_by_id(id=event.event_id)
+        if db_event is None:
+            logger.warning("drive_sync: event %s not found for photo %s", event.event_id, event.photo_id)
+            return
+
         try:
             drive_file_id = await staff_drive_service.upload_to_system_drive(
                 file_name=event.file_name,
                 content_type=event.mime_type or content_type,
                 data=data,
+                event_id=event.event_id,
+                event_name=db_event.name,
             )
+        except HTTPException as exc:
+            if exc.status_code == 404:
+                logger.warning(
+                    "drive_sync: no active drive connection, pausing for 5 minutes before retry"
+                )
+                await asyncio.sleep(300)
+            raise
         except Exception as exc:
             logger.warning(
                 "drive_sync: upload failed for photo %s: %s", event.photo_id, exc

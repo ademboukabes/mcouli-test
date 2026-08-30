@@ -8,6 +8,7 @@ import uuid
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
+from fastapi import HTTPException
 from cryptography.fernet import Fernet, InvalidToken
 
 from app.core.config import settings
@@ -175,7 +176,16 @@ class StaffDriveService:
             )
 
         refresh_token = self.decrypt(connection.refresh_token)
-        token = await GoogleDriveClient.refresh_access_token(refresh_token)
+        try:
+            token = await GoogleDriveClient.refresh_access_token(refresh_token)
+        except HTTPException as exc:
+            if "invalid_grant" in str(exc.detail):
+                await self.drive_connection_querier.revoke_staff_drive_connection_by_staff_user_id(
+                    staff_user_id=connection.staff_user_id,
+                    provider=connection.provider,
+                )
+                raise AppException.not_found("Drive connection revoked") from exc
+            raise
 
         encrypted_access_token = self._encrypt(token.access_token)
         encrypted_refresh_token = connection.refresh_token
@@ -220,22 +230,75 @@ class StaffDriveService:
             connection = await self._refresh_connection_access_token(connection)
         return self.decrypt(connection.access_token)
 
+    async def _get_or_create_event_folder(
+        self,
+        event_id: uuid.UUID,
+        event_name: str,
+        access_token: str,
+    ) -> str:
+        cache_key = f"drive:folder:{event_id}"
+        cached_id = await self.redis.get(cache_key)
+        if cached_id:
+            return cached_id
+
+        lock_key = f"lock:drive:folder:{event_id}"
+        while True:
+            acquired = await self.redis.set(lock_key, "1", expire=30, nx=True)
+            if acquired:
+                break
+            await asyncio.sleep(1.0)
+
+        try:
+            cached_id = await self.redis.get(cache_key)
+            if cached_id:
+                return cached_id
+
+            parent_id = settings.GOOGLE_CLUB_DRIVE_FOLDER_ID or None
+
+            existing = await GoogleDriveClient.search_files(
+                access_token=access_token, query=event_name, file_type="folder"
+            )
+            folder_id = None
+            if existing:
+                for folder in existing:
+                    if folder.name == event_name:
+                        folder_id = folder.id
+                        break
+
+            if not folder_id:
+                folder_meta = await GoogleDriveClient.create_folder(
+                    access_token=access_token, name=event_name, parent_id=parent_id
+                )
+                folder_id = folder_meta.id
+
+            await self.redis.set(cache_key, folder_id, expire=7 * 24 * 3600)
+            return folder_id
+        finally:
+            await self.redis.delete(lock_key)
+
     async def upload_to_system_drive(
         self,
         *,
         file_name: str,
         content_type: str,
         data: bytes,
+        event_id: uuid.UUID | None = None,
+        event_name: str | None = None,
     ) -> str:
         """Upload bytes to the system/club Drive using the most recently
         connected active staff Drive connection. Returns the Drive file id."""
         access_token = await self.get_system_access_token()
+        folder_id = settings.GOOGLE_CLUB_DRIVE_FOLDER_ID or None
+
+        if event_id and event_name:
+            folder_id = await self._get_or_create_event_folder(event_id, event_name, access_token)
+
         metadata = await GoogleDriveClient.upload_file(
             access_token=access_token,
             file_name=file_name,
             content_type=content_type,
             data=data,
-            folder_id=settings.GOOGLE_CLUB_DRIVE_FOLDER_ID or None,
+            folder_id=folder_id,
         )
         return metadata.id
 

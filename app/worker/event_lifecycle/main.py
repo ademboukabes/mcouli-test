@@ -42,7 +42,7 @@ async def run_storage_cleanup_pass() -> None:
         cleaned = 0
         for photo in due_photos:
             try:
-                await NatsClient.publish(
+                await NatsClient.js_publish(
                     NatsSubjects.FINAL_BUCKET_CLEANUP,
                     json.dumps({"storage_keys": [photo.storage_key]}).encode("utf-8"),
                 )

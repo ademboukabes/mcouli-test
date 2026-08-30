@@ -571,6 +571,7 @@ class UploadRequestsService:
                 subject=NatsSubjects.PHOTO_DRIVE_SYNC_REQUESTED,
                 payload={
                     "photo_id": str(created_photo.id),
+                    "event_id": str(created_photo.event_id),
                     "storage_key": created_photo.storage_key,
                     "file_name": staged_photo.file_name,
                     "mime_type": staged_photo.mime_type,
