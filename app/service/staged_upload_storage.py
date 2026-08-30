@@ -95,7 +95,9 @@ class StagedUploadStorageService:
         try:
             await self.bucket.delete(storage_key)
         except Exception as exc:
-            raise AppException.storage_error("Failed to delete staged image from storage") from exc
+            raise AppException.storage_error(
+                "Failed to delete staged image from storage"
+            ) from exc
 
     async def get_preview(self, storage_key: str) -> PreviewObject:
         data, file_name, content_type = await self.bucket.get(storage_key)
@@ -114,7 +116,9 @@ class StagedUploadStorageService:
             photo_id=photo_id,
             file_name=file_name,
         )
-        url = await self.bucket.presigned_put_url(storage_key, expires_seconds=expires_seconds)
+        url = await self.bucket.presigned_put_url(
+            storage_key, expires_seconds=expires_seconds
+        )
         return storage_key, url
 
     async def stat_staging_object(self, storage_key: str) -> ObjectStat | None:

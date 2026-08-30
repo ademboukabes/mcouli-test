@@ -22,7 +22,9 @@ class InvalidTokenStore:
             return
 
         await self._redis.sadd(RedisKey.INVALID_TOKEN_SET_KEY, *normalized)
-        await self._redis.expire(RedisKey.INVALID_TOKEN_SET_KEY, NotifSetting.TTL_SECONDS)
+        await self._redis.expire(
+            RedisKey.INVALID_TOKEN_SET_KEY, NotifSetting.TTL_SECONDS
+        )
 
         logger.warning("Marked %d tokens for cleanup", len(normalized))
 
@@ -30,17 +32,13 @@ class InvalidTokenStore:
         if not token:
             return False
 
-        return await self._redis.sismember(
-            RedisKey.INVALID_TOKEN_SET_KEY, token
-        )
+        return await self._redis.sismember(RedisKey.INVALID_TOKEN_SET_KEY, token)
 
     async def remove(self, tokens: Sequence[str]) -> None:
         if not tokens:
             return
 
-        await self._redis.srem(
-            RedisKey.INVALID_TOKEN_SET_KEY, *tokens
-        )
+        await self._redis.srem(RedisKey.INVALID_TOKEN_SET_KEY, *tokens)
 
 
 class DeviceInvalidationStore:

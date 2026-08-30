@@ -26,8 +26,10 @@ async def mark_as_read(
     container: Container = Depends(get_container),
     current_user: MobileUserSchema = Depends(require_onboarded_mobile_user),
 ) -> UserNotificationListResponse:
-    notifications = await container.user_notifications_service.mark_notifications_as_read(
-        notification_ids=req.notification_ids,
-        user_id=current_user.user_id,
+    notifications = (
+        await container.user_notifications_service.mark_notifications_as_read(
+            notification_ids=req.notification_ids,
+            user_id=current_user.user_id,
+        )
     )
     return UserNotificationListResponse.from_models(notifications)

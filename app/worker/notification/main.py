@@ -13,7 +13,10 @@ from app.worker.notification.invalid_tokens import (
     DeviceInvalidationStore,
     InvalidTokenStore,
 )
-from app.worker.notification.notification_queue import NotificationQueue, NotificationQueueEntry
+from app.worker.notification.notification_queue import (
+    NotificationQueue,
+    NotificationQueueEntry,
+)
 from app.worker.notification.rate_limiter import RateLimiter
 from app.worker.notification.settings import NotifSetting
 from app.infra.redis import RedisClient
@@ -52,7 +55,6 @@ async def process_entry(
         await retry(entry, queue)
 
 
-
 async def retry(
     entry: NotificationQueueEntry,
     queue: NotificationQueue,
@@ -71,11 +73,10 @@ async def retry(
         if not notification.tokens:
             return
 
-    delay = min(NotifSetting.BASE_RETRY_DELAY * (2 ** attempts), 60)
+    delay = min(NotifSetting.BASE_RETRY_DELAY * (2**attempts), 60)
 
     await asyncio.sleep(delay)
     await queue.enqueue_notification(notification, attempts=attempts)
-
 
 
 async def handle_message(
@@ -97,7 +98,6 @@ async def handle_message(
     await process_entry(entry, queue, invalid_tokens, invalid_devices)
 
 
-
 async def run_worker(
     queue: NotificationQueue,
     invalid_tokens: InvalidTokenStore,
@@ -115,13 +115,10 @@ async def run_worker(
 
     for subject in queue.priority_subjects():
         await NatsClient.js_subscribe(
-            subject, 
-            wrapped_handler, 
-            stream_name="notification_delivery_stream"
+            subject, wrapped_handler, stream_name="notification_delivery_stream"
         )
 
     await asyncio.Event().wait()
-
 
 
 async def main() -> None:

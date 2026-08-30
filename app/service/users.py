@@ -69,8 +69,7 @@ class AuthService:
         req: MobileAuthBaseRequest,
     ) -> UserDevice:
         existing_device = await self.device_querier.get_device_by_physical_id(
-            user_id=user_id,
-            physical_device_id=req.physical_device_id
+            user_id=user_id, physical_device_id=req.physical_device_id
         )
 
         if existing_device:
@@ -79,7 +78,9 @@ class AuthService:
                     "Device push token is invalid. Update the token before logging in."
                 )
             if not existing_device.is_active:
-                await self.device_querier.activate_device(id=existing_device.id, user_id=user_id)
+                await self.device_querier.activate_device(
+                    id=existing_device.id, user_id=user_id
+                )
             return existing_device
 
         device = await self.device_querier.create_device(
@@ -89,7 +90,7 @@ class AuthService:
                 device_name=req.device_name,
                 device_type=req.device_type,
                 totp_secret=None,
-                physical_device_id=req.physical_device_id
+                physical_device_id=req.physical_device_id,
             )
         )
         if not device:
@@ -123,19 +124,27 @@ class AuthService:
         existing_user = await self.user_querier.get_user_by_email(email=req.email)
         if existing_user is None:
             logger.warning("login attempt: user_not_found")
-            raise AppException.unauthorized("User not found; consider registering instead")
+            raise AppException.unauthorized(
+                "User not found; consider registering instead"
+            )
         if existing_user.blocked:
             logger.warning("login attempt: user_blocked user_id=%s", existing_user.id)
             raise AppException.forbidden("User is blocked")
         if not verify_password(req.password, existing_user.hashed_password or ""):
-            logger.warning("login attempt: invalid_credentials user_id=%s", existing_user.id)
+            logger.warning(
+                "login attempt: invalid_credentials user_id=%s", existing_user.id
+            )
             raise AppException.unauthorized("Invalid credentials")
 
-        locked_user = await self.user_querier.get_user_by_id_for_update(id=existing_user.id)
+        locked_user = await self.user_querier.get_user_by_id_for_update(
+            id=existing_user.id
+        )
         if not locked_user:
             raise AppException.unauthorized("User not found")
         if locked_user.blocked:
-            logger.warning("login attempt: user_blocked_at_commit user_id=%s", locked_user.id)
+            logger.warning(
+                "login attempt: user_blocked_at_commit user_id=%s", locked_user.id
+            )
             raise AppException.forbidden("User is blocked")
 
         logger.info("login success user_id=%s", locked_user.id)
@@ -193,13 +202,14 @@ class AuthService:
             otp = "".join(secrets.choice("0123456789") for _ in range(6))
             await redis.set(f"otp:{req.email}", otp, expire=600)
             # Send to NATS
-            await NatsClient.js_publish("email.send_otp", json.dumps({"email": req.email, "otp": otp}).encode("utf-8"))
+            await NatsClient.js_publish(
+                "email.send_otp",
+                json.dumps({"email": req.email, "otp": otp}).encode("utf-8"),
+            )
 
         logger.info("register success, OTP sent")
         return RegisterPendingResponse(
-            message="OTP sent to email",
-            status="pending_verification",
-            email=req.email
+            message="OTP sent to email", status="pending_verification", email=req.email
         )
 
     async def mobile_register_resend_otp(
@@ -240,13 +250,14 @@ class AuthService:
             # Regenerate OTP with 10 mins TTL, without touching the pending_user TTL
             await redis.set(f"otp:{email}", otp, expire=600)
             # Send to NATS
-            await NatsClient.js_publish("email.send_otp", json.dumps({"email": email, "otp": otp}).encode("utf-8"))
+            await NatsClient.js_publish(
+                "email.send_otp",
+                json.dumps({"email": email, "otp": otp}).encode("utf-8"),
+            )
 
         logger.info("resend_otp success, new OTP sent to %s", email)
         return RegisterPendingResponse(
-            message="New OTP sent to email",
-            status="pending_verification",
-            email=email
+            message="New OTP sent to email", status="pending_verification", email=email
         )
 
     async def verify_mobile_register(
@@ -269,7 +280,9 @@ class AuthService:
         data = json.loads(raw_data)
 
         try:
-            user = await self.user_querier.create_user(email=req.email, hashed_password=data["hashed_password"])
+            user = await self.user_querier.create_user(
+                email=req.email, hashed_password=data["hashed_password"]
+            )
             if not user:
                 raise AppException.internal_error("Failed to create user")
         except SQLAlchemyError as exc:
@@ -304,7 +317,9 @@ class AuthService:
 
         now = datetime.now(timezone.utc)
         idle_expires_at = now + timedelta(days=settings.MOBILE_SESSION_DAYS)
-        absolute_expires_at = now + timedelta(days=settings.MOBILE_SESSION_ABSOLUTE_DAYS)
+        absolute_expires_at = now + timedelta(
+            days=settings.MOBILE_SESSION_ABSOLUTE_DAYS
+        )
 
         session = await self.session_querier.upsert_session(
             user_id=user_id,
@@ -321,7 +336,8 @@ class AuthService:
             await SessionService.delete_session_cache(redis, evicted_id)
             logger.warning(
                 "session_evicted user_id=%s evicted_session_id=%s",
-                user_id, evicted_id,
+                user_id,
+                evicted_id,
             )
 
         access_token = create_acces_mobile_token(str(session.id))
@@ -368,11 +384,9 @@ class AuthService:
         inside the grace window with no cached replay available (a used
         token with nothing to replay is never treated as valid).
         """
-        within_grace = (
-            row.used_at is not None
-            and (datetime.now(timezone.utc) - row.used_at)
-            <= timedelta(seconds=AuthService.REFRESH_GRACE_SECONDS)
-        )
+        within_grace = row.used_at is not None and (
+            datetime.now(timezone.utc) - row.used_at
+        ) <= timedelta(seconds=AuthService.REFRESH_GRACE_SECONDS)
 
         if within_grace:
             cache_key = f"refresh_retry:{token_hash}"
@@ -384,10 +398,14 @@ class AuthService:
                     # tampered, corrupted, or wrong key — treat exactly
                     # like a cache miss, never trust an undecryptable value
                     raise AppException.unauthorized("Invalid refresh token")
-                session_for_check = await self.session_querier.get_session_by_id(id=row.session_id)
+                session_for_check = await self.session_querier.get_session_by_id(
+                    id=row.session_id
+                )
                 if not session_for_check:
                     raise AppException.unauthorized("Session not found")
-                user_for_check = await self.user_querier.get_user_by_id(id=session_for_check.user_id)
+                user_for_check = await self.user_querier.get_user_by_id(
+                    id=session_for_check.user_id
+                )
                 if not user_for_check or user_for_check.blocked:
                     raise AppException.forbidden("User is blocked")
                 return MobileAuthResponse.model_validate_json(decrypted)
@@ -395,17 +413,18 @@ class AuthService:
 
         logger.warning(
             "refresh_token_reuse_detected family_id=%s session_id=%s",
-            row.family_id, row.session_id,
+            row.family_id,
+            row.session_id,
         )
-        session_for_revoke = await self.session_querier.get_session_by_id(id=row.session_id)
+        session_for_revoke = await self.session_querier.get_session_by_id(
+            id=row.session_id
+        )
         if session_for_revoke:
             await self.session_querier.delete_session_by_id(
                 id=row.session_id, user_id=session_for_revoke.user_id
             )
             await SessionService.delete_session_cache(redis, row.session_id)
-        raise AppException.unauthorized(
-            "Refresh token reuse detected; session revoked"
-        )
+        raise AppException.unauthorized("Refresh token reuse detected; session revoked")
 
     async def refresh_token(
         self,
@@ -474,7 +493,9 @@ class AuthService:
         session_id: str,
     ) -> dict[str, str]:
         sid = uuid.UUID(session_id)
-        await self.session_querier.delete_session_by_id(id=sid, user_id=uuid.UUID(user_id))
+        await self.session_querier.delete_session_by_id(
+            id=sid, user_id=uuid.UUID(user_id)
+        )
         await SessionService.delete_session_cache(redis, sid)
 
         return {"message": "Logged out successfully"}
@@ -669,7 +690,12 @@ class AuthService:
             user = await self.user_querier.set_user_blocked(blocked=True, id=user_id)
             if not user:
                 raise AppException.internal_error("Failed to block user")
-            session_ids = [s.id async for s in self.session_querier.list_sessions_by_user(user_id=user_id)]
+            session_ids = [
+                s.id
+                async for s in self.session_querier.list_sessions_by_user(
+                    user_id=user_id
+                )
+            ]
             await self.session_querier.delete_all_user_sessions(user_id=user_id)
             for sid in session_ids:
                 await SessionService.delete_session_cache(redis, sid)
@@ -696,7 +722,9 @@ class AuthService:
 
             session_ids = [
                 s.id
-                async for s in self.session_querier.list_sessions_by_user(user_id=user_id)
+                async for s in self.session_querier.list_sessions_by_user(
+                    user_id=user_id
+                )
             ]
             await self.session_querier.delete_all_user_sessions(user_id=user_id)
             await self.user_querier.delete_user(id=user_id)
@@ -709,7 +737,9 @@ class AuthService:
             logger.error("Failed to delete user: %s", exc)
             raise DBException.handle(exc)
 
-    async def find_closest_user(self, *, embedding_literal: str) -> ClosestUserMatch | None:
+    async def find_closest_user(
+        self, *, embedding_literal: str
+    ) -> ClosestUserMatch | None:
         row = await self.user_querier.find_closest_user_by_embedding(
             dollar_1=embedding_literal,
         )
@@ -732,7 +762,9 @@ class AuthService:
         except HTTPException:
             raise
         except Exception:
-            logger.warning("check_rate_limit: redis unavailable, failing open for key=%s", key)
+            logger.warning(
+                "check_rate_limit: redis unavailable, failing open for key=%s", key
+            )
             return
 
         if current_count > max_requests:

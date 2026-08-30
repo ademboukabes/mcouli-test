@@ -18,13 +18,19 @@ from fastapi import HTTPException
 
 import app.service.users as users_module
 from app.core.securite import hash_password
-from app.schema.request.mobile.auth import MobileLoginRequest, MobileRegisterRequest, RegisterVerifyRequest
+from app.schema.request.mobile.auth import (
+    MobileLoginRequest,
+    MobileRegisterRequest,
+    RegisterVerifyRequest,
+)
 from app.service.session import SessionService
 from app.service.users import AuthService
 
 
 class FakeUser:
-    def __init__(self, email: str, exists: bool = True, password: str = "ValidPass@123") -> None:
+    def __init__(
+        self, email: str, exists: bool = True, password: str = "ValidPass@123"
+    ) -> None:
         self.id = uuid.uuid4()
         self.email = email
         self.blocked = False
@@ -98,14 +104,18 @@ class FakeDeviceQuerier:
         # no longer calls this for auth decisions.
         return None
 
-    async def get_device_by_id(self, id: uuid.UUID, user_id: uuid.UUID) -> FakeDevice | None:
+    async def get_device_by_id(
+        self, id: uuid.UUID, user_id: uuid.UUID
+    ) -> FakeDevice | None:
         for device in self._devices.values():
             if device.id == id and device.user_id == user_id:
                 return device
         return None
 
     async def create_device(self, arg: Any) -> FakeDevice:
-        device = FakeDevice(physical_device_id=arg.physical_device_id, user_id=arg.user_id)
+        device = FakeDevice(
+            physical_device_id=arg.physical_device_id, user_id=arg.user_id
+        )
         self._devices[(arg.user_id, arg.physical_device_id)] = device
         return device
 
@@ -132,7 +142,9 @@ class FakeSessionQuerier:
                 return session
         return None
 
-    async def list_sessions_by_user(self, user_id: uuid.UUID) -> AsyncIterator[FakeSession]:
+    async def list_sessions_by_user(
+        self, user_id: uuid.UUID
+    ) -> AsyncIterator[FakeSession]:
         for (u, _d), session in self._sessions.items():
             if u == user_id:
                 yield session
@@ -153,7 +165,8 @@ class FakeSessionQuerier:
         self, *, user_id: uuid.UUID, id: uuid.UUID, session_limit: int
     ) -> AsyncIterator[uuid.UUID]:
         candidates = [
-            s for (u, _d), s in list(self._sessions.items())
+            s
+            for (u, _d), s in list(self._sessions.items())
             if u == user_id and s.id != id
         ]
         # +1 accounts for the current session itself, which isn't in `candidates`
@@ -184,6 +197,7 @@ class FakeSessionQuerier:
         session.absolute_expires_at = absolute_expires_at
         self._sessions[key] = session
         return session
+
 
 class FakeRedis:
     def __init__(self) -> None:
@@ -218,7 +232,9 @@ def _patch_token_helpers(monkeypatch: pytest.MonkeyPatch) -> None:
     async def _noop_cache_session_for_auth(**_: object) -> None:
         return None
 
-    monkeypatch.setattr(SessionService, "cache_session_for_auth", _noop_cache_session_for_auth)
+    monkeypatch.setattr(
+        SessionService, "cache_session_for_auth", _noop_cache_session_for_auth
+    )
     monkeypatch.setattr(users_module, "create_acces_mobile_token", lambda _: "access")
     monkeypatch.setattr(users_module, "create_raw_refresh_token", lambda: "refresh")
 
@@ -458,7 +474,9 @@ def test_register_concurrent_signup_integrity_error() -> None:
         raise IntegrityError(
             statement="INSERT INTO users",
             params={},
-            orig=FakeOrigException("duplicate key value violates unique constraint idx_users_email")
+            orig=FakeOrigException(
+                "duplicate key value violates unique constraint idx_users_email"
+            ),
         )
 
     user_querier = FakeUserQuerier(user)
@@ -573,19 +591,26 @@ def test_relogin_on_existing_device_succeeds_even_at_session_cap(
     assert len(session_querier._sessions) == AuthService.SESSION_LIMIT
 
     # A genuinely NEW device at the cap should evict the oldest and SUCCEED.
-    result = asyncio.run(service.mobile_login(FakeRedis(), MobileLoginRequest(
-        email="user@example.com",
-        password="ValidPass@123",
-        device_name="New device",
-        device_type="android",
-        physical_device_id=uuid.uuid4(),
-    )))
+    result = asyncio.run(
+        service.mobile_login(
+            FakeRedis(),
+            MobileLoginRequest(
+                email="user@example.com",
+                password="ValidPass@123",
+                device_name="New device",
+                device_type="android",
+                physical_device_id=uuid.uuid4(),
+            ),
+        )
+    )
     assert result.access_token == "access"
     # Count stays at cap — one evicted, one added.
     assert len(session_querier._sessions) == AuthService.SESSION_LIMIT
 
     # Re-logging in on an EXISTING device (replace) must still succeed.
-    existing_physical_id = next(iter(device_querier._devices.values())).physical_device_id
+    existing_physical_id = next(
+        iter(device_querier._devices.values())
+    ).physical_device_id
     repeat_req = MobileLoginRequest(
         email="user@example.com",
         password="ValidPass@123",
@@ -597,6 +622,7 @@ def test_relogin_on_existing_device_succeeds_even_at_session_cap(
     assert result.access_token == "access"
     # Session count must NOT have grown — this was a replace, not an addition.
     assert len(session_querier._sessions) == AuthService.SESSION_LIMIT
+
 
 def test_same_physical_device_id_reuses_device_row(
     monkeypatch: pytest.MonkeyPatch,

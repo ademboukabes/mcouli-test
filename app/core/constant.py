@@ -29,12 +29,7 @@ class AuditEventType(str, Enum):
     PHOTO_APPROVAL_DECIDED = "photo_approval.decided"
 
 
-IMAGE_ALLOWED_TYPES = {
-    "image/jpeg",
-    "image/png",
-    "image/heic",
-    "image/heif"
-}
+IMAGE_ALLOWED_TYPES = {"image/jpeg", "image/png", "image/heic", "image/heif"}
 
 DEFAULT_CONTENT_TYPE = "application/octet-stream"
 DRIVE_ALLOWED_HOSTS = {"drive.google.com", "docs.google.com"}

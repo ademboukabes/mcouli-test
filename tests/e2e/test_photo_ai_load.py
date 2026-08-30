@@ -122,7 +122,11 @@ async def test_photo_ai_load_20_photos(setup_infra: None) -> None:  # noqa: ARG0
             selected_img = random.choice(image_files)
             storage_key = f"load-test/{event_id}/{photo_id}.jpg"
             photo_tasks.append(
-                {"photo_id": photo_id, "storage_key": storage_key, "content": image_contents[selected_img]}
+                {
+                    "photo_id": photo_id,
+                    "storage_key": storage_key,
+                    "content": image_contents[selected_img],
+                }
             )
             await conn.execute(
                 text(
@@ -169,7 +173,8 @@ async def test_photo_ai_load_20_photos(setup_infra: None) -> None:  # noqa: ARG0
 
         # 3. Wait for all jobs
         photo_ids: list[uuid.UUID] = [
-            p["photo_id"] for p in photo_tasks  # type: ignore[misc]
+            p["photo_id"]
+            for p in photo_tasks  # type: ignore[misc]
         ]
         status_counts = await _wait_for_jobs(photo_ids, timeout=180)
 

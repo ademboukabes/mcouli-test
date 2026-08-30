@@ -58,7 +58,9 @@ async def google_drive_callback(
         raise AppException.bad_request(f"Google OAuth error: {error}")
 
     try:
-        connection, redirect_url = await container.staff_drive_service.handle_callback(code, state)
+        connection, redirect_url = await container.staff_drive_service.handle_callback(
+            code, state
+        )
     except HTTPException as exc:
         if redirect_url is not None:
             return RedirectResponse(
@@ -108,7 +110,9 @@ async def disconnect_google_drive(
     container: Container = Depends(get_container),
 ) -> GoogleDriveDisconnectResponse:
     await container.staff_drive_service.disconnect(current_staff_user.id)
-    return GoogleDriveDisconnectResponse(message="Google Drive disconnected successfully")
+    return GoogleDriveDisconnectResponse(
+        message="Google Drive disconnected successfully"
+    )
 
 
 @router.get("/browse", response_model=DriveBrowseResponse)
@@ -121,7 +125,8 @@ async def browse_drive(
         current_staff_user.id
     )
     files = await GoogleDriveClient.list_folder_contents(
-        access_token=access_token, folder_id=folder_id,
+        access_token=access_token,
+        folder_id=folder_id,
     )
     return DriveBrowseResponse(
         items=[
@@ -148,7 +153,9 @@ async def search_drive(
         current_staff_user.id
     )
     files = await GoogleDriveClient.search_files(
-        access_token=access_token, query=q, file_type=type,
+        access_token=access_token,
+        query=q,
+        file_type=type,
     )
     return DriveBrowseResponse(
         items=[

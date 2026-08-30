@@ -110,7 +110,9 @@ class StaffDriveService:
         if redirect_url is not None and not isinstance(redirect_url, str):
             raise AppException.bad_request("Invalid OAuth redirect URL")
 
-        staff_user = await self.staff_user_querier.get_staff_user_by_id(id=staff_user_id)
+        staff_user = await self.staff_user_querier.get_staff_user_by_id(
+            id=staff_user_id
+        )
         if staff_user is None:
             raise AppException.not_found("Staff user not found")
 
@@ -158,7 +160,10 @@ class StaffDriveService:
     def _token_needs_refresh(cls, connection: StaffDriveConnection) -> bool:
         if connection.token_expires_at is None:
             return False
-        return connection.token_expires_at <= datetime.now(timezone.utc) + cls.TOKEN_REFRESH_BUFFER
+        return (
+            connection.token_expires_at
+            <= datetime.now(timezone.utc) + cls.TOKEN_REFRESH_BUFFER
+        )
 
     async def _refresh_connection_access_token(
         self,
@@ -177,20 +182,24 @@ class StaffDriveService:
         if token.refresh_token:
             encrypted_refresh_token = self._encrypt(token.refresh_token)
 
-        refreshed_connection = await self.drive_connection_querier.upsert_staff_drive_connection(
-            arg=drive_queries.UpsertStaffDriveConnectionParams(
-                staff_user_id=connection.staff_user_id,
-                provider=connection.provider,
-                google_email=connection.google_email,
-                google_account_id=connection.google_account_id,
-                access_token=encrypted_access_token,
-                refresh_token=encrypted_refresh_token,
-                token_expires_at=token.expires_at,
-                scopes=token.scope,
+        refreshed_connection = (
+            await self.drive_connection_querier.upsert_staff_drive_connection(
+                arg=drive_queries.UpsertStaffDriveConnectionParams(
+                    staff_user_id=connection.staff_user_id,
+                    provider=connection.provider,
+                    google_email=connection.google_email,
+                    google_account_id=connection.google_account_id,
+                    access_token=encrypted_access_token,
+                    refresh_token=encrypted_refresh_token,
+                    token_expires_at=token.expires_at,
+                    scopes=token.scope,
+                )
             )
         )
         if refreshed_connection is None:
-            raise AppException.internal_error("Failed to refresh Google Drive connection")
+            raise AppException.internal_error(
+                "Failed to refresh Google Drive connection"
+            )
 
         return refreshed_connection
 
@@ -202,7 +211,9 @@ class StaffDriveService:
 
     async def get_system_access_token(self) -> str:
         """Get an access token from any active staff Drive connection."""
-        connection = await self.drive_connection_querier.get_any_active_staff_drive_connection()
+        connection = (
+            await self.drive_connection_querier.get_any_active_staff_drive_connection()
+        )
         if connection is None:
             raise AppException.not_found("No active Google Drive connection")
         if self._token_needs_refresh(connection):
@@ -243,9 +254,13 @@ class StaffDriveService:
 
     def decrypt(self, encrypted_value: str) -> str:
         try:
-            return self._fernet().decrypt(encrypted_value.encode("utf-8")).decode("utf-8")
+            return (
+                self._fernet().decrypt(encrypted_value.encode("utf-8")).decode("utf-8")
+            )
         except InvalidToken as exc:
-            raise AppException.internal_error("Stored Google Drive token cannot be decrypted") from exc
+            raise AppException.internal_error(
+                "Stored Google Drive token cannot be decrypted"
+            ) from exc
 
     async def import_images_from_drive(
         self,
@@ -318,7 +333,7 @@ class StaffDriveService:
 
     @staticmethod
     def _generate_object_name(filename: str) -> str:
-        suffix = filename[filename.rfind("."):] if "." in filename else ""
+        suffix = filename[filename.rfind(".") :] if "." in filename else ""
         return f"{uuid.uuid4()}{suffix}"
 
     @staticmethod
@@ -343,4 +358,6 @@ class StaffDriveService:
             query.append(("google_email", google_email))
         if error is not None:
             query.append(("error", error))
-        return urllib.parse.urlunparse(parsed._replace(query=urllib.parse.urlencode(query)))
+        return urllib.parse.urlunparse(
+            parsed._replace(query=urllib.parse.urlencode(query))
+        )

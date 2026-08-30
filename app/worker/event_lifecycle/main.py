@@ -15,11 +15,15 @@ async def run_lifecycle_pass() -> None:
 
         activated = [event_id async for event_id in querier.activate_due_events()]
         if activated:
-            logger.info("event_lifecycle: activated %d event(s): %s", len(activated), activated)
+            logger.info(
+                "event_lifecycle: activated %d event(s): %s", len(activated), activated
+            )
 
         archived = [event_id async for event_id in querier.archive_ended_events()]
         if archived:
-            logger.info("event_lifecycle: archived %d event(s): %s", len(archived), archived)
+            logger.info(
+                "event_lifecycle: archived %d event(s): %s", len(archived), archived
+            )
 
 
 async def run_storage_cleanup_pass() -> None:
@@ -44,7 +48,9 @@ async def run_storage_cleanup_pass() -> None:
                 )
             except Exception as exc:
                 logger.warning(
-                    "storage_cleanup: failed to schedule cleanup for photo %s: %s", photo.id, exc
+                    "storage_cleanup: failed to schedule cleanup for photo %s: %s",
+                    photo.id,
+                    exc,
                 )
                 continue
             marked = await querier.mark_photo_storage_cleaned(id=photo.id)

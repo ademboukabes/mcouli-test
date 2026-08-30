@@ -20,6 +20,7 @@ from db.generated.models import StaffUser
 router = APIRouter(prefix="/uploads/direct")
 # this endpoint are for staff to upload images directly to the system and very large files and they can resume and restart and retry .
 
+
 @router.post("/groups", response_model=UploadRequestGroupSchema)
 async def create_direct_group(
     req: CreateDirectGroupRequest,
@@ -27,10 +28,12 @@ async def create_direct_group(
     container: Container = Depends(get_container),
 ) -> UploadRequestGroupSchema:
     group = await container.upload_requests_service.create_direct_group(
-        event_id=req.event_id, requested_by=current_staff_user,
+        event_id=req.event_id,
+        requested_by=current_staff_user,
     )
     details = await container.upload_requests_service.get_group_details(
-        group_id=group.id, current_staff_user=current_staff_user,
+        group_id=group.id,
+        current_staff_user=current_staff_user,
     )
     return UploadRequestGroupSchema.from_details(details)
 
@@ -60,7 +63,9 @@ async def register_direct_batch(
     return RegisterDirectBatchResponse(
         group_id=group_id,
         items=[
-            DirectUploadFileResponse(photo_id=photo.id, file_name=photo.file_name, upload_url=url)
+            DirectUploadFileResponse(
+                photo_id=photo.id, file_name=photo.file_name, upload_url=url
+            )
             for photo, url in results
         ],
     )
@@ -73,9 +78,12 @@ async def confirm_direct_upload(
     container: Container = Depends(get_container),
 ) -> DirectUploadFileResponse:
     photo = await container.upload_requests_service.confirm_direct_upload(
-        photo_id=photo_id, requested_by=current_staff_user,
+        photo_id=photo_id,
+        requested_by=current_staff_user,
     )
-    return DirectUploadFileResponse(photo_id=photo.id, file_name=photo.file_name, upload_url="")
+    return DirectUploadFileResponse(
+        photo_id=photo.id, file_name=photo.file_name, upload_url=""
+    )
 
 
 @router.post("/photos/{photo_id}/fail", response_model=DirectUploadFileResponse)
@@ -85,9 +93,12 @@ async def fail_direct_upload(
     container: Container = Depends(get_container),
 ) -> DirectUploadFileResponse:
     photo = await container.upload_requests_service.fail_direct_upload(
-        photo_id=photo_id, requested_by=current_staff_user,
+        photo_id=photo_id,
+        requested_by=current_staff_user,
     )
-    return DirectUploadFileResponse(photo_id=photo.id, file_name=photo.file_name, upload_url="")
+    return DirectUploadFileResponse(
+        photo_id=photo.id, file_name=photo.file_name, upload_url=""
+    )
 
 
 @router.post("/groups/{group_id}/resume", response_model=ResumeDirectGroupResponse)
@@ -97,11 +108,14 @@ async def resume_direct_group(
     container: Container = Depends(get_container),
 ) -> ResumeDirectGroupResponse:
     results = await container.upload_requests_service.resume_direct_group(
-        group_id=group_id, requested_by=current_staff_user,
+        group_id=group_id,
+        requested_by=current_staff_user,
     )
     return ResumeDirectGroupResponse(
         items=[
-            DirectUploadFileResponse(photo_id=photo.id, file_name=photo.file_name, upload_url=url)
+            DirectUploadFileResponse(
+                photo_id=photo.id, file_name=photo.file_name, upload_url=url
+            )
             for photo, url in results
         ]
     )
@@ -114,6 +128,7 @@ async def get_direct_group_status(
     container: Container = Depends(get_container),
 ) -> UploadRequestGroupSchema:
     details = await container.upload_requests_service.get_group_details(
-        group_id=group_id, current_staff_user=current_staff_user,
+        group_id=group_id,
+        current_staff_user=current_staff_user,
     )
     return UploadRequestGroupSchema.from_details(details)

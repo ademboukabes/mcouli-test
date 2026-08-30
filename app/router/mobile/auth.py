@@ -22,40 +22,66 @@ from app.schema.request.mobile.auth import (
     InactivateDeviceRequest,
     UpdateProfileRequest,
 )
-from app.schema.response.mobile.auth import MeResponse, DeviceSchema, MobileAuthResponse, SessionSchema, UserSchema, RegisterPendingResponse
+from app.schema.response.mobile.auth import (
+    MeResponse,
+    DeviceSchema,
+    MobileAuthResponse,
+    SessionSchema,
+    UserSchema,
+    RegisterPendingResponse,
+)
 
 router = APIRouter(prefix="/auth")
 
-@router.post("/register", response_model=RegisterPendingResponse, dependencies=[Depends(RateLimiter(requests=5, window=60))])
+
+@router.post(
+    "/register",
+    response_model=RegisterPendingResponse,
+    dependencies=[Depends(RateLimiter(requests=5, window=60))],
+)
 async def mobile_register(
     req: MobileRegisterRequest,
     request: Request,
     container: Container = Depends(get_container),
 ) -> RegisterPendingResponse:
     client_ip = get_client_ip(request)
-    result = await container.auth_service.mobile_register(container.redis, req, client_ip=client_ip)
+    result = await container.auth_service.mobile_register(
+        container.redis, req, client_ip=client_ip
+    )
     return result
 
 
-@router.post("/register/resend-otp", response_model=RegisterPendingResponse, dependencies=[Depends(RateLimiter(requests=5, window=60))])
+@router.post(
+    "/register/resend-otp",
+    response_model=RegisterPendingResponse,
+    dependencies=[Depends(RateLimiter(requests=5, window=60))],
+)
 async def mobile_register_resend_otp(
     req: ResendOtpRequest,
     request: Request,
     container: Container = Depends(get_container),
 ) -> RegisterPendingResponse:
     client_ip = get_client_ip(request)
-    result = await container.auth_service.mobile_register_resend_otp(container.redis, req.email, client_ip=client_ip)
+    result = await container.auth_service.mobile_register_resend_otp(
+        container.redis, req.email, client_ip=client_ip
+    )
     return result
 
 
-@router.post("/register/verify", response_model=MobileAuthResponse, dependencies=[Depends(RateLimiter(requests=10, window=60))])
+@router.post(
+    "/register/verify",
+    response_model=MobileAuthResponse,
+    dependencies=[Depends(RateLimiter(requests=10, window=60))],
+)
 async def mobile_register_verify(
     req: RegisterVerifyRequest,
     request: Request,
     container: Container = Depends(get_container),
 ) -> MobileAuthResponse:
     client_ip = get_client_ip(request)
-    result = await container.auth_service.verify_mobile_register(container.redis, req, client_ip=client_ip)
+    result = await container.auth_service.verify_mobile_register(
+        container.redis, req, client_ip=client_ip
+    )
     await container.audit_service.create_record(
         event_type=AuditEventType.USER_SIGNUP,
         user_id=result.user_id,
@@ -64,14 +90,20 @@ async def mobile_register_verify(
     return result
 
 
-@router.post("/login", response_model=MobileAuthResponse, dependencies=[Depends(RateLimiter(requests=5, window=60))])
+@router.post(
+    "/login",
+    response_model=MobileAuthResponse,
+    dependencies=[Depends(RateLimiter(requests=5, window=60))],
+)
 async def mobile_login(
     req: MobileLoginRequest,
     request: Request,
     container: Container = Depends(get_container),
 ) -> MobileAuthResponse:
     client_ip = get_client_ip(request)
-    result = await container.auth_service.mobile_login(container.redis, req, client_ip=client_ip)
+    result = await container.auth_service.mobile_login(
+        container.redis, req, client_ip=client_ip
+    )
     await container.audit_service.create_record(
         event_type=AuditEventType.USER_LOGIN,
         user_id=result.user_id,
@@ -89,7 +121,9 @@ async def refresh_token(
     req: RefreshTokenRequest,
     container: Container = Depends(get_container),
 ) -> MobileAuthResponse:
-    return await container.auth_service.refresh_token(container.redis, req.refresh_token)
+    return await container.auth_service.refresh_token(
+        container.redis, req.refresh_token
+    )
 
 
 @router.post("/logout")
@@ -122,8 +156,10 @@ async def revoke_device(
     if device is None or device.user_id != current_user.user_id:
         raise AppException.not_found("Device not found")
 
-    session = await container.session_service.session_querier.get_session_by_device_for_user(
-        device_id=device_id, user_id=current_user.user_id
+    session = (
+        await container.session_service.session_querier.get_session_by_device_for_user(
+            device_id=device_id, user_id=current_user.user_id
+        )
     )
 
     await container.device_service.revoke_device(
@@ -132,8 +168,9 @@ async def revoke_device(
     )
 
     if session:
-        await container.session_service.delete_session_cache(container.redis, session.id)
-
+        await container.session_service.delete_session_cache(
+            container.redis, session.id
+        )
 
     return {"message": "Device revoked successfully"}
 
@@ -213,6 +250,7 @@ async def get_me(
         sessions=session_schema,
     )
 
+
 @router.patch("/me/profile", response_model=UserSchema)
 async def update_profile(
     req: UpdateProfileRequest,
@@ -249,7 +287,8 @@ async def upload_avatar(
     )
     try:
         user = await container.auth_service.update_avatar(
-            user_id=current_user.user_id, avatar_key=object_name,
+            user_id=current_user.user_id,
+            avatar_key=object_name,
         )
     except Exception:
         await container.auth_service.delete_avatar_bytes(avatar_key=object_name)

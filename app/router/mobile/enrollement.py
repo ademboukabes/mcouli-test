@@ -41,6 +41,7 @@ class EnrollmentResponse(BaseModel):
 
 router = APIRouter()
 
+
 async def _build_face_image_payload(file: UploadFile) -> FaceImagePayload:
     payload = await build_image_payload(file)
     return FaceImagePayload(
@@ -149,7 +150,8 @@ async def enroll_face(
         except Exception as exc:
             logger.warning(
                 "enroll: redis unavailable, failing open (no duplicate-submission lock) for user %s: %s",
-                user.user_id, exc,
+                user.user_id,
+                exc,
             )
             lock_acquired = True
         if not lock_acquired:

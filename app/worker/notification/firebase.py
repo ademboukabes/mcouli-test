@@ -3,6 +3,7 @@ from typing import cast
 
 # pyright: ignore[reportMissingTypeStubs]
 import firebase_admin  # type: ignore[import-not-found,import-untyped]
+
 # pyright: ignore[reportMissingTypeStubs]
 from firebase_admin import credentials, messaging  # type: ignore[import-not-found,import-untyped]
 
@@ -24,6 +25,8 @@ class _SendResponse:
 
 class _BatchResponse:
     responses: list[_SendResponse]
+
+
 class NotificationDeliveryError(Exception):
     def __init__(
         self,
@@ -39,16 +42,16 @@ class NotificationDeliveryError(Exception):
 
 
 def init_firebase_app(credentials_path: str | None = None) -> None:
-    if firebase_admin._apps: # type: ignore
+    if firebase_admin._apps:  # type: ignore
         return
     if credentials_path is None:
         credentials_path = settings.FIREBASE_CREDENTIALS_PATH
     if credentials_path:
         cred = credentials.Certificate(credentials_path)
-        firebase_admin.initialize_app(cred) # type: ignore
+        firebase_admin.initialize_app(cred)  # type: ignore
         logger.info("Firebase initialized with credentials from %s", credentials_path)
         return
-    firebase_admin.initialize_app() # type: ignore
+    firebase_admin.initialize_app()  # type: ignore
     logger.info("Firebase initialized with default credentials")
 
 
@@ -75,9 +78,9 @@ def send_notification(notification: UnifiedNotification) -> None:
         data=notification.data or None,
     )
     response = cast(
-    _BatchResponse,
-    messaging.send_multicast(multicast) # type: ignore
-)
+        _BatchResponse,
+        messaging.send_multicast(multicast),  # type: ignore
+    )
 
     failed_tokens: list[str] = []
     invalid_tokens: list[str] = []
@@ -96,6 +99,4 @@ def send_notification(notification: UnifiedNotification) -> None:
             invalid_tokens=invalid_tokens,
         )
 
-    logger.info(
-        "Notification delivered to %d tokens", len(notification.tokens)
-    )
+    logger.info("Notification delivered to %d tokens", len(notification.tokens))

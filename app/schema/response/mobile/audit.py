@@ -23,6 +23,7 @@ class AuditActorSchema(BaseModel):
             display_name=user.display_name,
         )
 
+
 class AuditEventSchema(BaseModel):
     id: UUID
     event_type: AuditEventType

@@ -119,6 +119,7 @@ async def _handle_cleanup_event(
 async def main() -> None:
     await NatsClient.connect()
     try:
+
         async def _jetstream_handler(data: bytes | str) -> None:
             async with engine.begin() as conn:
                 querier = upload_request_photo_queries.AsyncQuerier(conn)

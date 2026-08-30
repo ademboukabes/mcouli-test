@@ -3,6 +3,7 @@ from datetime import datetime
 import uuid
 from typing import Optional
 
+
 class EventResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -16,16 +17,20 @@ class EventResponse(BaseModel):
     created_at: datetime
     archived_at: Optional[datetime] = None
 
+
 class ParticipantResponse(BaseModel):
     """Data for a user who joined an event"""
+
     model_config = ConfigDict(from_attributes=True)
 
     user_id: uuid.UUID
     user_email: str
     joined_at: datetime
 
+
 class UserEventResponse(BaseModel):
     """Data for an event a user has joined"""
+
     model_config = ConfigDict(from_attributes=True)
 
     id: uuid.UUID
@@ -35,8 +40,10 @@ class UserEventResponse(BaseModel):
     status: str
     joined_at: datetime
 
+
 class JoinEventResponse(BaseModel):
     """Confirmation of a successful join"""
+
     model_config = ConfigDict(from_attributes=True)
 
     id: uuid.UUID

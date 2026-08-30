@@ -7,37 +7,46 @@ from app.worker.photo_worker.schema.event import PhotoProcessEvent
 from app.service.face_embedding import DetectedFace
 from app.service.photo_approval import PhotoApprovalService
 
+
 @pytest.fixture
 def mock_conn() -> AsyncMock:
     return AsyncMock()
+
 
 @pytest.fixture
 def mock_face_embedding_service() -> AsyncMock:
     return AsyncMock()
 
+
 @pytest.fixture
 def mock_single_face_service() -> AsyncMock:
     return AsyncMock()
+
 
 @pytest.fixture
 def mock_notification_service() -> AsyncMock:
     return AsyncMock()
 
+
 @pytest.fixture
 def mock_photo_face_querier() -> AsyncMock:
     return AsyncMock()
+
 
 @pytest.fixture
 def mock_photo_querier() -> AsyncMock:
     return AsyncMock()
 
+
 @pytest.fixture
 def mock_photo_approval_querier() -> AsyncMock:
     return AsyncMock()
 
+
 @pytest.fixture
 def mock_processing_job_querier() -> AsyncMock:
     return AsyncMock()
+
 
 @pytest.fixture
 def mock_staged_upload_storage_service() -> AsyncMock:
@@ -153,14 +162,19 @@ async def test_expire_stale_marks_photos_approved(
     )
 
     from typing import Any, AsyncIterator
+
     # Mock the generator for expire_stale_approvals
     async def mock_generator(*args: Any, **kwargs: Any) -> AsyncIterator[uuid.UUID]:
         yield uuid.uuid4()
         yield uuid.uuid4()
 
-    mock_photo_approval_querier.expire_stale_approvals = MagicMock(side_effect=mock_generator)
+    mock_photo_approval_querier.expire_stale_approvals = MagicMock(
+        side_effect=mock_generator
+    )
 
     count = await service.expire_stale(timeout_days=7)
 
     assert count == 2
-    mock_photo_approval_querier.expire_stale_approvals.assert_called_once_with(timeout_days=7)
+    mock_photo_approval_querier.expire_stale_approvals.assert_called_once_with(
+        timeout_days=7
+    )

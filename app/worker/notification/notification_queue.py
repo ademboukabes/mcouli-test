@@ -1,7 +1,11 @@
 from typing import Sequence
 from pydantic import BaseModel, ConfigDict, Field
 from app.infra.nats import NatsClient
-from app.schema.internal.notification import NotificationPriority, PRIORITY_ORDER, UnifiedNotification
+from app.schema.internal.notification import (
+    NotificationPriority,
+    PRIORITY_ORDER,
+    UnifiedNotification,
+)
 from app.worker.notification.settings import NotificationWorkerSettings
 
 
@@ -17,14 +21,14 @@ class NotificationQueue:
         self._settings = settings
 
     async def enqueue_notification(
-        self,
-        notification: UnifiedNotification,
-        attempts: int = 0
+        self, notification: UnifiedNotification, attempts: int = 0
     ) -> None:
         entry = NotificationQueueEntry(notification=notification, attempts=attempts)
         subject = self._settings.subject_for(entry.notification.priority)
         payload = entry.model_dump_json().encode("utf-8")
-        await NatsClient.js_publish(subject, payload, stream_name="notification_delivery_stream")
+        await NatsClient.js_publish(
+            subject, payload, stream_name="notification_delivery_stream"
+        )
 
     @staticmethod
     def priority_index(priority: NotificationPriority) -> int:

@@ -75,7 +75,9 @@ class NatsClient:
         if NatsClient._nc is None:
             nc = NATS()
             await nc.connect(
-                servers=[f"nats://{host or settings.NATS_HOST}:{port or settings.NATS_PORT}"],
+                servers=[
+                    f"nats://{host or settings.NATS_HOST}:{port or settings.NATS_PORT}"
+                ],
                 user=user or settings.NATS_USER,
                 password=password or settings.NATS_PASSWORD,
             )
@@ -102,7 +104,9 @@ class NatsClient:
         await nc.publish(subject_name, message)
 
     @staticmethod
-    async def subscribe(subject: NatsSubjects | str, callback: Callable[[Any], Any]) -> None:
+    async def subscribe(
+        subject: NatsSubjects | str, callback: Callable[[Any], Any]
+    ) -> None:
         if NatsClient._nc is None:
             await NatsClient.connect()
         nc = NatsClient._nc
@@ -114,9 +118,10 @@ class NatsClient:
         subject_name = subject.value if isinstance(subject, NatsSubjects) else subject
         await nc.subscribe(subject_name, cb=_wrapper)  # type: ignore
 
-
     @staticmethod
-    async def js_publish(subject: NatsSubjects | str, message: bytes, stream_name: str | None = None) -> None:
+    async def js_publish(
+        subject: NatsSubjects | str, message: bytes, stream_name: str | None = None
+    ) -> None:
         if NatsClient._js is None:
             await NatsClient.connect()
         js = NatsClient._js
@@ -124,10 +129,14 @@ class NatsClient:
         subject_name = subject.value if isinstance(subject, NatsSubjects) else subject
         resolved_stream = stream_name or SUBJECT_TO_STREAM.get(subject_name)
         if resolved_stream is None:
-            logger.warning(f"No stream mapped for subject {subject_name}, but js_publish was called.")
+            logger.warning(
+                f"No stream mapped for subject {subject_name}, but js_publish was called."
+            )
             return await NatsClient.publish(subject, message)
-            
-        await NatsClient.ensure_stream(stream_name=resolved_stream, subjects=[subject_name])
+
+        await NatsClient.ensure_stream(
+            stream_name=resolved_stream, subjects=[subject_name]
+        )
         await js.publish(subject_name, message, stream=resolved_stream)
 
     @staticmethod
@@ -136,7 +145,7 @@ class NatsClient:
         callback: Callable[[Any], Any],
         stream_name: str | None = None,
         durable_name: str | None = None,
-        ack_policy: AckPolicy = AckPolicy.EXPLICIT
+        ack_policy: AckPolicy = AckPolicy.EXPLICIT,
     ) -> None:
         if NatsClient._js is None:
             await NatsClient.connect()
@@ -144,21 +153,27 @@ class NatsClient:
         subject_name = subject.value if isinstance(subject, NatsSubjects) else subject
         resolved_stream = stream_name or SUBJECT_TO_STREAM.get(subject_name)
         if not resolved_stream:
-            raise ValueError(f"Cannot js_subscribe to {subject_name}: no stream mapped.")
-            
+            raise ValueError(
+                f"Cannot js_subscribe to {subject_name}: no stream mapped."
+            )
+
         resolved_durable = durable_name or f"{resolved_stream}_consumer"
 
-        await NatsClient.ensure_stream(stream_name=resolved_stream, subjects=[subject_name])
+        await NatsClient.ensure_stream(
+            stream_name=resolved_stream, subjects=[subject_name]
+        )
 
         async def _wrapper(msg: Msg) -> None:
             try:
                 await callback(msg.data)
                 await msg.ack()
             except Exception as exc:
-                logger.error(f"Error processing message from {subject_name}, NACKing: {exc}")
+                logger.error(
+                    f"Error processing message from {subject_name}, NACKing: {exc}"
+                )
                 await msg.nak()
                 raise
-                
+
         js = NatsClient._js
         assert js is not None
         await js.subscribe(
@@ -179,7 +194,7 @@ class NatsClient:
         try:
             await js.stream_info(stream_name)
         except NotFoundError:
-            await js.add_stream( # type: ignore
+            await js.add_stream(  # type: ignore
                 name=stream_name,
                 config=StreamConfig(
                     name=stream_name,

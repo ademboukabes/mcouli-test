@@ -7,7 +7,11 @@ from sqlalchemy.exc import DBAPIError, SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncConnection
 
 from app.core.logger import logger
-from app.schema.internal.single_face_match import BBoxPayload, ClosestUserMatch, SingleFaceMatchJob
+from app.schema.internal.single_face_match import (
+    BBoxPayload,
+    ClosestUserMatch,
+    SingleFaceMatchJob,
+)
 from app.service.user_notification import UserNotificationService
 from app.service.users import AuthService
 from db.generated import photo_faces as photo_face_queries
@@ -37,7 +41,9 @@ class SingleFaceMatchService:
         bbox: BBoxPayload | None,
     ) -> None:  # noqa: C901
         if not job.image_ref:
-            logger.warning("Missing image_ref in event payload for photo %s", job.photo_id)
+            logger.warning(
+                "Missing image_ref in event payload for photo %s", job.photo_id
+            )
             return
 
         embedding_literal = self._vector_literal(embedding)
@@ -95,7 +101,8 @@ class SingleFaceMatchService:
         if created_face_match_id:
             assert matched_user is not None
             await self.photo_querier.update_photo_status(
-                id=job.photo_id, status="approved",
+                id=job.photo_id,
+                status="approved",
             )
             await self.user_notification_service.create_notification(
                 user_id=matched_user.user_id,
@@ -111,17 +118,27 @@ class SingleFaceMatchService:
         matched_user: ClosestUserMatch | None,
     ) -> bool:
         if matched_user is None:
-            logger.info("No user embeddings available for matching, auto-approving photo %s", job.photo_id)
-            await self.photo_querier.update_photo_status(id=job.photo_id, status="approved")
+            logger.info(
+                "No user embeddings available for matching, auto-approving photo %s",
+                job.photo_id,
+            )
+            await self.photo_querier.update_photo_status(
+                id=job.photo_id, status="approved"
+            )
             return True
 
         from app.worker.photo_worker.settings import settings as worker_settings
+
         if matched_user.distance > worker_settings.similarity_threshold:
             logger.info(
                 "Closest user distance %.4f exceeds threshold %.4f for photo %s; auto-approving",
-                matched_user.distance, worker_settings.similarity_threshold, job.photo_id,
+                matched_user.distance,
+                worker_settings.similarity_threshold,
+                job.photo_id,
             )
-            await self.photo_querier.update_photo_status(id=job.photo_id, status="approved")
+            await self.photo_querier.update_photo_status(
+                id=job.photo_id, status="approved"
+            )
             return True
 
         return False
@@ -144,6 +161,4 @@ class SingleFaceMatchService:
     def _serialize_bbox(bbox: BBoxPayload | None) -> str | None:
         if bbox is None:
             return None
-        return json.dumps(
-            {"x1": bbox.x1, "y1": bbox.y1, "x2": bbox.x2, "y2": bbox.y2}
-        )
+        return json.dumps({"x1": bbox.x1, "y1": bbox.y1, "x2": bbox.x2, "y2": bbox.y2})

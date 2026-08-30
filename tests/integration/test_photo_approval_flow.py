@@ -28,6 +28,7 @@ from db.generated import photo_approvals as approval_queries
 @pytest.fixture
 def mock_storage() -> AsyncMock:
     from app.service.staged_upload_storage import StagedUploadStorageService
+
     svc = MagicMock(spec=StagedUploadStorageService)
     svc.delete_storage_key = AsyncMock()
     return svc
@@ -36,6 +37,7 @@ def mock_storage() -> AsyncMock:
 @pytest.fixture
 def mock_audit() -> AsyncMock:
     from app.service.audit import AuditService
+
     svc = MagicMock(spec=AuditService)
     svc.create_record = AsyncMock()
     return svc
@@ -45,11 +47,13 @@ def mock_audit() -> AsyncMock:
 async def db_conn():
     from sqlalchemy.ext.asyncio import create_async_engine
     from app.core.config import settings
+
     url = f"postgresql+asyncpg://{settings.POSTGRES_USER}:{settings.POSTGRES_PASSWORD}@{settings.POSTGRES_HOST}:{settings.POSTGRES_PORT}/{settings.POSTGRES_DB}"
     engine = create_async_engine(url, pool_pre_ping=True)
     async with engine.connect() as conn:
         yield conn
     await engine.dispose()
+
 
 @pytest.fixture
 def approval_service(
@@ -90,12 +94,16 @@ async def test_group_photo_approval_lifecycle(
     pq = photo_queries.AsyncQuerier(db_conn)
     aq = approval_queries.AsyncQuerier(db_conn)
 
-    staff = await sq.create_admin(email=f"admin-{uuid.uuid4()}@test.com", password="hash")
+    staff = await sq.create_admin(
+        email=f"admin-{uuid.uuid4()}@test.com", password="hash"
+    )
     event_creator_id = staff.id
 
     user_ids = []
     for i in range(3):
-        u = await uq.create_user(email=f"approval-{uuid.uuid4()}@test.com", hashed_password="hash")
+        u = await uq.create_user(
+            email=f"approval-{uuid.uuid4()}@test.com", hashed_password="hash"
+        )
         user_ids.append(u.id)
 
     uploader_id, user1_id, user2_id = user_ids
@@ -105,9 +113,10 @@ async def test_group_photo_approval_lifecycle(
             name="Approval Test Event",
             event_code=f"APP{str(event_id)[:4]}",
             event_date=datetime.datetime.now(datetime.timezone.utc),
-            end_date=datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(days=1),
+            end_date=datetime.datetime.now(datetime.timezone.utc)
+            + datetime.timedelta(days=1),
             status="scheduled",
-            created_by=event_creator_id
+            created_by=event_creator_id,
         )
     )
     event_id = event.id
@@ -119,40 +128,60 @@ async def test_group_photo_approval_lifecycle(
             source="direct",
             taken_at=None,
             day_number=None,
-            visibility="public"
+            visibility="public",
         )
     )
 
     # Set status to pending and id
     await db_conn.execute(
-        text(f"UPDATE photos SET id = '{photo_id}', status = 'pending', uploaded_by = '{uploader_id}' WHERE storage_key = 'test/group.jpg'")
+        text(
+            f"UPDATE photos SET id = '{photo_id}', status = 'pending', uploaded_by = '{uploader_id}' WHERE storage_key = 'test/group.jpg'"
+        )
     )
 
-    await aq.create_photo_approval(photo_id=photo_id, user_id=user1_id, decision="pending")
-    await aq.create_photo_approval(photo_id=photo_id, user_id=user2_id, decision="pending")
+    await aq.create_photo_approval(
+        photo_id=photo_id, user_id=user1_id, decision="pending"
+    )
+    await aq.create_photo_approval(
+        photo_id=photo_id, user_id=user2_id, decision="pending"
+    )
 
     try:
         # 2. User 1 approves
-        result1 = await approval_service.decide(photo_id=photo_id, user_id=user1_id, decision="approved")
-        assert result1 == "pending", "Photo should remain pending because User 2 hasn't approved yet"
+        result1 = await approval_service.decide(
+            photo_id=photo_id, user_id=user1_id, decision="approved"
+        )
+        assert result1 == "pending", (
+            "Photo should remain pending because User 2 hasn't approved yet"
+        )
 
         photo = await photo_queries.AsyncQuerier(db_conn).get_photo_by_id(id=photo_id)
         assert photo.status == "pending"
 
         # 3. User 2 approves
-        result2 = await approval_service.decide(photo_id=photo_id, user_id=user2_id, decision="approved")
-        assert result2 == "approved", "Photo should be approved since all users approved"
+        result2 = await approval_service.decide(
+            photo_id=photo_id, user_id=user2_id, decision="approved"
+        )
+        assert result2 == "approved", (
+            "Photo should be approved since all users approved"
+        )
 
         photo = await photo_queries.AsyncQuerier(db_conn).get_photo_by_id(id=photo_id)
         assert photo.status == "approved"
 
     finally:
         # 4. Cleanup
-        await db_conn.execute(text(f"DELETE FROM photo_approvals WHERE photo_id = '{photo_id}'"))
+        await db_conn.execute(
+            text(f"DELETE FROM photo_approvals WHERE photo_id = '{photo_id}'")
+        )
         await db_conn.execute(text(f"DELETE FROM photos WHERE id = '{photo_id}'"))
         await db_conn.execute(text(f"DELETE FROM events WHERE id = '{event_id}'"))
-        await db_conn.execute(text(f"DELETE FROM users WHERE id IN ('{user1_id}', '{user2_id}')"))
-        await db_conn.execute(text(f"DELETE FROM staff_users WHERE id = '{event_creator_id}'"))
+        await db_conn.execute(
+            text(f"DELETE FROM users WHERE id IN ('{user1_id}', '{user2_id}')")
+        )
+        await db_conn.execute(
+            text(f"DELETE FROM staff_users WHERE id = '{event_creator_id}'")
+        )
         await db_conn.commit()
 
 
@@ -172,12 +201,16 @@ async def test_group_photo_rejection_deletes_storage(
     pq = photo_queries.AsyncQuerier(db_conn)
     aq = approval_queries.AsyncQuerier(db_conn)
 
-    staff = await sq.create_admin(email=f"admin-{uuid.uuid4()}@test.com", password="hash")
+    staff = await sq.create_admin(
+        email=f"admin-{uuid.uuid4()}@test.com", password="hash"
+    )
     event_creator_id = staff.id
 
     user_ids = []
     for i in range(2):
-        u = await uq.create_user(email=f"reject-{uuid.uuid4()}@test.com", hashed_password="hash")
+        u = await uq.create_user(
+            email=f"reject-{uuid.uuid4()}@test.com", hashed_password="hash"
+        )
         user_ids.append(u.id)
 
     uploader_id, user1_id = user_ids
@@ -187,9 +220,10 @@ async def test_group_photo_rejection_deletes_storage(
             name="Reject Test Event",
             event_code=f"REJ{str(event_id)[:4]}",
             event_date=datetime.datetime.now(datetime.timezone.utc),
-            end_date=datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(days=1),
+            end_date=datetime.datetime.now(datetime.timezone.utc)
+            + datetime.timedelta(days=1),
             status="scheduled",
-            created_by=event_creator_id
+            created_by=event_creator_id,
         )
     )
     event_id = event.id
@@ -201,19 +235,25 @@ async def test_group_photo_rejection_deletes_storage(
             source="direct",
             taken_at=None,
             day_number=None,
-            visibility="public"
+            visibility="public",
         )
     )
 
     await db_conn.execute(
-        text(f"UPDATE photos SET id = '{photo_id}', status = 'pending', uploaded_by = '{uploader_id}' WHERE storage_key = 'test/reject.jpg'")
+        text(
+            f"UPDATE photos SET id = '{photo_id}', status = 'pending', uploaded_by = '{uploader_id}' WHERE storage_key = 'test/reject.jpg'"
+        )
     )
 
-    await aq.create_photo_approval(photo_id=photo_id, user_id=user1_id, decision="pending")
+    await aq.create_photo_approval(
+        photo_id=photo_id, user_id=user1_id, decision="pending"
+    )
 
     try:
         # 2. User 1 rejects
-        result = await approval_service.decide(photo_id=photo_id, user_id=user1_id, decision="rejected")
+        result = await approval_service.decide(
+            photo_id=photo_id, user_id=user1_id, decision="rejected"
+        )
 
         # 3. Verify
         assert result == "rejected"
@@ -223,9 +263,15 @@ async def test_group_photo_rejection_deletes_storage(
         assert photo.status == "rejected"
 
     finally:
-        await db_conn.execute(text(f"DELETE FROM photo_approvals WHERE photo_id = '{photo_id}'"))
+        await db_conn.execute(
+            text(f"DELETE FROM photo_approvals WHERE photo_id = '{photo_id}'")
+        )
         await db_conn.execute(text(f"DELETE FROM photos WHERE id = '{photo_id}'"))
         await db_conn.execute(text(f"DELETE FROM events WHERE id = '{event_id}'"))
-        await db_conn.execute(text(f"DELETE FROM users WHERE id IN ('{uploader_id}', '{user1_id}')"))
-        await db_conn.execute(text(f"DELETE FROM staff_users WHERE id = '{event_creator_id}'"))
+        await db_conn.execute(
+            text(f"DELETE FROM users WHERE id IN ('{uploader_id}', '{user1_id}')")
+        )
+        await db_conn.execute(
+            text(f"DELETE FROM staff_users WHERE id = '{event_creator_id}'")
+        )
         await db_conn.commit()

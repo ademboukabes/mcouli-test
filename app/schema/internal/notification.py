@@ -17,6 +17,7 @@ class UnifiedNotification(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
+
 PRIORITY_ORDER: tuple[NotificationPriority, ...] = (
     NotificationPriority.HIGH,
     NotificationPriority.NORMAL,

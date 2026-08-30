@@ -19,8 +19,6 @@ from app.deps.ai_deps import get_face_embedding_service
 from app.core.logger import configure_logger, logger
 
 
-
-
 configure_logger()
 
 
@@ -48,21 +46,25 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
         return response
 
 
-
 async def _approval_expiry_loop() -> None:
     while True:
         await asyncio.sleep(3600)
         try:
             async with engine.begin() as conn:
                 from app.container import Container
+
                 container = Container(conn)
-                await container.photo_approval_service.expire_stale(settings.PHOTO_APPROVAL_TIMEOUT_DAYS)
+                await container.photo_approval_service.expire_stale(
+                    settings.PHOTO_APPROVAL_TIMEOUT_DAYS
+                )
         except Exception as exc:
             logger.warning("Approval expiry task failed: %s", exc)
 
 
 MAX_RETRIES = 5
 RETRY_DELAY = 2  # seconds
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
@@ -78,7 +80,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         except Exception as e:
             print(f"[MINIO] Attempt {attempt} failed: {e}")
             if attempt == MAX_RETRIES:
-                raise RuntimeError("Cannot connect to MinIO after multiple attempts") from e
+                raise RuntimeError(
+                    "Cannot connect to MinIO after multiple attempts"
+                ) from e
             await asyncio.sleep(RETRY_DELAY)
 
     RedisClient.init(
@@ -100,7 +104,6 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     await NatsClient.close()
 
 
-
 app = FastAPI(
     title="multAI API",
     description="Mobile and Web API for multAI",
@@ -114,12 +117,15 @@ app = FastAPI(
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception) -> JSONResponse:
-    logger.error("Uncaught exception on %s %s: %s", request.method, request.url.path, exc)
+    logger.error(
+        "Uncaught exception on %s %s: %s", request.method, request.url.path, exc
+    )
     logger.error(traceback.format_exc())
     return JSONResponse(
         status_code=500,
         content={"detail": "Internal server error"},
     )
+
 
 app.add_middleware(RequestLoggingMiddleware)
 

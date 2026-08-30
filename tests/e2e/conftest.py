@@ -15,9 +15,11 @@ from app.infra.nats import NatsClient
 
 FIXTURE_DIR = Path(__file__).parent.parent / "fixtures" / "images"
 
+
 # ── guard: only run when explicitly requested ─────────────────────────
 def pytest_configure(config: pytest.Config) -> None:
     config.addinivalue_line("markers", "e2e: mark test as an end-to-end test")
+
 
 @pytest.fixture(autouse=True)
 async def setup_infra() -> AsyncGenerator[None, None]:
@@ -38,6 +40,7 @@ async def setup_infra() -> AsyncGenerator[None, None]:
 
 
 # ── shared helpers ────────────────────────────────────────────────────
+
 
 async def _seed_event_and_photo(
     conn: AsyncConnection,
@@ -110,11 +113,24 @@ async def _cleanup(
 ) -> None:
     """Delete all rows created during a test, in FK-safe order."""
     if user_id:
-        await conn.execute(text("DELETE FROM notifications WHERE user_id = :uid"), {"uid": user_id})  # type: ignore[union-attr]
-        await conn.execute(text("DELETE FROM face_matches WHERE user_id = :uid"), {"uid": user_id})  # type: ignore[union-attr]
+        await conn.execute(
+            text("DELETE FROM notifications WHERE user_id = :uid"), {"uid": user_id}
+        )  # type: ignore[union-attr]
+        await conn.execute(
+            text("DELETE FROM face_matches WHERE user_id = :uid"), {"uid": user_id}
+        )  # type: ignore[union-attr]
         await conn.execute(text("DELETE FROM users WHERE id = :uid"), {"uid": user_id})  # type: ignore[union-attr]
-    await conn.execute(text("DELETE FROM face_matches fm USING photo_faces pf WHERE pf.id = fm.photo_face_id AND pf.photo_id = :pid"), {"pid": photo_id})  # type: ignore[union-attr]
-    await conn.execute(text("DELETE FROM photo_faces WHERE photo_id = :pid"), {"pid": photo_id})  # type: ignore[union-attr]
-    await conn.execute(text("DELETE FROM processing_jobs WHERE photo_id = :pid"), {"pid": photo_id})  # type: ignore[union-attr]
+    await conn.execute(
+        text(
+            "DELETE FROM face_matches fm USING photo_faces pf WHERE pf.id = fm.photo_face_id AND pf.photo_id = :pid"
+        ),
+        {"pid": photo_id},
+    )  # type: ignore[union-attr]
+    await conn.execute(
+        text("DELETE FROM photo_faces WHERE photo_id = :pid"), {"pid": photo_id}
+    )  # type: ignore[union-attr]
+    await conn.execute(
+        text("DELETE FROM processing_jobs WHERE photo_id = :pid"), {"pid": photo_id}
+    )  # type: ignore[union-attr]
     await conn.execute(text("DELETE FROM photos WHERE id = :pid"), {"pid": photo_id})  # type: ignore[union-attr]
     await conn.execute(text("DELETE FROM events WHERE id = :eid"), {"eid": event_id})  # type: ignore[union-attr]

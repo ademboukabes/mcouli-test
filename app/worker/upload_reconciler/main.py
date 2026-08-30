@@ -29,7 +29,9 @@ async def run_reconcile_pass() -> None:
             stat = await storage_service.stat_staging_object(photo.staging_storage_key)
             if stat is not None:
                 await querier.confirm_upload_request_photo_transfer(
-                    id=photo.id, size_bytes=stat.size, mime_type=stat.content_type,
+                    id=photo.id,
+                    size_bytes=stat.size,
+                    mime_type=stat.content_type,
                 )
                 confirmed += 1
             else:
@@ -38,7 +40,9 @@ async def run_reconcile_pass() -> None:
 
         logger.info(
             "upload_reconciler: reconciled %d stale photo(s) — %d confirmed, %d failed",
-            len(stale_photos), confirmed, failed,
+            len(stale_photos),
+            confirmed,
+            failed,
         )
 
 

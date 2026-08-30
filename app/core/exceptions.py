@@ -23,8 +23,8 @@ class AppException:
         return HTTPException(status_code=400, detail=detail)
 
     @staticmethod
-    def payement_required(detail:str = "payement required")->HTTPException:
-        return HTTPException(status_code=402,detail=detail)
+    def payement_required(detail: str = "payement required") -> HTTPException:
+        return HTTPException(status_code=402, detail=detail)
 
     @staticmethod
     def internal_error(detail: str = "Internal server error") -> HTTPException:
@@ -51,12 +51,15 @@ class AppException:
         return HTTPException(status_code=500, detail=detail)
 
     @staticmethod
-    def image_quality_error(detail: str = "Image does not meet quality requirements") -> HTTPException:
+    def image_quality_error(
+        detail: str = "Image does not meet quality requirements",
+    ) -> HTTPException:
         return HTTPException(status_code=400, detail=detail)
 
     @staticmethod
     def image_format_error(detail: str = "Unsupported image format") -> HTTPException:
         return HTTPException(status_code=400, detail=detail)
+
 
 class DBException(ABC):
     """Abstract class to enforce DB error handling."""
@@ -115,13 +118,15 @@ class DBExceptionImpl(DBException):
         err_msg = str(exc).lower()
         if constraint == "staff_users_email_key" or "staff_users_email_key" in err_msg:
             return HTTPException(
-                status_code=409,
-                detail="Staff user with this email already exists"
+                status_code=409, detail="Staff user with this email already exists"
             )
-        if constraint in ("users_email_key", "idx_users_email") or "idx_users_email" in err_msg or "users_email_key" in err_msg:
+        if (
+            constraint in ("users_email_key", "idx_users_email")
+            or "idx_users_email" in err_msg
+            or "users_email_key" in err_msg
+        ):
             return HTTPException(
-                status_code=409,
-                detail="Email already in use; please login instead"
+                status_code=409, detail="Email already in use; please login instead"
             )
         return HTTPException(status_code=409, detail="Resource already exists")
 
@@ -133,6 +138,4 @@ class DBExceptionImpl(DBException):
 
     @staticmethod
     def handle_check_violation(exc: Exception) -> HTTPException:
-        return HTTPException(
-            status_code=400, detail="Constraint check failed"
-        )
+        return HTTPException(status_code=400, detail="Constraint check failed")

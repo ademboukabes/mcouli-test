@@ -7,4 +7,4 @@ class AuditWorkerSettings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="AUDIT_")
 
 
-settings = AuditWorkerSettings() # type: ignore
+settings = AuditWorkerSettings()  # type: ignore

@@ -10,12 +10,11 @@ class RedisClient:
     _instance: ClassVar["RedisClient | None"] = None
 
     def __init__(self, host: str, port: int, password: str) -> None:
-        self._client = Redis.from_url( # type: ignore
+        self._client = Redis.from_url(  # type: ignore
             f"redis://{host}:{port}",
             password=password,
             decode_responses=True,
         )
-
 
     @classmethod
     def init(cls, host: str, port: int, password: str) -> "RedisClient":
@@ -31,7 +30,6 @@ class RedisClient:
             raise RuntimeError("RedisClient not initialized")
 
         return cls._instance
-
 
     async def set(
         self,
@@ -61,7 +59,6 @@ class RedisClient:
     async def incr(self, key: RedisKey | str) -> int:
         return await self._client.incr(key)
 
-
     async def sadd(self, key: RedisKey | str, *values: str) -> int:
         result = await self._client.sadd(key, *values)  # type: ignore[misc]
         return int(cast(int, result))
@@ -73,7 +70,6 @@ class RedisClient:
     async def srem(self, key: RedisKey | str, *values: str) -> int:
         result = await self._client.srem(key, *values)  # type: ignore[misc]
         return int(cast(int, result))
-
 
     async def close(self) -> None:
         await self._client.close()

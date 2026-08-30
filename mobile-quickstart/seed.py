@@ -38,14 +38,14 @@ load_dotenv()
 # ---------------------------------------------------------------------------
 
 STAFF_USERS = [
-    {"email": "admin@multai.dev",  "password": "Admin1234!",  "role": "admin"},
-    {"email": "lead@multai.dev",   "password": "Lead1234!",   "role": "multi_team_lead"},
-    {"email": "multi@multai.dev",  "password": "Multi1234!",  "role": "multi"},
+    {"email": "admin@multai.dev", "password": "Admin1234!", "role": "admin"},
+    {"email": "lead@multai.dev", "password": "Lead1234!", "role": "multi_team_lead"},
+    {"email": "multi@multai.dev", "password": "Multi1234!", "role": "multi"},
 ]
 
 MOBILE_USERS = [
     {"email": "alice@example.com", "password": "Alice123!", "display_name": "Alice"},
-    {"email": "bob@example.com",   "password": "Bob1234!",  "display_name": "Bob"},
+    {"email": "bob@example.com", "password": "Bob1234!", "display_name": "Bob"},
 ]
 
 EVENTS = [
@@ -81,6 +81,7 @@ PHOTO_COLORS = [
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def now() -> datetime:
     return datetime.now(timezone.utc)
 
@@ -108,15 +109,29 @@ def generate_placeholder_image(label: str, color: tuple[int, int, int]) -> bytes
 # Reset
 # ---------------------------------------------------------------------------
 
+
 async def reset_db(conn: asyncpg.Connection) -> None:
     print("Resetting database...")
     tables = [
-        "audit_events", "face_matches", "photo_faces", "photo_approvals",
-        "user_photos", "processing_jobs", "upload_request_photos",
-        "upload_requests", "upload_request_groups", "notifications",
-        "staff_notifications", "staff_drive_connections", "event_participants",
-        "user_sessions", "user_devices", "photos", "events",
-        "users", "staff_users",
+        "audit_events",
+        "face_matches",
+        "photo_faces",
+        "photo_approvals",
+        "user_photos",
+        "processing_jobs",
+        "upload_request_photos",
+        "upload_requests",
+        "upload_request_groups",
+        "notifications",
+        "staff_notifications",
+        "staff_drive_connections",
+        "event_participants",
+        "user_sessions",
+        "user_devices",
+        "photos",
+        "events",
+        "users",
+        "staff_users",
     ]
     for table in tables:
         await conn.execute(f"DELETE FROM {table}")
@@ -135,6 +150,7 @@ async def reset_minio(minio: Minio) -> None:
 # ---------------------------------------------------------------------------
 # MinIO
 # ---------------------------------------------------------------------------
+
 
 async def init_minio(minio: Minio) -> None:
     print("Setting up MinIO buckets...")
@@ -168,6 +184,7 @@ async def upload_photo(
 # Seeders
 # ---------------------------------------------------------------------------
 
+
 async def seed_staff_users(conn: asyncpg.Connection) -> list[uuid.UUID]:
     print("  -> Seeding staff users...")
     ids = []
@@ -182,7 +199,10 @@ async def seed_staff_users(conn: asyncpg.Connection) -> list[uuid.UUID]:
                     updated_at = EXCLUDED.updated_at
             RETURNING id
             """,
-            u["email"], hash_password(u["password"]), u["role"], now(),
+            u["email"],
+            hash_password(u["password"]),
+            u["role"],
+            now(),
         )
         ids.append(row["id"])
         print(f"     [OK] {u['role']}: {u['email']}  password: {u['password']}")
@@ -203,7 +223,10 @@ async def seed_mobile_users(conn: asyncpg.Connection) -> list[uuid.UUID]:
                     updated_at      = EXCLUDED.updated_at
             RETURNING id
             """,
-            u["email"], hash_password(u["password"]), u["display_name"], now(),
+            u["email"],
+            hash_password(u["password"]),
+            u["display_name"],
+            now(),
         )
         ids.append(row["id"])
         print(f"     [OK] {u['display_name']}: {u['email']}  password: {u['password']}")
@@ -222,7 +245,8 @@ async def seed_devices_and_sessions(
             VALUES ($1, 'Seed Device', 'android', $2, $2)
             RETURNING id
             """,
-            user_id, now(),
+            user_id,
+            now(),
         )
         await conn.execute(
             """
@@ -230,7 +254,10 @@ async def seed_devices_and_sessions(
             VALUES ($1, $2, $3, $3, $4)
             ON CONFLICT (user_id, device_id) DO NOTHING
             """,
-            user_id, device_id, now(), future(30),
+            user_id,
+            device_id,
+            now(),
+            future(30),
         )
     print(f"     [OK] {len(user_ids)} device(s) + session(s)")
 
@@ -252,8 +279,12 @@ async def seed_events(
                     status     = EXCLUDED.status
             RETURNING id
             """,
-            e["name"], e["event_code"], e["event_date"],
-            e["status"], staff_ids[i % len(staff_ids)], now(),
+            e["name"],
+            e["event_code"],
+            e["event_date"],
+            e["status"],
+            staff_ids[i % len(staff_ids)],
+            now(),
         )
         ids.append(row["id"])
         print(f"     [OK] {e['event_code']} — join code: {e['event_code']}")
@@ -275,7 +306,9 @@ async def seed_event_participants(
                 VALUES ($1, $2, $3)
                 ON CONFLICT (event_id, user_id) DO NOTHING
                 """,
-                event_id, user_id, now(),
+                event_id,
+                user_id,
+                now(),
             )
             count += 1
     print(f"     [OK] {count} participant record(s)")
@@ -298,7 +331,8 @@ async def seed_photos(
             color_index += 1
 
             await upload_photo(
-                minio, storage_key,
+                minio,
+                storage_key,
                 f"Event {str(event_id)[:8]} / Photo {i + 1}",
                 color,
             )
@@ -311,7 +345,12 @@ async def seed_photos(
                 VALUES ($1, $2, $3, $4, $5, 'public', 'approved', $6)
                 RETURNING id
                 """,
-                event_id, uploader, storage_key, now(), i + 1, now(),
+                event_id,
+                uploader,
+                storage_key,
+                now(),
+                i + 1,
+                now(),
             )
             photo_ids.append(row["id"])
             print(f"     [OK] {storage_key}")
@@ -337,8 +376,10 @@ async def seed_photo_access(
             ON CONFLICT (photo_id, face_index) DO NOTHING
             RETURNING id
             """,
-            photo_id, embedding_str,
-            '{"x1":10,"y1":10,"x2":100,"y2":100}', now(),
+            photo_id,
+            embedding_str,
+            '{"x1":10,"y1":10,"x2":100,"y2":100}',
+            now(),
         )
         if face_row:
             face_count += 1
@@ -348,8 +389,10 @@ async def seed_photo_access(
                     INSERT INTO face_matches (photo_face_id, user_id, confidence, created_at)
                     VALUES ($1, $2, $3, $4)
                     """,
-                    face_row["id"], user_id,
-                    round(random.uniform(0.85, 0.99), 4), now(),
+                    face_row["id"],
+                    user_id,
+                    round(random.uniform(0.85, 0.99), 4),
+                    now(),
                 )
                 match_count += 1
 
@@ -359,11 +402,15 @@ async def seed_photo_access(
                 INSERT INTO photo_approvals (photo_id, user_id, decision, decided_at)
                 VALUES ($1, $2, 'approved', $3)
                 """,
-                photo_id, user_id, now(),
+                photo_id,
+                user_id,
+                now(),
             )
             approval_count += 1
 
-    print(f"     [OK] {face_count} face(s), {match_count} match(es), {approval_count} approval(s)")
+    print(
+        f"     [OK] {face_count} face(s), {match_count} match(es), {approval_count} approval(s)"
+    )
 
 
 async def seed_user_photos(
@@ -381,7 +428,9 @@ async def seed_user_photos(
                 VALUES ($1, $2, 'public', $3)
                 ON CONFLICT (user_id, photo_id) DO NOTHING
                 """,
-                user_id, photo_id, now(),
+                user_id,
+                photo_id,
+                now(),
             )
             count += 1
     print(f"     [OK] {count} record(s)")
@@ -401,7 +450,10 @@ async def seed_processing_jobs(
                     (photo_id, job_type, status, attempts, created_at, completed_at)
                 VALUES ($1, $2, $3::processing_job_status, 1, $4, $4)
                 """,
-                photo_id, job_type, "completed", now(),
+                photo_id,
+                job_type,
+                "completed",
+                now(),
             )
             count += 1
     print(f"     [OK] {count} job(s)")
@@ -418,7 +470,8 @@ async def seed_notifications(
             INSERT INTO notifications (user_id, type, payload, created_at)
             VALUES ($1, 'welcome', '{"message": "Welcome to multAI!"}', $2)
             """,
-            user_id, now(),
+            user_id,
+            now(),
         )
     print(f"     [OK] {len(user_ids)} notification(s)")
 
@@ -434,7 +487,8 @@ async def seed_staff_notifications(
             INSERT INTO staff_notifications (staff_user_id, type, payload, created_at)
             VALUES ($1, 'system', '{"message": "Staff account seeded."}', $2)
             """,
-            staff_id, now(),
+            staff_id,
+            now(),
         )
     print(f"     [OK] {len(staff_ids)} notification(s)")
 
@@ -456,10 +510,12 @@ async def seed_upload_request_groups(
                     $5, 2, 'completed', $6, $6)
             RETURNING id
             """,
-            event_id, f"gdrive_folder_{i + 1}",
+            event_id,
+            f"gdrive_folder_{i + 1}",
             staff_ids[i % len(staff_ids)],
             staff_ids[(i + 1) % len(staff_ids)],
-            PHOTOS_PER_EVENT, now(),
+            PHOTOS_PER_EVENT,
+            now(),
         )
         ids.append(row["id"])
     print(f"     [OK] {len(ids)} group(s)")
@@ -483,11 +539,13 @@ async def seed_upload_requests(
             VALUES ($1, $2, $3, $4, 'approved'::upload_request_status, $5, $6, $7, $7)
             RETURNING id
             """,
-            event_id, f"gdrive_file_{i + 1}",
+            event_id,
+            f"gdrive_file_{i + 1}",
             staff_ids[i % len(staff_ids)],
             staff_ids[(i + 1) % len(staff_ids)],
             PHOTOS_PER_EVENT,
-            group_ids[i % len(group_ids)], now(),
+            group_ids[i % len(group_ids)],
+            now(),
         )
         ids.append(row["id"])
     print(f"     [OK] {len(ids)} request(s)")
@@ -497,6 +555,7 @@ async def seed_upload_requests(
 # ---------------------------------------------------------------------------
 # Summary
 # ---------------------------------------------------------------------------
+
 
 def print_summary() -> None:
     print()
@@ -513,7 +572,9 @@ def print_summary() -> None:
     for e in EVENTS:
         print(f"  {e['name']}  join code: {e['event_code']}")
     print()
-    print(f"Photos: {len(EVENTS) * PHOTOS_PER_EVENT} total — approved, public, gallery-ready")
+    print(
+        f"Photos: {len(EVENTS) * PHOTOS_PER_EVENT} total — approved, public, gallery-ready"
+    )
     print()
     print("Staff users:")
     for u in STAFF_USERS:
@@ -525,6 +586,7 @@ def print_summary() -> None:
 # ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
+
 
 async def main(reset: bool = False) -> None:
     dsn = (
@@ -539,7 +601,9 @@ async def main(reset: bool = False) -> None:
         secure=False,
     )
 
-    print(f"Connecting to {settings.POSTGRES_HOST}:{settings.POSTGRES_PORT}/{settings.POSTGRES_DB}...")
+    print(
+        f"Connecting to {settings.POSTGRES_HOST}:{settings.POSTGRES_PORT}/{settings.POSTGRES_DB}..."
+    )
     conn: asyncpg.Connection = await asyncpg.connect(dsn)
 
     try:
@@ -553,7 +617,7 @@ async def main(reset: bool = False) -> None:
             print("Seeding...\n")
 
             staff_ids = await seed_staff_users(conn)
-            user_ids  = await seed_mobile_users(conn)
+            user_ids = await seed_mobile_users(conn)
 
             await seed_devices_and_sessions(conn, user_ids)
 

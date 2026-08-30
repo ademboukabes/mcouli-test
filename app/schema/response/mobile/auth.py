@@ -3,11 +3,13 @@ from pydantic import BaseModel
 import uuid
 from datetime import datetime
 
+
 class DeviceSchema(BaseModel):
     id: uuid.UUID
     device_name: str
     device_type: str
     totp_secret: str | None
+
 
 class SessionSchema(BaseModel):
     session_id: uuid.UUID
@@ -16,10 +18,12 @@ class SessionSchema(BaseModel):
     idle_expires_at: datetime
     absolute_expires_at: datetime
 
+
 class MobileUserSchema(BaseModel):
     user_id: uuid.UUID
     email: str
     session_id: uuid.UUID
+
 
 class UserSchema(BaseModel):
     id: uuid.UUID
@@ -28,15 +32,18 @@ class UserSchema(BaseModel):
     avatar_url: str | None
     is_onboarded: bool
 
+
 class MeResponse(BaseModel):
     user: UserSchema
     devices: List[DeviceSchema]
     sessions: Optional[SessionSchema]
 
+
 class RegisterPendingResponse(BaseModel):
     message: str
     status: str
     email: str
+
 
 class MobileAuthResponse(BaseModel):
     access_token: str

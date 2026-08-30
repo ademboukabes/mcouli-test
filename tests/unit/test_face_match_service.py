@@ -24,8 +24,11 @@ from app.schema.internal.single_face_match import BBoxPayload, SingleFaceMatchJo
 @pytest.fixture
 def photo_face_querier() -> AsyncMock:
     from db.generated import photo_faces as pf_queries
+
     q = MagicMock(spec=pf_queries.AsyncQuerier)
-    q.photo_faces_photo_exists = AsyncMock(return_value=object())  # truthy → photo exists
+    q.photo_faces_photo_exists = AsyncMock(
+        return_value=object()
+    )  # truthy → photo exists
     q.photo_faces_match_exists_for_photo = AsyncMock(return_value=None)  # no duplicate
     q.photo_faces_ensure_face_match = AsyncMock()
     return q
@@ -34,6 +37,7 @@ def photo_face_querier() -> AsyncMock:
 @pytest.fixture
 def photo_querier() -> AsyncMock:
     from db.generated import photos as photo_queries
+
     q = MagicMock(spec=photo_queries.AsyncQuerier)
     q.update_photo_status = AsyncMock(return_value=None)
     return q
@@ -42,6 +46,7 @@ def photo_querier() -> AsyncMock:
 @pytest.fixture
 def user_match_service() -> AsyncMock:
     from app.service.users import AuthService
+
     svc = MagicMock(spec=AuthService)
     svc.find_closest_user = AsyncMock()
     return svc
@@ -50,6 +55,7 @@ def user_match_service() -> AsyncMock:
 @pytest.fixture
 def notification_service() -> AsyncMock:
     from app.service.user_notification import UserNotificationService
+
     svc = MagicMock(spec=UserNotificationService)
     svc.create_notification = AsyncMock()
     return svc
@@ -91,6 +97,7 @@ def _make_embedding(value: float = 0.5) -> list[float]:
 
 def _closest_match(distance: float = 0.3) -> object:
     from app.schema.internal.single_face_match import ClosestUserMatch
+
     return ClosestUserMatch(user_id=uuid.uuid4(), distance=distance)
 
 
@@ -194,7 +201,9 @@ class TestSuccessfulMatch:
 
         face_match_result = MagicMock()
         face_match_result.face_match_id = uuid.uuid4()
-        photo_face_querier.photo_faces_ensure_face_match.return_value = face_match_result
+        photo_face_querier.photo_faces_ensure_face_match.return_value = (
+            face_match_result
+        )
 
         await service.process_detected_face(job, _make_embedding(), bbox=None)
 
@@ -214,7 +223,9 @@ class TestSuccessfulMatch:
 
         face_match_result = MagicMock()
         face_match_result.face_match_id = uuid.uuid4()
-        photo_face_querier.photo_faces_ensure_face_match.return_value = face_match_result
+        photo_face_querier.photo_faces_ensure_face_match.return_value = (
+            face_match_result
+        )
 
         await service.process_detected_face(job, _make_embedding(), bbox=None)
 
@@ -236,7 +247,9 @@ class TestSuccessfulMatch:
 
         face_match_result = MagicMock()
         face_match_result.face_match_id = uuid.uuid4()
-        photo_face_querier.photo_faces_ensure_face_match.return_value = face_match_result
+        photo_face_querier.photo_faces_ensure_face_match.return_value = (
+            face_match_result
+        )
 
         await service.process_detected_face(job, _make_embedding(), bbox=None)
 
@@ -259,7 +272,9 @@ class TestSuccessfulMatch:
 
         face_match_result = MagicMock()
         face_match_result.face_match_id = uuid.uuid4()
-        photo_face_querier.photo_faces_ensure_face_match.return_value = face_match_result
+        photo_face_querier.photo_faces_ensure_face_match.return_value = (
+            face_match_result
+        )
 
         await service.process_detected_face(job, _make_embedding(), bbox=bbox)
 
@@ -298,7 +313,9 @@ class TestIdempotencyGuards:
         photo_face_querier: AsyncMock,
         photo_querier: AsyncMock,
     ) -> None:
-        photo_face_querier.photo_faces_match_exists_for_photo.return_value = object()  # exists
+        photo_face_querier.photo_faces_match_exists_for_photo.return_value = (
+            object()
+        )  # exists
 
         await service.process_detected_face(job, _make_embedding(), bbox=None)
 
@@ -337,7 +354,9 @@ class TestIdempotencyGuards:
 
         result_already_existed = MagicMock()
         result_already_existed.face_match_id = None  # already existed
-        photo_face_querier.photo_faces_ensure_face_match.return_value = result_already_existed
+        photo_face_querier.photo_faces_ensure_face_match.return_value = (
+            result_already_existed
+        )
 
         await service.process_detected_face(job, _make_embedding(), bbox=None)
 
@@ -363,7 +382,9 @@ class TestResilience:
 
         good_match = _closest_match(distance=0.1)
         user_match_service.find_closest_user.return_value = good_match
-        photo_face_querier.photo_faces_ensure_face_match.side_effect = SQLAlchemyError("DB down")
+        photo_face_querier.photo_faces_ensure_face_match.side_effect = SQLAlchemyError(
+            "DB down"
+        )
 
         # Should not raise — worker must stay alive
         await service.process_detected_face(job, _make_embedding(), bbox=None)

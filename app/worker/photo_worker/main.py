@@ -17,7 +17,11 @@ from app.infra.nats import NatsClient, NatsSubjects
 from app.infra.redis import RedisClient
 from app.schema.internal.notification import NotificationPriority, UnifiedNotification
 from app.schema.internal.single_face_match import BBoxPayload
-from app.service.face_embedding import DetectedFace, FaceEmbeddingService, FaceImagePayload
+from app.service.face_embedding import (
+    DetectedFace,
+    FaceEmbeddingService,
+    FaceImagePayload,
+)
 from app.service.face_match import SingleFaceMatchService
 from app.service.user_notification import UserNotificationService
 from app.worker.photo_worker.schema.event import PhotoProcessEvent
@@ -36,7 +40,6 @@ class PhotoApprovalDecision(str, Enum):
 
 
 class PhotoWorker:
-
     def __init__(
         self,
         conn: AsyncConnection,
@@ -72,9 +75,15 @@ class PhotoWorker:
         faces = await self._face_service.detect_faces(payload)
 
         if not faces:
-            logger.info("No faces detected in photo %s, marking as public", event.photo_id)
-            await self._photo_querier.update_photo_status(id=event.photo_id, status="approved")
-            await self._photo_querier.update_photo_visibility(id=event.photo_id, visibility="public")
+            logger.info(
+                "No faces detected in photo %s, marking as public", event.photo_id
+            )
+            await self._photo_querier.update_photo_status(
+                id=event.photo_id, status="approved"
+            )
+            await self._photo_querier.update_photo_visibility(
+                id=event.photo_id, visibility="public"
+            )
             await self._update_job(job, "completed")
             return
 
@@ -86,8 +95,9 @@ class PhotoWorker:
         await self._update_job(job, "completed")
         await self._publish_audit(event, len(faces))
 
-
-    async def _handle_single_face(self, event: PhotoProcessEvent, face: DetectedFace) -> None:
+    async def _handle_single_face(
+        self, event: PhotoProcessEvent, face: DetectedFace
+    ) -> None:
         from app.schema.internal.single_face_match import SingleFaceMatchJob
 
         bbox = BBoxPayload(
@@ -106,23 +116,32 @@ class PhotoWorker:
         )
 
         try:
-            await self._single_face_service.process_detected_face(job, face.embedding, bbox)
+            await self._single_face_service.process_detected_face(
+                job, face.embedding, bbox
+            )
         except Exception as exc:
-            logger.exception("Single face match failed for photo %s: %s", event.photo_id, exc)
+            logger.exception(
+                "Single face match failed for photo %s: %s", event.photo_id, exc
+            )
 
-
-    async def _handle_group_photo(self, event: PhotoProcessEvent, faces: list[DetectedFace]) -> None:
-        logger.info("Processing group photo %s with %d faces", event.photo_id, len(faces))
+    async def _handle_group_photo(
+        self, event: PhotoProcessEvent, faces: list[DetectedFace]
+    ) -> None:
+        logger.info(
+            "Processing group photo %s with %d faces", event.photo_id, len(faces)
+        )
 
         approvals_created = 0
 
         for face_index, face in enumerate(faces):
-            bbox_json = json.dumps({
-                "x1": float(face.bbox[0]),
-                "y1": float(face.bbox[1]),
-                "x2": float(face.bbox[2]),
-                "y2": float(face.bbox[3]),
-            })
+            bbox_json = json.dumps(
+                {
+                    "x1": float(face.bbox[0]),
+                    "y1": float(face.bbox[1]),
+                    "x2": float(face.bbox[2]),
+                    "y2": float(face.bbox[3]),
+                }
+            )
 
             embedding_literal = "[" + ", ".join(str(x) for x in face.embedding) + "]"
 
@@ -138,7 +157,9 @@ class PhotoWorker:
             )
 
             if approval is None:
-                logger.info("No match for face %d in photo %s", face_index, event.photo_id)
+                logger.info(
+                    "No match for face %d in photo %s", face_index, event.photo_id
+                )
                 continue
 
             approvals_created += 1
@@ -159,22 +180,32 @@ class PhotoWorker:
                         priority=NotificationPriority.NORMAL,
                     ),
                 )
-                logger.info("Notified user %s for group photo %s", approval.user_id, approval.photo_id)
+                logger.info(
+                    "Notified user %s for group photo %s",
+                    approval.user_id,
+                    approval.photo_id,
+                )
             except Exception as exc:
                 logger.warning(
                     "Failed to notify user %s for photo %s: %s",
-                    approval.user_id, event.photo_id, exc,
+                    approval.user_id,
+                    event.photo_id,
+                    exc,
                 )
 
         if approvals_created == 0:
-            logger.info("No users matched in group photo %s, leaving as pending", event.photo_id)
+            logger.info(
+                "No users matched in group photo %s, leaving as pending", event.photo_id
+            )
 
-
-    async def _create_job(self, event: PhotoProcessEvent) -> models.ProcessingJob | None:
+    async def _create_job(
+        self, event: PhotoProcessEvent
+    ) -> models.ProcessingJob | None:
         if self._pj_querier is None:
             return None
         return await self._pj_querier.create_processing_job(
-            photo_id=event.photo_id, job_type="face_detection",
+            photo_id=event.photo_id,
+            job_type="face_detection",
         )
 
     async def _update_job(self, job: models.ProcessingJob | None, status: str) -> None:
@@ -186,14 +217,19 @@ class PhotoWorker:
     async def _publish_audit(event: PhotoProcessEvent, faces_count: int) -> None:
         from app.core.constant import AuditEventType
         from app.worker.audit.schema.audit import AuditEventMessage
+
         msg = AuditEventMessage(
             event_type=AuditEventType.PHOTO_PROCESSED,
             metadata={"photo_id": str(event.photo_id), "faces_count": faces_count},
         )
         try:
-            await NatsClient.js_publish(NatsSubjects.AUDIT_EVENT, msg.model_dump_json().encode("utf-8"))
+            await NatsClient.js_publish(
+                NatsSubjects.AUDIT_EVENT, msg.model_dump_json().encode("utf-8")
+            )
         except Exception as exc:
-            logger.warning("Failed to publish audit for photo %s: %s", event.photo_id, exc)
+            logger.warning(
+                "Failed to publish audit for photo %s: %s", event.photo_id, exc
+            )
 
     @staticmethod
     def _parse_event(raw_data: bytes) -> PhotoProcessEvent | None:
@@ -220,7 +256,10 @@ class PhotoWorker:
                 last_exc = exc
                 logger.warning(
                     "MinIO fetch failed for %s (attempt %s/%s): %s",
-                    object_name, attempt, settings.MINIO_RETRY_ATTEMPTS, exc,
+                    object_name,
+                    attempt,
+                    settings.MINIO_RETRY_ATTEMPTS,
+                    exc,
                 )
                 if attempt < settings.MINIO_RETRY_ATTEMPTS:
                     await asyncio.sleep(settings.MINIO_RETRY_BASE_SECONDS * attempt)
@@ -231,7 +270,7 @@ class PhotoWorker:
     @staticmethod
     def _parse_minio_ref(image_ref: str) -> tuple[str, str]:
         if image_ref.startswith(MINIO_URL_PREFIX):
-            raw = image_ref[len(MINIO_URL_PREFIX):]
+            raw = image_ref[len(MINIO_URL_PREFIX) :]
             parts = raw.split("/", 1)
             if len(parts) != 2 or not parts[0] or not parts[1]:
                 raise ValueError("Invalid MinIO image_ref format")
@@ -289,7 +328,10 @@ async def run_worker() -> None:
         durable_name=worker_settings.durable_name,
     )
 
-    logger.info("PhotoWorker subscribed on %s; waiting for jobs", NatsSubjects.PHOTO_PROCESS.value)
+    logger.info(
+        "PhotoWorker subscribed on %s; waiting for jobs",
+        NatsSubjects.PHOTO_PROCESS.value,
+    )
     try:
         await asyncio.Event().wait()
     finally:

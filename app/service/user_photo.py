@@ -83,7 +83,8 @@ class UserPhotoService:
         event_id: UUID,
     ) -> int:
         count = await self._photo_querier.count_event_photos_for_user(
-            user_id=user_id, event_id=event_id,
+            user_id=user_id,
+            event_id=event_id,
         )
         return count or 0
 
@@ -138,11 +139,16 @@ class UserPhotoService:
     async def _user_has_access(self, user_id: UUID, photo_id: UUID) -> bool:
         """Check if user has a face_match or photo_approval for this photo."""
         match = await self._photo_face_querier.user_has_face_match_for_photo(
-            photo_id=photo_id, user_id=user_id,
+            photo_id=photo_id,
+            user_id=user_id,
         )
         if match is not None:
             return True
-        async for approval in self._photo_approval_querier.get_photo_approvals_by_photo_id(photo_id=photo_id):
+        async for (
+            approval
+        ) in self._photo_approval_querier.get_photo_approvals_by_photo_id(
+            photo_id=photo_id
+        ):
             if approval.user_id == user_id:
                 return True
         return False

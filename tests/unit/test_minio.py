@@ -13,6 +13,7 @@ from app.infra.minio import (
     init_minio_client,
 )
 
+
 @pytest.fixture
 def mock_minio_client():
     client = AsyncMock()
@@ -114,6 +115,7 @@ async def test_bucket_get_not_found(mock_minio_client):
     bucket = Bucket("test_bucket", "")
 
     from fastapi import HTTPException
+
     with pytest.raises(HTTPException) as exc:
         await bucket.get("test.jpg")
     assert exc.value.status_code == 404
@@ -138,9 +140,7 @@ async def test_bucket_put_bytes(mock_minio_client):
     bucket = Bucket("test_bucket", "")
 
     await bucket.put_bytes(
-        data=b"byte_data",
-        object_name="byte_test.txt",
-        content_type="text/plain"
+        data=b"byte_data", object_name="byte_test.txt", content_type="text/plain"
     )
 
     mock_minio_client.put_object.assert_called_once()
@@ -186,6 +186,7 @@ async def test_image_bucket_invalid_extension(mock_minio_client, mock_upload_fil
     mock_upload_file.content_type = "application/pdf"
 
     from fastapi import HTTPException
+
     with pytest.raises(HTTPException) as exc:
         await bucket.put(mock_upload_file)
 
@@ -206,7 +207,9 @@ async def test_wa_sim_bucket_auto_name(mock_minio_client, mock_upload_file):
 @pytest.mark.asyncio
 async def test_presigned_put_url_calls_client_with_expiry(mock_minio_client):
     Bucket.client = mock_minio_client
-    mock_minio_client.presigned_put_object = AsyncMock(return_value="https://minio.local/signed")
+    mock_minio_client.presigned_put_object = AsyncMock(
+        return_value="https://minio.local/signed"
+    )
     bucket = Bucket("test_bucket", "")
 
     url = await bucket.presigned_put_url("staging/foo.jpg", expires_seconds=1800)
@@ -234,8 +237,12 @@ async def test_stat_returns_object_stat_when_present(mock_minio_client):
 async def test_stat_returns_none_when_object_missing(mock_minio_client):
     Bucket.client = mock_minio_client
     error = S3Error(
-        code="NoSuchKey", message="not found", resource="", request_id="",
-        host_id="", response=MagicMock(),
+        code="NoSuchKey",
+        message="not found",
+        resource="",
+        request_id="",
+        host_id="",
+        response=MagicMock(),
     )
     mock_minio_client.stat_object = AsyncMock(side_effect=error)
     bucket = Bucket("test_bucket", "")

@@ -33,8 +33,10 @@ class FakeUser:
         self.id = uuid.uuid4()
         self.email = "test@example.com"
         from app.core.securite import hash_password
+
         self.hashed_password = hash_password("ValidPass@123")
         self.blocked = False
+
 
 class FakeUserQuerier:
     def __init__(self) -> None:
@@ -45,6 +47,7 @@ class FakeUserQuerier:
 
     async def get_user_by_id_for_update(self, id: uuid.UUID) -> FakeUser:
         return self._user
+
 
 class FakeDeviceQuerier:
     pass
@@ -72,6 +75,7 @@ def test_rate_limiting_triggered_after_max_attempts() -> None:
     # Stub session creation to avoid database / redis dependencies
     async def _dummy_create_session(*args: object, **kwargs: object) -> Any:
         from app.schema.response.mobile.auth import MobileAuthResponse
+
         return MobileAuthResponse(
             access_token="access",
             refresh_token="refresh",
@@ -80,6 +84,7 @@ def test_rate_limiting_triggered_after_max_attempts() -> None:
             user_id=uuid.uuid4(),
             is_new_user=False,
         )
+
     service._create_mobile_session = _dummy_create_session  # type: ignore
 
     req = MobileLoginRequest(

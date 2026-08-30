@@ -15,6 +15,7 @@ from app.core.constant import (
     GOOGLE_TOKEN_URL,
     GOOGLE_USERINFO_URL,
 )
+
 GOOGLE_DRIVE_LIST_FILES_URL = "https://www.googleapis.com/drive/v3/files"
 
 
@@ -117,8 +118,7 @@ class GoogleDriveClient:
             expires_at=expires_at,
             scope=GoogleDriveClient._optional_str(data, "scope")
             or settings.GOOGLE_OAUTH_SCOPES,
-            token_type=GoogleDriveClient._optional_str(data, "token_type")
-            or "Bearer",
+            token_type=GoogleDriveClient._optional_str(data, "token_type") or "Bearer",
         )
 
     @staticmethod
@@ -142,8 +142,7 @@ class GoogleDriveClient:
             expires_at=expires_at,
             scope=GoogleDriveClient._optional_str(data, "scope")
             or settings.GOOGLE_OAUTH_SCOPES,
-            token_type=GoogleDriveClient._optional_str(data, "token_type")
-            or "Bearer",
+            token_type=GoogleDriveClient._optional_str(data, "token_type") or "Bearer",
         )
 
     @staticmethod
@@ -204,12 +203,16 @@ class GoogleDriveClient:
             metadata["parents"] = [folder_id]
 
         body = (
-            f"--{boundary}\r\n"
-            "Content-Type: application/json; charset=UTF-8\r\n\r\n"
-            f"{json.dumps(metadata)}\r\n"
-            f"--{boundary}\r\n"
-            f"Content-Type: {content_type}\r\n\r\n"
-        ).encode("utf-8") + data + f"\r\n--{boundary}--".encode("utf-8")
+            (
+                f"--{boundary}\r\n"
+                "Content-Type: application/json; charset=UTF-8\r\n\r\n"
+                f"{json.dumps(metadata)}\r\n"
+                f"--{boundary}\r\n"
+                f"Content-Type: {content_type}\r\n\r\n"
+            ).encode("utf-8")
+            + data
+            + f"\r\n--{boundary}--".encode("utf-8")
+        )
 
         def _request() -> dict[str, object]:
             url = (
@@ -234,12 +237,16 @@ class GoogleDriveClient:
                     f"Google Drive file upload failed: {details or exc.reason}"
                 ) from exc
             except urllib.error.URLError as exc:
-                raise AppException.internal_error("Unable to reach Google APIs") from exc
+                raise AppException.internal_error(
+                    "Unable to reach Google APIs"
+                ) from exc
 
         result = await asyncio.to_thread(_request)
         size_raw = result.get("size", "0")
         try:
-            size_bytes = int(size_raw) if isinstance(size_raw, (str, int)) else len(data)
+            size_bytes = (
+                int(size_raw) if isinstance(size_raw, (str, int)) else len(data)
+            )
         except (TypeError, ValueError):
             size_bytes = len(data)
 
@@ -299,11 +306,15 @@ class GoogleDriveClient:
 
             raw_files = data.get("files", [])
             if not isinstance(raw_files, list):
-                raise AppException.bad_request("Google Drive folder listing response is invalid")
+                raise AppException.bad_request(
+                    "Google Drive folder listing response is invalid"
+                )
 
             for raw_file in raw_files:
                 if not isinstance(raw_file, dict):
-                    raise AppException.bad_request("Google Drive folder entry is invalid")
+                    raise AppException.bad_request(
+                        "Google Drive folder entry is invalid"
+                    )
                 metadata = GoogleDriveClient._file_metadata_from_dict(raw_file)
                 if metadata.mime_type == GoogleDriveClient._drive_folder_mime_type:
                     continue
@@ -313,7 +324,9 @@ class GoogleDriveClient:
             if next_page_token_raw is None:
                 break
             if not isinstance(next_page_token_raw, str) or not next_page_token_raw:
-                raise AppException.bad_request("Google Drive next page token is invalid")
+                raise AppException.bad_request(
+                    "Google Drive next page token is invalid"
+                )
             next_page_token = next_page_token_raw
 
         return files
@@ -349,7 +362,9 @@ class GoogleDriveClient:
 
             raw_files = data.get("files", [])
             if not isinstance(raw_files, list):
-                raise AppException.bad_request("Google Drive folder listing response is invalid")
+                raise AppException.bad_request(
+                    "Google Drive folder listing response is invalid"
+                )
 
             for raw_file in raw_files:
                 if not isinstance(raw_file, dict):
@@ -468,7 +483,9 @@ class GoogleDriveClient:
             final_url = url
             if query_params:
                 final_url = f"{url}?{urllib.parse.urlencode(query_params)}"
-            request = urllib.request.Request(final_url, headers=headers or {}, method="GET")
+            request = urllib.request.Request(
+                final_url, headers=headers or {}, method="GET"
+            )
             try:
                 with urllib.request.urlopen(request, timeout=15) as response:
                     return json.loads(response.read().decode("utf-8"))
@@ -494,7 +511,9 @@ class GoogleDriveClient:
             final_url = url
             if query_params:
                 final_url = f"{url}?{urllib.parse.urlencode(query_params)}"
-            request = urllib.request.Request(final_url, headers=headers or {}, method="GET")
+            request = urllib.request.Request(
+                final_url, headers=headers or {}, method="GET"
+            )
             try:
                 with urllib.request.urlopen(request, timeout=30) as response:
                     body = response.read()
@@ -508,6 +527,8 @@ class GoogleDriveClient:
                     f"Google file download failed: {details or exc.reason}"
                 ) from exc
             except urllib.error.URLError as exc:
-                raise AppException.internal_error("Unable to download file from Google Drive") from exc
+                raise AppException.internal_error(
+                    "Unable to download file from Google Drive"
+                ) from exc
 
         return await asyncio.to_thread(_request)

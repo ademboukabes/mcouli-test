@@ -52,7 +52,9 @@ class UserNotificationService:
                 if tokens:
                     notification = notification.model_copy(update={"tokens": tokens})
                 else:
-                    logger.info("No active push tokens for user %s, skipping push", user_id)
+                    logger.info(
+                        "No active push tokens for user %s, skipping push", user_id
+                    )
                     return notification_record
             await self._notification_queue.enqueue_notification(notification)
 
@@ -64,9 +66,9 @@ class UserNotificationService:
         user_id: uuid.UUID,
     ) -> list[Notification]:
         notifications: list[Notification] = []
-        async for notification in self.notification_querier.list_notifications_by_user_id(
-            user_id=user_id
-        ):
+        async for (
+            notification
+        ) in self.notification_querier.list_notifications_by_user_id(user_id=user_id):
             notifications.append(notification)
         return notifications
 

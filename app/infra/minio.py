@@ -24,6 +24,7 @@ IMAGES_BUCKET_NAME = CORE_IMAGES_BUCKET_NAME
 DOCUMENTS_BUCKET_NAME = CORE_DOCUMENTS_BUCKET_NAME
 WA_SIM_BUCKET_NAME = CORE_WA_SIM_BUCKET_NAME
 
+
 async def init_minio_client(
     minio_host: str, minio_port: int, minio_root_user: str, minio_root_password: str
 ) -> None:
@@ -37,6 +38,7 @@ async def init_minio_client(
     for bucket_name in [IMAGES_BUCKET_NAME, DOCUMENTS_BUCKET_NAME, WA_SIM_BUCKET_NAME]:
         if not await Bucket.client.bucket_exists(bucket_name):
             await Bucket.client.make_bucket(bucket_name)
+
 
 @dataclass(frozen=True)
 class ObjectStat:
@@ -94,9 +96,7 @@ class Bucket:
                 raise e
 
         data = await res.read()
-        content_type = (
-            res.content_type if res.content_type else DEFAULT_CONTENT_TYPE
-        )
+        content_type = res.content_type if res.content_type else DEFAULT_CONTENT_TYPE
         filename = res.headers.get("x-amz-meta-filename", f"{object_name}")
 
         res.close()
@@ -155,7 +155,11 @@ class Bucket:
             if e.code == "NoSuchKey":
                 return None
             raise
-        return ObjectStat(size=result.size or 0, content_type=result.content_type or DEFAULT_CONTENT_TYPE)
+        return ObjectStat(
+            size=result.size or 0,
+            content_type=result.content_type or DEFAULT_CONTENT_TYPE,
+        )
+
 
 image_ext_content_type_map = {
     "apng": ["image/apng"],
@@ -169,6 +173,7 @@ image_ext_content_type_map = {
     "ico": ["image/x-icon", "image/vnd.microsoft.icon"],
 }
 
+
 class ImageBucket(Bucket):
     def __init__(self, file_prefix: str):
         super().__init__(IMAGES_BUCKET_NAME, file_prefix)
@@ -177,9 +182,11 @@ class ImageBucket(Bucket):
         check_extension(file, image_ext_content_type_map)
         return await super().put(file, object_name)
 
+
 class DocumentBucket(Bucket):
     def __init__(self, file_prefix: str):
         super().__init__(DOCUMENTS_BUCKET_NAME, file_prefix)
+
 
 class WaSimBucket(Bucket):
     def __init__(self) -> None:
