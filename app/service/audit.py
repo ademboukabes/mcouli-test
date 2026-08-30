@@ -55,7 +55,7 @@ class AuditService:
             metadata=metadata,
             description=description,
         ).model_dump_json()
-        await NatsClient.publish(NatsSubjects.AUDIT_EVENT, message.encode("utf-8"))
+        await NatsClient.js_publish(NatsSubjects.AUDIT_EVENT, message.encode("utf-8"))
 
     async def list_audit_events(
         self,

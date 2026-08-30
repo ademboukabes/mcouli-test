@@ -24,7 +24,7 @@ class NotificationQueue:
         entry = NotificationQueueEntry(notification=notification, attempts=attempts)
         subject = self._settings.subject_for(entry.notification.priority)
         payload = entry.model_dump_json().encode("utf-8")
-        await NatsClient.publish(subject, payload)
+        await NatsClient.js_publish(subject, payload, stream_name="notification_delivery_stream")
 
     @staticmethod
     def priority_index(priority: NotificationPriority) -> int:

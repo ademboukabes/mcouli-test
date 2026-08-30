@@ -160,7 +160,7 @@ async def test_create_request_success(
     )
 
     with patch("app.service.upload_requests.GoogleDriveClient.download_file", return_value=mock_download) as mock_drive, \
-         patch("app.service.upload_requests.NatsClient.publish") as mock_publish:
+         patch("app.service.upload_requests.NatsClient.js_publish") as mock_publish:
 
         details = await upload_requests_service.create_request(
             event_id=event_id,
@@ -231,7 +231,7 @@ async def test_create_group_from_folder(
             id=group_id, event_id=event_id, folder_id="folder_123", requested_by=mock_staff_user.id, total_photo_count=0, batch_count=0, processed_photo_count=0, failed_photo_count=0, processing_status="pending", error_message=None, created_at=datetime.now(timezone.utc), status="pending", approved_by=None, approved_at=None, rejection_reason=None, source="drive"
         )
 
-    with patch("app.service.upload_requests.NatsClient.publish") as mock_publish:
+    with patch("app.service.upload_requests.NatsClient.js_publish") as mock_publish:
         details = await upload_requests_service.create_group_from_folder(
             event_id=event_id, folder_id="folder_123", visibility="public", day_number=None, requested_by=mock_staff_user
         )

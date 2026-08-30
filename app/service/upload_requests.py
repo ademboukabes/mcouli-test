@@ -481,7 +481,7 @@ class UploadRequestsService:
         payload: dict[str, object],
     ) -> None:
         try:
-            await NatsClient.publish(subject, json.dumps(payload).encode("utf-8"))
+            await NatsClient.js_publish(subject, json.dumps(payload).encode("utf-8"))
         except Exception as exc:
             logger.warning("Failed to publish upload request event %s: %s", subject.value, exc)
 

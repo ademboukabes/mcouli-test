@@ -47,7 +47,8 @@ def auth_service(
     )
 
 @pytest.mark.asyncio
-@patch("app.service.users.NatsClient.publish")
+@patch("app.service.users.settings.environment", "production")
+@patch("app.service.users.NatsClient.js_publish")
 async def test_mobile_register_sends_otp(
     mock_publish: AsyncMock,
     auth_service: AuthService,
@@ -140,7 +141,8 @@ async def test_mobile_register_resend_otp_success(
     mock_redis.get.return_value = '{"hashed_password": "fake"}'
     mock_redis.incr.return_value = 1
 
-    with patch("app.service.users.NatsClient.publish", new_callable=AsyncMock) as mock_publish:
+    with patch("app.service.users.settings.environment", "production"), \
+         patch("app.service.users.NatsClient.js_publish", new_callable=AsyncMock) as mock_publish:
         res = await auth_service.mobile_register_resend_otp(redis=mock_redis, email=email)
 
     assert res.status == "pending_verification"

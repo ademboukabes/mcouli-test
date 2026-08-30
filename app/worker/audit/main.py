@@ -55,16 +55,16 @@ async def _handle_event(worker: AuditDeliveryWorker, raw_data: bytes) -> None:
     except ValidationError as exc:
         logger.warning("Audit payload validation failed: %s", exc)
         return
-    try:
-        await worker.persist(payload)
-    except Exception:
-        logger.exception("Failed to persist audit for %s", payload.event_type)
+    await worker.persist(payload)
 
 
 async def listen_nats_event(worker: AuditDeliveryWorker) -> None:
-    await NatsClient.subscribe(
+    async def handler(data: bytes) -> None:
+        await _handle_event(worker, data)
+        
+    await NatsClient.js_subscribe(
         NatsSubjects.AUDIT_EVENT,
-        lambda data: _handle_event(worker, data),
+        handler,
     )
     logger.info("Listening for audit events on %s", AUDIT_EVENT_SUBJECT)
 

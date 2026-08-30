@@ -48,7 +48,7 @@ async def _handle_event(raw_data: bytes) -> None:
         data, _, content_type = await bucket.get(event.storage_key)
     except Exception as exc:
         logger.warning("drive_sync: failed to read photo %s from storage: %s", event.photo_id, exc)
-        return
+        raise
 
     async with engine.begin() as conn:
         staff_drive_service = StaffDriveService(
@@ -66,7 +66,7 @@ async def _handle_event(raw_data: bytes) -> None:
             )
         except Exception as exc:
             logger.warning("drive_sync: upload failed for photo %s: %s", event.photo_id, exc)
-            return
+            raise
 
         synced = await photo_querier.mark_photo_drive_synced(
             id=event.photo_id, drive_file_id=drive_file_id,
@@ -93,7 +93,7 @@ async def main() -> None:
     )
     await NatsClient.connect()
     try:
-        await NatsClient.subscribe(NatsSubjects.PHOTO_DRIVE_SYNC_REQUESTED, _handle_event)
+        await NatsClient.js_subscribe(NatsSubjects.PHOTO_DRIVE_SYNC_REQUESTED, _handle_event)
         await asyncio.Event().wait()
     finally:
         await NatsClient.close()

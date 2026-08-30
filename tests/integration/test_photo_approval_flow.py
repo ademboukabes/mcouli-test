@@ -105,6 +105,7 @@ async def test_group_photo_approval_lifecycle(
             name="Approval Test Event",
             event_code=f"APP{str(event_id)[:4]}",
             event_date=datetime.datetime.now(datetime.timezone.utc),
+            end_date=datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(days=1),
             status="scheduled",
             created_by=event_creator_id
         )
@@ -115,6 +116,7 @@ async def test_group_photo_approval_lifecycle(
         photo_queries.CreatePhotoParams(
             event_id=event_id,
             storage_key="test/group.jpg",
+            source="direct",
             taken_at=None,
             day_number=None,
             visibility="public"
@@ -185,6 +187,7 @@ async def test_group_photo_rejection_deletes_storage(
             name="Reject Test Event",
             event_code=f"REJ{str(event_id)[:4]}",
             event_date=datetime.datetime.now(datetime.timezone.utc),
+            end_date=datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(days=1),
             status="scheduled",
             created_by=event_creator_id
         )
@@ -195,6 +198,7 @@ async def test_group_photo_rejection_deletes_storage(
         photo_queries.CreatePhotoParams(
             event_id=event_id,
             storage_key="test/reject.jpg",
+            source="direct",
             taken_at=None,
             day_number=None,
             visibility="public"

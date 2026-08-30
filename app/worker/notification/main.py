@@ -114,7 +114,11 @@ async def run_worker(
             await handle_message(msg, queue, invalid_tokens, invalid_devices)
 
     for subject in queue.priority_subjects():
-        await NatsClient.subscribe(subject, wrapped_handler)
+        await NatsClient.js_subscribe(
+            subject, 
+            wrapped_handler, 
+            stream_name="notification_delivery_stream"
+        )
 
     await asyncio.Event().wait()
 

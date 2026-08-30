@@ -91,7 +91,7 @@ async def test_handle_message_success_no_faces(photo_worker, sample_event, mock_
     photo_worker._load_image = AsyncMock(return_value=FaceImagePayload(filename="test.jpg", content_type="image/jpeg", bytes=b"data"))
     mock_face_service.detect_faces.return_value = []
 
-    with patch("app.worker.photo_worker.main.NatsClient.publish") as mock_publish:
+    with patch("app.worker.photo_worker.main.NatsClient.js_publish") as mock_publish:
         await photo_worker.handle_message(sample_event.model_dump_json().encode("utf-8"))
 
         mock_pj_querier.create_processing_job.assert_called_once()
@@ -110,7 +110,7 @@ async def test_handle_message_success_single_face(photo_worker, sample_event, mo
     face = DetectedFace(bbox=(0, 0, 100, 100), embedding=[0.1] * 512)
     mock_face_service.detect_faces.return_value = [face]
 
-    with patch("app.worker.photo_worker.main.NatsClient.publish") as mock_publish:
+    with patch("app.worker.photo_worker.main.NatsClient.js_publish") as mock_publish:
         await photo_worker.handle_message(sample_event.model_dump_json().encode("utf-8"))
 
         mock_pj_querier.update_processing_job_status.assert_any_call(id=mock_pj_querier.create_processing_job.return_value.id, status="completed")
@@ -126,7 +126,7 @@ async def test_handle_message_success_group_face(photo_worker, sample_event, moc
     face2 = DetectedFace(bbox=(100, 100, 200, 200), embedding=[0.2] * 512)
     mock_face_service.detect_faces.return_value = [face1, face2]
 
-    with patch("app.worker.photo_worker.main.NatsClient.publish"):
+    with patch("app.worker.photo_worker.main.NatsClient.js_publish"):
         await photo_worker.handle_message(sample_event.model_dump_json().encode("utf-8"))
 
         mock_pj_querier.update_processing_job_status.assert_any_call(id=mock_pj_querier.create_processing_job.return_value.id, status="completed")
@@ -137,16 +137,18 @@ async def test_handle_message_success_group_face(photo_worker, sample_event, moc
 @pytest.mark.asyncio
 async def test_handle_message_fails_on_minio_load(photo_worker, sample_event, mock_pj_querier):
     photo_worker._load_image = AsyncMock(side_effect=Exception("MinIO error"))
-    await photo_worker.handle_message(sample_event.model_dump_json().encode("utf-8"))
-    mock_pj_querier.update_processing_job_status.assert_called_with(id=mock_pj_querier.create_processing_job.return_value.id, status="failed")
+    with pytest.raises(Exception, match="MinIO error"):
+        await photo_worker.handle_message(sample_event.model_dump_json().encode("utf-8"))
+    assert "failed" not in [call.kwargs.get("status") for call in mock_pj_querier.update_processing_job_status.call_args_list]
 
 
 @pytest.mark.asyncio
 async def test_handle_message_fails_on_ai_detection(photo_worker, sample_event, mock_face_service, mock_pj_querier):
     photo_worker._load_image = AsyncMock(return_value=FaceImagePayload(filename="test.jpg", content_type="image/jpeg", bytes=b"data"))
     mock_face_service.detect_faces.side_effect = Exception("InsightFace out of memory")
-    await photo_worker.handle_message(sample_event.model_dump_json().encode("utf-8"))
-    mock_pj_querier.update_processing_job_status.assert_called_with(id=mock_pj_querier.create_processing_job.return_value.id, status="failed")
+    with pytest.raises(Exception, match="InsightFace out of memory"):
+        await photo_worker.handle_message(sample_event.model_dump_json().encode("utf-8"))
+    assert "failed" not in [call.kwargs.get("status") for call in mock_pj_querier.update_processing_job_status.call_args_list]
 
 
 @pytest.mark.asyncio

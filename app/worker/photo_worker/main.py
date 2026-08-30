@@ -65,21 +65,11 @@ class PhotoWorker:
         # transaction rolls back cleanly instead of being committed half-applied.
         job = await self._create_job(event)
 
-        try:
-            payload = await self._load_image(event.image_ref)
-        except Exception as exc:
-            logger.warning("Failed to load image for photo %s: %s", event.photo_id, exc)
-            await self._update_job(job, "failed")
-            return
+        payload = await self._load_image(event.image_ref)
 
         await self._update_job(job, "running")
 
-        try:
-            faces = await self._face_service.detect_faces(payload)
-        except Exception as exc:
-            logger.warning("Face detection failed for photo %s: %s", event.photo_id, exc)
-            await self._update_job(job, "failed")
-            return
+        faces = await self._face_service.detect_faces(payload)
 
         if not faces:
             logger.info("No faces detected in photo %s, marking as public", event.photo_id)
@@ -201,7 +191,7 @@ class PhotoWorker:
             metadata={"photo_id": str(event.photo_id), "faces_count": faces_count},
         )
         try:
-            await NatsClient.publish(NatsSubjects.AUDIT_EVENT, msg.model_dump_json().encode("utf-8"))
+            await NatsClient.js_publish(NatsSubjects.AUDIT_EVENT, msg.model_dump_json().encode("utf-8"))
         except Exception as exc:
             logger.warning("Failed to publish audit for photo %s: %s", event.photo_id, exc)
 
@@ -272,28 +262,25 @@ async def run_worker() -> None:
         # pool_pre_ping the connection is also revalidated on checkout, so a
         # Postgres restart is recovered automatically. Errors are logged here so a
         # single bad message does not tear down the subscription.
-        try:
-            async with engine.begin() as conn:
-                container = Container(conn)
-                single_face_service = SingleFaceMatchService(
-                    conn=conn,
-                    photo_face_querier=container.photo_face_querier,
-                    photo_querier=container.photo_querier,
-                    user_match_service=container.auth_service,
-                    user_notification_service=container.user_notifications_service,
-                )
-                worker = PhotoWorker(
-                    conn=conn,
-                    face_embedding_service=container.face_embedding_service,
-                    single_face_service=single_face_service,
-                    user_notification_service=container.user_notifications_service,
-                    photo_face_querier=container.photo_face_querier,
-                    photo_querier=container.photo_querier,
-                    processing_job_querier=container.processing_job_querier,
-                )
-                await worker.handle_message(data)
-        except Exception:
-            logger.exception("Failed to process photo message")
+        async with engine.begin() as conn:
+            container = Container(conn)
+            single_face_service = SingleFaceMatchService(
+                conn=conn,
+                photo_face_querier=container.photo_face_querier,
+                photo_querier=container.photo_querier,
+                user_match_service=container.auth_service,
+                user_notification_service=container.user_notifications_service,
+            )
+            worker = PhotoWorker(
+                conn=conn,
+                face_embedding_service=container.face_embedding_service,
+                single_face_service=single_face_service,
+                user_notification_service=container.user_notifications_service,
+                photo_face_querier=container.photo_face_querier,
+                photo_querier=container.photo_querier,
+                processing_job_querier=container.processing_job_querier,
+            )
+            await worker.handle_message(data)
 
     await NatsClient.js_subscribe(
         subject=NatsSubjects.PHOTO_PROCESS,

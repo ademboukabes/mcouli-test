@@ -373,7 +373,7 @@ async def test_approve_request_publishes_drive_sync_event_for_direct_photo_only(
         request_id, event_id, mock_staff_user.id, None,
     )
 
-    with patch("app.service.upload_requests.NatsClient.publish") as mock_publish:
+    with patch("app.service.upload_requests.NatsClient.js_publish") as mock_publish:
         await upload_requests_service.approve_request(
             request_id=request_id, approved_by=mock_staff_user,
         )

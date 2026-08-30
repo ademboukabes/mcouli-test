@@ -37,7 +37,7 @@ async def test_photo_ai_pipeline_detects_single_face() -> None:
         "image_ref": storage_key,
         "event_id": str(event_id),
     }
-    await NatsClient.publish(
+    await NatsClient.js_publish(
         NatsSubjects.PHOTO_PROCESS, json.dumps(payload).encode("utf-8")
     )
 
@@ -89,7 +89,7 @@ async def test_photo_ai_pipeline_corrupt_image() -> None:
         "image_ref": storage_key,
         "event_id": str(event_id),
     }
-    await NatsClient.publish(
+    await NatsClient.js_publish(
         NatsSubjects.PHOTO_PROCESS, json.dumps(payload).encode("utf-8")
     )
 

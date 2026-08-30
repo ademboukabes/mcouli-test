@@ -193,7 +193,7 @@ class AuthService:
             otp = "".join(secrets.choice("0123456789") for _ in range(6))
             await redis.set(f"otp:{req.email}", otp, expire=600)
             # Send to NATS
-            await NatsClient.publish("email.send_otp", json.dumps({"email": req.email, "otp": otp}).encode("utf-8"))
+            await NatsClient.js_publish("email.send_otp", json.dumps({"email": req.email, "otp": otp}).encode("utf-8"))
 
         logger.info("register success, OTP sent")
         return RegisterPendingResponse(
@@ -240,7 +240,7 @@ class AuthService:
             # Regenerate OTP with 10 mins TTL, without touching the pending_user TTL
             await redis.set(f"otp:{email}", otp, expire=600)
             # Send to NATS
-            await NatsClient.publish("email.send_otp", json.dumps({"email": email, "otp": otp}).encode("utf-8"))
+            await NatsClient.js_publish("email.send_otp", json.dumps({"email": email, "otp": otp}).encode("utf-8"))
 
         logger.info("resend_otp success, new OTP sent to %s", email)
         return RegisterPendingResponse(

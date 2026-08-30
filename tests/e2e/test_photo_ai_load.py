@@ -153,7 +153,7 @@ async def test_photo_ai_load_20_photos(setup_infra: None) -> None:  # noqa: ARG0
         # 2. Publish 20 NATS messages concurrently
         await asyncio.gather(
             *[
-                NatsClient.publish(
+                NatsClient.js_publish(
                     NatsSubjects.PHOTO_PROCESS.value,
                     json.dumps(
                         {
