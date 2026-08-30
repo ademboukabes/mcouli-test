@@ -291,7 +291,9 @@ class StaffDriveService:
         folder_id = settings.GOOGLE_CLUB_DRIVE_FOLDER_ID or None
 
         if event_id and event_name:
-            folder_id = await self._get_or_create_event_folder(event_id, event_name, access_token)
+            folder_id = await self._get_or_create_event_folder(
+                event_id, event_name, access_token
+            )
 
         metadata = await GoogleDriveClient.upload_file(
             access_token=access_token,
