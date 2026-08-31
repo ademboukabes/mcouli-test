@@ -48,12 +48,16 @@ class PhotoApprovalService:
             )
 
         approvals = []
-        async for a in self._approval_querier.get_photo_approvals_by_photo_id(photo_id=photo_id):
+        async for a in self._approval_querier.get_photo_approvals_by_photo_id(
+            photo_id=photo_id
+        ):
             approvals.append(a)
 
         rejected = [a for a in approvals if a.decision == "rejected"]
         if rejected:
-            await self._photo_querier.update_photo_status(id=photo_id, status="rejected")
+            await self._photo_querier.update_photo_status(
+                id=photo_id, status="rejected"
+            )
             await self._delete_photo_storage(photo_id)
             return "rejected"
 
@@ -66,7 +70,9 @@ class PhotoApprovalService:
 
     async def expire_stale(self, timeout_days: int) -> int:
         count = 0
-        async for _ in self._approval_querier.expire_stale_approvals(timeout_days=timeout_days):
+        async for _ in self._approval_querier.expire_stale_approvals(
+            timeout_days=timeout_days
+        ):
             count += 1
         if count:
             logger.info("Auto-expired %d stale pending photo(s)", count)

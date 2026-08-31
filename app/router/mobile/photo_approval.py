@@ -4,7 +4,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Query
 
 from app.container import Container, get_container
-from app.deps.token_auth import MobileUserSchema, get_current_mobile_user
+from app.deps.token_auth import MobileUserSchema, require_onboarded_mobile_user
 from app.schema.request.mobile.photo_approval import PhotoApprovalRequest
 
 router = APIRouter(prefix="/photos")
@@ -15,7 +15,7 @@ async def list_my_approvals(
     status: Literal["pending", "approved", "rejected"] | None = Query(default=None),
     limit: int = Query(default=50, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
-    current_user: MobileUserSchema = Depends(get_current_mobile_user),
+    current_user: MobileUserSchema = Depends(require_onboarded_mobile_user),
     container: Container = Depends(get_container),
 ) -> list[dict[str, object]]:
     approvals: list[dict[str, object]] = []
@@ -39,7 +39,7 @@ async def list_my_approvals(
 async def decide_photo_approval(
     photo_id: UUID,
     req: PhotoApprovalRequest,
-    current_user: MobileUserSchema = Depends(get_current_mobile_user),
+    current_user: MobileUserSchema = Depends(require_onboarded_mobile_user),
     container: Container = Depends(get_container),
 ) -> dict[str, str]:
     photo_status = await container.photo_approval_service.decide(

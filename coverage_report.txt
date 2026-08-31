@@ -1,0 +1,96 @@
+Name                                                Stmts   Miss  Cover   Missing
+---------------------------------------------------------------------------------
+app/__init__.py                                         0      0   100%
+app/container.py                                       83      0   100%
+app/core/config.py                                     74      7    91%   98, 100-105
+app/core/constant.py                                   42      0   100%
+app/core/exceptions.py                                 90     20    78%   27, 31, 47, 51, 55, 68, 74, 80, 97-106, 117, 126, 130, 136
+app/core/image_validation.py                           78     10    87%   48, 54-55, 117-128
+app/core/logger.py                                      5      0   100%
+app/core/securite.py                                   89     19    79%   37, 69, 73-74, 78-79, 83-90, 150-158, 169-177, 188-198
+app/core/utils.py                                      18     12    33%   13-37
+app/deps/ai_deps.py                                     5      0   100%
+app/deps/client_ip.py                                  11      1    91%   13
+app/deps/cookie_auth.py                                36     23    36%   13, 21-40, 44-46, 52, 56-58, 63
+app/deps/rate_limit.py                                 23      5    78%   20-24
+app/deps/token_auth.py                                 45     17    62%   39, 56-64, 83-112
+app/infra/database.py                                   8      1    88%   18
+app/infra/google_drive.py                             233    165    29%   56-59, 63-68, 72-77, 83-96, 100-114, 126-139, 151-156, 168-185, 198-210, 218-258, 267-303, 313-354, 358-366, 375-397, 406-424, 432-452
+app/infra/minio.py                                     76     39    49%   28-37, 49-51, 54-74, 77-95, 98, 111-120, 123-131, 147, 150-151, 155, 159, 162-164
+app/infra/nats.py                                      92     37    60%   64-70, 83-92, 97-102, 112-122, 133-140
+app/infra/redis.py                                     47     12    74%   23, 31, 50-51, 54-55, 66-67, 70-71, 74-75
+app/main.py                                            76     32    58%   53-61, 69-100, 117-119, 137, 142
+app/router/mobile/__init__.py                          15      0   100%
+app/router/mobile/auth.py                              87     42    52%   45-47, 56-63, 91, 99-108, 118-137, 147-153, 163-168, 176-203, 220-237, 250-253
+app/router/mobile/enrollement.py                       70     43    39%   45-46, 62-78, 84, 93-97, 116-189
+app/router/mobile/event.py                             13      2    85%   18, 29
+app/router/mobile/notifications.py                     14      4    71%   17-20, 29-33
+app/router/mobile/photo_approval.py                    18      7    61%   21-35, 45-50
+app/router/mobile/photos.py                            21      6    71%   30, 53-64, 87-91
+app/router/staff/__init__.py                            8      0   100%
+app/router/staff/drive.py                              57     31    46%   34-38, 48-81, 92-96, 110-111, 120-126, 147-153, 173-181
+app/router/staff/notifications.py                      15      4    73%   20-23, 32-36
+app/router/staff/uploads.py                            63     27    57%   40-50, 60-65, 77-82, 91-95, 104-108, 117-121, 131-136, 145-149, 158-162, 174-180, 189-193, 203-208
+app/router/web/__init__.py                             14      0   100%
+app/router/web/audit.py                                14      2    86%   28-36
+app/router/web/auth.py                                 21      5    76%   21-33, 40, 54
+app/router/web/event.py                                26      7    73%   34-37, 50, 60, 70, 80
+app/router/web/staff_users.py                          29     11    62%   27-35, 52-56, 73-77, 92-94
+app/router/web/stats.py                                18      4    78%   18, 27, 36, 45
+app/router/web/users.py                                43     19    56%   21-28, 39-40, 49-50, 60-67, 76-81, 90-95, 104-106
+app/schema/internal/notification.py                    14      0   100%
+app/schema/internal/single_face_match.py               22      0   100%
+app/schema/internal/uploads.py                          8      0   100%
+app/schema/request/mobile/auth.py                      60      5    92%   29, 36, 79-81
+app/schema/request/mobile/notifications.py              4      0   100%
+app/schema/request/mobile/photo_approval.py             4      0   100%
+app/schema/request/staff/drive.py                       7      0   100%
+app/schema/request/staff/notifications.py               4      0   100%
+app/schema/request/staff/uploads.py                    58     24    59%   21-23, 28-31, 34, 56-59, 64-67, 71-75, 78-80
+app/schema/request/web/auth.py                          4      0   100%
+app/schema/request/web/event.py                         9      0   100%
+app/schema/request/web/staff_user.py                    9      0   100%
+app/schema/request/web/user.py                         11      0   100%
+app/schema/response/mobile/auth.py                     39      0   100%
+app/schema/response/mobile/notifications.py            19      2    89%   19, 36
+app/schema/response/staff/drive.py                     32      0   100%
+app/schema/response/staff/notifications.py             19      2    89%   19, 36
+app/schema/response/staff/upload_groups.py             67      8    88%   39, 43-47, 58, 67, 90, 98
+app/schema/response/staff/uploads.py                   44      4    91%   44, 48-52
+app/schema/response/web/audit.py                       25      2    92%   20, 39
+app/schema/response/web/auth.py                         7      0   100%
+app/schema/response/web/event.py                       32      0   100%
+app/schema/response/web/staff_user.py                   9      0   100%
+app/schema/response/web/stats.py                       30      0   100%
+app/schema/response/web/user.py                        13      1    92%   18
+app/service/audit.py                                   37     17    54%   35-42, 52-58, 70-88
+app/service/device.py                                  56     41    27%   18-24, 31-38, 46-56, 63-72, 75-82, 89-95, 98-104
+app/service/event.py                                   62     41    34%   31-42, 45-48, 51-52, 63-76, 79-82, 88-105, 109-112, 116-119
+app/service/face_embedding.py                         139     78    44%   67, 77, 80, 91-126, 138-142, 149-184, 191-217, 223-237, 241-249
+app/service/face_match.py                              81      2    98%   76-77
+app/service/photo_approval.py                          50      1    98%   78
+app/service/session.py                                 63     22    65%   55-56, 68-72, 74, 85-86, 91-97, 100-106
+app/service/staff_drive.py                            185    122    34%   65-76, 79-89, 96-140, 143, 152-155, 159-161, 167-195, 198-201, 205-210, 213-217, 223, 226-229, 237-294, 297-298, 302-303, 307-310, 320-327
+app/service/staff_notifications.py                     32     20    38%   23-30, 37-42, 50-56, 64-76
+app/service/staff_user.py                              74     54    27%   25-47, 53-62, 65-71, 83-104, 112-124, 134-137
+app/service/staged_upload_storage.py                   43     16    63%   36-37, 46-47, 58-69, 83-92, 95-98, 101-102
+app/service/stats.py                                   32     21    34%   17-21, 30-39, 46-50, 57-73
+app/service/upload_requests.py                        441    350    21%   80, 84, 91, 98-106, 109-113, 116, 120-127, 130-134, 146-162, 169-173, 182-186, 196-205, 214-263, 275-321, 329-380, 389-411, 419-423, 431-435, 441-442, 448-449, 455-460, 470-473, 476-477, 483-493, 505, 526-534, 547-550, 566-594, 603-762, 770-777, 789-800, 809-834, 846-851, 859-876, 894-918, 926-930, 942-980, 992-1028, 1036-1112, 1124-1190
+app/service/user_notification.py                       53     34    36%   26-32, 42-60, 67-72, 80-93
+app/service/user_photo.py                              64     38    41%   50-51, 62-73, 81-84, 95-126, 130-138, 143-146
+app/service/users.py                                  373     93    75%   78, 82, 96, 160, 254, 259, 266, 308, 381, 422, 427, 434, 483, 485, 497, 499, 509, 516, 520-523, 526, 536-559, 562-565, 568-575, 585-607, 610-620, 625-634, 637-647, 650-654, 663, 725
+app/worker/audit/__init__.py                            7      4    43%   8-12
+app/worker/audit/schema/audit.py                        9      0   100%
+app/worker/notification/__init__.py                     0      0   100%
+app/worker/notification/notification_queue.py          22      6    73%   24-27, 31, 34
+app/worker/notification/settings.py                    28      2    93%   33, 36
+app/worker/photo_worker/__init__.py                     0      0   100%
+app/worker/photo_worker/main.py                       184    113    39%   59-99, 103-123, 175-176, 186-188, 193-195, 199-208, 212-217, 221-225, 228-250, 254-260, 264-321, 325-334, 338
+app/worker/photo_worker/schema/__init__.py              0      0   100%
+app/worker/photo_worker/schema/event.py                10      0   100%
+app/worker/photo_worker/settings.py                     9      0   100%
+app/worker/upload_group_worker/__init__.py              0      0   100%
+app/worker/upload_group_worker/schema/__init__.py       0      0   100%
+app/worker/upload_group_worker/schema/event.py         12      0   100%
+---------------------------------------------------------------------------------
+TOTAL                                                4293   1737    60%

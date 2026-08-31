@@ -35,7 +35,9 @@ class StaffNotificationsService:
         staff_user_id: uuid.UUID,
     ) -> list[StaffNotification]:
         notifications: list[StaffNotification] = []
-        async for notification in self.notification_querier.list_staff_notifications_by_staff_user_id(
+        async for (
+            notification
+        ) in self.notification_querier.list_staff_notifications_by_staff_user_id(
             staff_user_id=staff_user_id
         ):
             notifications.append(notification)

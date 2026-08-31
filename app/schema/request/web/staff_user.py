@@ -11,4 +11,3 @@ class StaffUserCreateRequest(BaseModel):
 class StaffUserUpdateRequest(BaseModel):
     email: Optional[EmailStr]
     role: Literal["multi_team_lead", "multi"]
-

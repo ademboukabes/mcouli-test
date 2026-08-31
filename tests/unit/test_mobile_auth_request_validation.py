@@ -68,7 +68,6 @@ def fake_container() -> FakeContainer:
     return FakeContainer()
 
 
-
 @pytest.fixture
 def client(fake_container: FakeContainer) -> Iterator[TestClient]:
     app.dependency_overrides[get_container] = lambda: fake_container
@@ -229,5 +228,3 @@ def test_mobile_auth_uses_forwarded_ip_for_rate_limit_identity(
 
     assert response.status_code == 200
     assert fake_container.auth_service.login_client_ip == "203.0.113.10"
-
-

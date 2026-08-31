@@ -8,6 +8,7 @@ UNIQUE(user_id, device_id) constraint, and the user_sessions.device_id FK
 actually being ON DELETE CASCADE. Both were previously verified by hand via
 psql; these tests make that verification automatic and regression-proof.
 """
+
 import asyncio
 import uuid
 from datetime import datetime, timedelta, timezone
@@ -156,7 +157,9 @@ async def test_relogin_on_same_device_replaces_not_duplicates_real_db(
         await db_conn.execute(
             text("DELETE FROM user_devices WHERE user_id = :uid"), {"uid": user_id}
         )
-        await db_conn.execute(text("DELETE FROM users WHERE id = :uid"), {"uid": user_id})
+        await db_conn.execute(
+            text("DELETE FROM users WHERE id = :uid"), {"uid": user_id}
+        )
         await db_conn.commit()
 
 
@@ -224,8 +227,11 @@ async def test_revoke_device_cascades_delete_session_real_db(
         await db_conn.execute(
             text("DELETE FROM user_devices WHERE user_id = :uid"), {"uid": user_id}
         )
-        await db_conn.execute(text("DELETE FROM users WHERE id = :uid"), {"uid": user_id})
+        await db_conn.execute(
+            text("DELETE FROM users WHERE id = :uid"), {"uid": user_id}
+        )
         await db_conn.commit()
+
 
 @pytest.mark.skip(reason="Flaky Postgres concurrency test in CI")
 @pytest.mark.asyncio
@@ -325,8 +331,11 @@ async def test_concurrent_new_device_logins_settle_at_cap_real_db(
         await db_conn.execute(
             text("DELETE FROM user_devices WHERE user_id = :uid"), {"uid": user_id}
         )
-        await db_conn.execute(text("DELETE FROM users WHERE id = :uid"), {"uid": user_id})
+        await db_conn.execute(
+            text("DELETE FROM users WHERE id = :uid"), {"uid": user_id}
+        )
         await db_conn.commit()
+
 
 @pytest.mark.asyncio
 async def test_concurrent_block_and_login_never_leaves_blocked_user_with_session(
@@ -353,7 +362,8 @@ async def test_concurrent_block_and_login_never_leaves_blocked_user_with_session
         email = f"test-block-race-{uuid.uuid4()}@multai.com"
 
         user = await user_queries.AsyncQuerier(db_conn).create_user(
-            email=email, hashed_password=hash_password(password),
+            email=email,
+            hashed_password=hash_password(password),
         )
         assert user is not None
         user_id = user.id
@@ -369,8 +379,10 @@ async def test_concurrent_block_and_login_never_leaves_blocked_user_with_session
                     refresh_token_querier=refresh_token_queries.AsyncQuerier(conn),
                 )
                 req = MobileLoginRequest(
-                    email=email, password=password,
-                    device_name="Race Device", device_type="android",
+                    email=email,
+                    password=password,
+                    device_name="Race Device",
+                    device_type="android",
                     physical_device_id=uuid.uuid4(),
                 )
                 try:
@@ -411,7 +423,9 @@ async def test_concurrent_block_and_login_never_leaves_blocked_user_with_session
         await db_conn.execute(
             text("DELETE FROM user_devices WHERE user_id = :uid"), {"uid": user_id}
         )
-        await db_conn.execute(text("DELETE FROM users WHERE id = :uid"), {"uid": user_id})
+        await db_conn.execute(
+            text("DELETE FROM users WHERE id = :uid"), {"uid": user_id}
+        )
         await db_conn.commit()
 
         if blocked:

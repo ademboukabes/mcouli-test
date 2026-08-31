@@ -3,9 +3,10 @@ import os
 
 SQL_DIR = os.path.join(os.path.dirname(__file__), "sql")
 
+
 def run_sql_up(message: str) -> None:
     """
-        message: Migration message exactly as typed (matches filename).
+    message: Migration message exactly as typed (matches filename).
     """
     path = os.path.join(SQL_DIR, "up", message + ".sql")
     if not os.path.isfile(path):
@@ -18,7 +19,7 @@ def run_sql_up(message: str) -> None:
 
 
 def run_sql_down(message: str) -> None:
-   # write the message here u create it  in th emigration
+    # write the message here u create it  in th emigration
     path = os.path.join(SQL_DIR, "down", message + ".sql")
     if not os.path.isfile(path):
         raise FileNotFoundError(f"Down SQL file not found: {path}")

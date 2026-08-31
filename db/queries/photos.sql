@@ -4,9 +4,10 @@ INSERT INTO photos (
     storage_key,
     taken_at,
     day_number,
-    visibility
+    visibility,
+    source
 ) VALUES (
-    $1, $2, $3, $4, $5
+    $1, $2, $3, $4, $5, $6
 )
 RETURNING *;
 
@@ -26,9 +27,11 @@ WHERE id = $1
 RETURNING *;
 
 -- name: ListUserPhotos :many
-SELECT p.*
+SELECT p.*,
+  (SELECT COUNT(*) FROM photo_faces pf2 WHERE pf2.photo_id = p.id)::int AS face_count
 FROM photos p
-WHERE (
+WHERE p.status = 'approved'
+AND (
   EXISTS (
     SELECT 1 FROM photo_faces pf
     JOIN face_matches fm ON fm.photo_face_id = pf.id
@@ -46,7 +49,8 @@ ORDER BY
 LIMIT $4 OFFSET $5;
 
 -- name: ListEventPhotosForUser :many
-SELECT p.*
+SELECT p.*,
+  (SELECT COUNT(*) FROM photo_faces pf2 WHERE pf2.photo_id = p.id)::int AS face_count
 FROM photos p
 WHERE p.event_id = $2
 AND p.status = 'approved'
@@ -82,3 +86,28 @@ SELECT urp.drive_file_id
 FROM upload_request_photos urp
 WHERE urp.final_storage_key = $1
 LIMIT 1;
+
+-- name: MarkPhotoDriveSynced :one
+UPDATE photos
+SET drive_file_id = $2,
+    drive_synced_at = NOW()
+WHERE id = $1
+RETURNING *;
+
+-- name: ListPhotosDueForStorageCleanup :many
+SELECT p.*
+FROM photos p
+JOIN events e ON e.id = p.event_id
+WHERE p.status = 'approved'
+  AND p.storage_cleaned_at IS NULL
+  AND e.end_date IS NOT NULL
+  AND e.end_date <= NOW() - ($1 || ' days')::interval
+  AND (p.source != 'direct' OR p.drive_synced_at IS NOT NULL)
+ORDER BY e.end_date ASC
+LIMIT 500;
+
+-- name: MarkPhotoStorageCleaned :one
+UPDATE photos
+SET storage_cleaned_at = NOW()
+WHERE id = $1
+RETURNING *;

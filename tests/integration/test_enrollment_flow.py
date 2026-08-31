@@ -25,6 +25,7 @@ from db.generated import refresh_token as refresh_token_queries
 @pytest.fixture
 def mock_face_embedding() -> AsyncMock:
     from app.service.face_embedding import FaceEmbeddingService
+
     svc = MagicMock(spec=FaceEmbeddingService)
     # Return a dummy embedding of size 512
     svc.compute_average_embedding_stream = AsyncMock(return_value=[0.1] * 512)
@@ -35,11 +36,13 @@ def mock_face_embedding() -> AsyncMock:
 async def db_conn():
     from sqlalchemy.ext.asyncio import create_async_engine
     from app.core.config import settings
+
     url = f"postgresql+asyncpg://{settings.POSTGRES_USER}:{settings.POSTGRES_PASSWORD}@{settings.POSTGRES_HOST}:{settings.POSTGRES_PORT}/{settings.POSTGRES_DB}"
     engine = create_async_engine(url, pool_pre_ping=True)
     async with engine.connect() as conn:
         yield conn
     await engine.dispose()
+
 
 @pytest.fixture
 def auth_service(mock_face_embedding: AsyncMock, db_conn) -> AuthService:
@@ -79,7 +82,9 @@ async def test_enrollment_persists_embedding(
     user_id = user.id
 
     # 2. Execute enrollment
-    payload = FaceImagePayload(bytes=b"fake-image", filename="face.jpg", content_type="image/jpeg")
+    payload = FaceImagePayload(
+        bytes=b"fake-image", filename="face.jpg", content_type="image/jpeg"
+    )
 
     try:
         await auth_service.add_embbed_user(
@@ -88,7 +93,9 @@ async def test_enrollment_persists_embedding(
         )
 
         # 3. Verify: The user should now have an embedding
-        updated_user = await user_queries.AsyncQuerier(db_conn).get_user_by_id(id=user_id)
+        updated_user = await user_queries.AsyncQuerier(db_conn).get_user_by_id(
+            id=user_id
+        )
         assert updated_user is not None
         assert updated_user.face_embedding is not None
         assert "0.1" in str(updated_user.face_embedding)

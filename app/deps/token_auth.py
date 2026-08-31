@@ -52,7 +52,9 @@ async def get_current_mobile_user(
         if cached.blocked:
             raise HTTPException(status_code=403, detail="User is blocked")
 
-        if (now - cached.last_active).total_seconds() > settings.SESSION_ACTIVITY_THROTTLE_SECONDS:
+        if (
+            now - cached.last_active
+        ).total_seconds() > settings.SESSION_ACTIVITY_THROTTLE_SECONDS:
             new_idle_expires_at = min(
                 now + timedelta(days=settings.MOBILE_SESSION_DAYS),
                 cached.absolute_expires_at,
@@ -80,7 +82,9 @@ async def get_current_mobile_user(
         )
 
     # --- Slow path: Postgres fallback ---
-    session = await container.session_service.session_querier.get_session_by_id(id=session_id)
+    session = await container.session_service.session_querier.get_session_by_id(
+        id=session_id
+    )
     if not session:
         raise HTTPException(status_code=401, detail="Session not found")
 
@@ -114,3 +118,26 @@ async def get_current_mobile_user(
         email=user.email or "",
         session_id=session.id,
     )
+
+
+async def require_onboarded_mobile_user(
+    current_user: Annotated[MobileUserSchema, Depends(get_current_mobile_user)],
+    container: Annotated[Container, Depends(get_container)],
+) -> MobileUserSchema:
+    """Gate for endpoints that require a completed face enrollment.
+    Auth (login/me/devices/etc.), /enroll, and /event/join stay reachable
+    via plain get_current_mobile_user so a new user can always finish
+    onboarding; everything else (photos, notifications, audits, /event/me)
+    depends on this instead.
+    """
+    user = await container.auth_service.user_querier.get_user_by_id(
+        id=current_user.user_id
+    )
+    if user is None:
+        raise HTTPException(status_code=401, detail="User not found")
+    if user.face_embedding is None:
+        raise HTTPException(
+            status_code=403,
+            detail="Complete face enrollment before accessing this resource",
+        )
+    return current_user

@@ -19,7 +19,6 @@ def check_extension(
     if len(filename_splitted) < 2:
         raise AppException.bad_request("File should have an extension")
 
-
     file_ext = filename_splitted[-1]
 
     if file_ext not in allowed_extensions:
@@ -27,11 +26,9 @@ def check_extension(
             f"File extension {file_ext} is not allowed. Allowed extensions are: {', '.join(allowed_extensions)}"
         )
 
-
     if file.content_type not in ext_content_type_map[file_ext]:
         raise AppException.bad_request(
             f"File content type {file.content_type} does not match extension {file_ext}"
         )
-
 
     return file_ext

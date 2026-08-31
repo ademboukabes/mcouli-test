@@ -33,4 +33,6 @@ class StaffNotificationListResponse(BaseModel):
         cls,
         notifications: list[StaffNotification],
     ) -> "StaffNotificationListResponse":
-        return cls(items=[StaffNotificationSchema.from_model(item) for item in notifications])
+        return cls(
+            items=[StaffNotificationSchema.from_model(item) for item in notifications]
+        )

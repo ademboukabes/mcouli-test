@@ -42,6 +42,7 @@ def _make_photo(storage_key: str = "photos/test.jpg") -> MagicMock:
 @pytest.fixture
 def approval_querier() -> AsyncMock:
     from db.generated import photo_approvals as pa_queries
+
     q = MagicMock(spec=pa_queries.AsyncQuerier)
     q.update_photo_approval_decision = AsyncMock()
     q.get_photo_approvals_by_photo_id = MagicMock()  # async generator
@@ -51,6 +52,7 @@ def approval_querier() -> AsyncMock:
 @pytest.fixture
 def photo_querier() -> AsyncMock:
     from db.generated import photos as photo_queries
+
     q = MagicMock(spec=photo_queries.AsyncQuerier)
     q.update_photo_status = AsyncMock(return_value=None)
     q.get_photo_by_id = AsyncMock(return_value=_make_photo())
@@ -60,6 +62,7 @@ def photo_querier() -> AsyncMock:
 @pytest.fixture
 def storage_service() -> AsyncMock:
     from app.service.staged_upload_storage import StagedUploadStorageService
+
     svc = MagicMock(spec=StagedUploadStorageService)
     svc.delete_storage_key = AsyncMock()
     return svc
@@ -68,6 +71,7 @@ def storage_service() -> AsyncMock:
 @pytest.fixture
 def audit_service() -> AsyncMock:
     from app.service.audit import AuditService
+
     svc = MagicMock(spec=AuditService)
     svc.create_record = AsyncMock()
     return svc
@@ -89,9 +93,11 @@ def _make_service(
 
 def _mock_async_iter(items: list[object]):  # type: ignore[type-arg]
     """Return a MagicMock that behaves like an async for loop."""
+
     async def _gen():  # type: ignore[return]
         for item in items:
             yield item
+
     return _gen()
 
 
@@ -113,10 +119,14 @@ class TestApproveDecision:
         approvals = [_make_approval("approved"), _make_approval("approved")]
 
         approval_querier.update_photo_approval_decision.return_value = MagicMock()
-        approval_querier.get_photo_approvals_by_photo_id.return_value = _mock_async_iter(approvals)
+        approval_querier.get_photo_approvals_by_photo_id.return_value = (
+            _mock_async_iter(approvals)
+        )
 
         service = _make_service(approval_querier, photo_querier, storage_service)
-        result = await service.decide(photo_id=photo_id, user_id=user_id, decision="approved")
+        result = await service.decide(
+            photo_id=photo_id, user_id=user_id, decision="approved"
+        )
 
         assert result == "approved"
         photo_querier.update_photo_status.assert_called_once_with(
@@ -135,7 +145,9 @@ class TestApproveDecision:
         approvals = [_make_approval("approved")]
 
         approval_querier.update_photo_approval_decision.return_value = MagicMock()
-        approval_querier.get_photo_approvals_by_photo_id.return_value = _mock_async_iter(approvals)
+        approval_querier.get_photo_approvals_by_photo_id.return_value = (
+            _mock_async_iter(approvals)
+        )
 
         service = _make_service(approval_querier, photo_querier, storage_service)
         await service.decide(photo_id=photo_id, user_id=user_id, decision="approved")
@@ -161,10 +173,14 @@ class TestRejectDecision:
         approvals = [_make_approval("approved"), _make_approval("rejected")]
 
         approval_querier.update_photo_approval_decision.return_value = MagicMock()
-        approval_querier.get_photo_approvals_by_photo_id.return_value = _mock_async_iter(approvals)
+        approval_querier.get_photo_approvals_by_photo_id.return_value = (
+            _mock_async_iter(approvals)
+        )
 
         service = _make_service(approval_querier, photo_querier, storage_service)
-        result = await service.decide(photo_id=photo_id, user_id=user_id, decision="rejected")
+        result = await service.decide(
+            photo_id=photo_id, user_id=user_id, decision="rejected"
+        )
 
         assert result == "rejected"
         photo_querier.update_photo_status.assert_called_once_with(
@@ -182,10 +198,14 @@ class TestRejectDecision:
         user_id = uuid.uuid4()
         approvals = [_make_approval("rejected")]
         storage_key = "photos/reject-me.jpg"
-        photo_querier.get_photo_by_id.return_value = _make_photo(storage_key=storage_key)
+        photo_querier.get_photo_by_id.return_value = _make_photo(
+            storage_key=storage_key
+        )
 
         approval_querier.update_photo_approval_decision.return_value = MagicMock()
-        approval_querier.get_photo_approvals_by_photo_id.return_value = _mock_async_iter(approvals)
+        approval_querier.get_photo_approvals_by_photo_id.return_value = (
+            _mock_async_iter(approvals)
+        )
 
         service = _make_service(approval_querier, photo_querier, storage_service)
         await service.decide(photo_id=photo_id, user_id=user_id, decision="rejected")
@@ -205,12 +225,16 @@ class TestRejectDecision:
         approvals = [_make_approval("rejected")]
 
         approval_querier.update_photo_approval_decision.return_value = MagicMock()
-        approval_querier.get_photo_approvals_by_photo_id.return_value = _mock_async_iter(approvals)
+        approval_querier.get_photo_approvals_by_photo_id.return_value = (
+            _mock_async_iter(approvals)
+        )
         storage_service.delete_storage_key.side_effect = Exception("MinIO unavailable")
 
         service = _make_service(approval_querier, photo_querier, storage_service)
         # Must not raise despite MinIO being unavailable
-        result = await service.decide(photo_id=photo_id, user_id=user_id, decision="rejected")
+        result = await service.decide(
+            photo_id=photo_id, user_id=user_id, decision="rejected"
+        )
         assert result == "rejected"
 
 
@@ -232,10 +256,14 @@ class TestPendingDecision:
         approvals = [_make_approval("approved"), _make_approval("pending")]
 
         approval_querier.update_photo_approval_decision.return_value = MagicMock()
-        approval_querier.get_photo_approvals_by_photo_id.return_value = _mock_async_iter(approvals)
+        approval_querier.get_photo_approvals_by_photo_id.return_value = (
+            _mock_async_iter(approvals)
+        )
 
         service = _make_service(approval_querier, photo_querier, storage_service)
-        result = await service.decide(photo_id=photo_id, user_id=user_id, decision="approved")
+        result = await service.decide(
+            photo_id=photo_id, user_id=user_id, decision="approved"
+        )
 
         assert result == "pending"
 
@@ -251,7 +279,9 @@ class TestPendingDecision:
         approvals = [_make_approval("pending"), _make_approval("pending")]
 
         approval_querier.update_photo_approval_decision.return_value = MagicMock()
-        approval_querier.get_photo_approvals_by_photo_id.return_value = _mock_async_iter(approvals)
+        approval_querier.get_photo_approvals_by_photo_id.return_value = (
+            _mock_async_iter(approvals)
+        )
 
         service = _make_service(approval_querier, photo_querier, storage_service)
         await service.decide(photo_id=photo_id, user_id=user_id, decision="approved")
@@ -302,9 +332,13 @@ class TestAuditLogging:
         approvals = [_make_approval("approved")]
 
         approval_querier.update_photo_approval_decision.return_value = MagicMock()
-        approval_querier.get_photo_approvals_by_photo_id.return_value = _mock_async_iter(approvals)
+        approval_querier.get_photo_approvals_by_photo_id.return_value = (
+            _mock_async_iter(approvals)
+        )
 
-        service = _make_service(approval_querier, photo_querier, storage_service, audit_service)
+        service = _make_service(
+            approval_querier, photo_querier, storage_service, audit_service
+        )
         await service.decide(photo_id=photo_id, user_id=user_id, decision="approved")
 
         audit_service.create_record.assert_called_once()
@@ -325,9 +359,15 @@ class TestAuditLogging:
         approvals = [_make_approval("approved")]
 
         approval_querier.update_photo_approval_decision.return_value = MagicMock()
-        approval_querier.get_photo_approvals_by_photo_id.return_value = _mock_async_iter(approvals)
+        approval_querier.get_photo_approvals_by_photo_id.return_value = (
+            _mock_async_iter(approvals)
+        )
 
         # No audit_service passed → audit_service=None
-        service = _make_service(approval_querier, photo_querier, storage_service, audit_service=None)
-        await service.decide(photo_id=photo_id, user_id=uuid.uuid4(), decision="approved")
+        service = _make_service(
+            approval_querier, photo_querier, storage_service, audit_service=None
+        )
+        await service.decide(
+            photo_id=photo_id, user_id=uuid.uuid4(), decision="approved"
+        )
         # no assertion needed — just must not raise

@@ -38,9 +38,9 @@ def _parse_payload(raw_data: bytes) -> dict[str, Any] | None:
     try:
         parsed = json.loads(raw_data.decode("utf-8"))
         if not isinstance(parsed, dict):
-            logger.warning("Audit payload must be an object, got %s", type(parsed)) # type: ignore
+            logger.warning("Audit payload must be an object, got %s", type(parsed))  # type: ignore
             return None
-        return parsed # type: ignore
+        return parsed  # type: ignore
     except (UnicodeDecodeError, json.JSONDecodeError) as exc:
         logger.error("Cannot parse audit payload: %s", exc)
         return None
@@ -55,16 +55,16 @@ async def _handle_event(worker: AuditDeliveryWorker, raw_data: bytes) -> None:
     except ValidationError as exc:
         logger.warning("Audit payload validation failed: %s", exc)
         return
-    try:
-        await worker.persist(payload)
-    except Exception:
-        logger.exception("Failed to persist audit for %s", payload.event_type)
+    await worker.persist(payload)
 
 
 async def listen_nats_event(worker: AuditDeliveryWorker) -> None:
-    await NatsClient.subscribe(
+    async def handler(data: bytes) -> None:
+        await _handle_event(worker, data)
+
+    await NatsClient.js_subscribe(
         NatsSubjects.AUDIT_EVENT,
-        lambda data: _handle_event(worker, data),
+        handler,
     )
     logger.info("Listening for audit events on %s", AUDIT_EVENT_SUBJECT)
 

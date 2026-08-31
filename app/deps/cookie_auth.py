@@ -8,19 +8,17 @@ from db.generated.models import StaffRole, StaffUser
 from app.core.securite import decode_staff_token
 
 
-
 def _role_value(role: object) -> str:
     return getattr(role, "value", str(role))
-
 
 
 async def get_current_staff_user(
     container: Annotated[Container, Depends(get_container)],
     token: Annotated[str | None, Cookie(alias="access_token")] = None,
 ) -> StaffUser:
-    if token is None :
+    if token is None:
         raise AppException.unauthorized("token doestn exist")
-    else :
+    else:
         payload = decode_staff_token(token)
         staff_id_str = payload.sub
 
@@ -33,7 +31,9 @@ async def get_current_staff_user(
         except ValueError:
             raise AppException.unauthorized("Invalid staff ID in token")
 
-        staff_user = await container.staff_user_querier.get_staff_user_by_id(id=staff_id)
+        staff_user = await container.staff_user_querier.get_staff_user_by_id(
+            id=staff_id
+        )
         if staff_user is None:
             raise AppException.not_found("Staff user not found")
 
@@ -56,6 +56,7 @@ def ensure_admin_staff(current_staff_user: StaffUser) -> StaffUser:
     if _role_value(current_staff_user.role) != StaffRole.ADMIN.value:
         raise AppException.forbidden("Admin access required")
     return current_staff_user
+
 
 async def require_admin_staff(
     current_staff_user: Annotated[StaffUser, Depends(get_current_staff_user)],

@@ -6,7 +6,10 @@ from fastapi import APIRouter, Depends, Query, status
 from app.container import Container, get_container
 from app.core.logger import logger
 from app.deps.cookie_auth import get_current_staff_user
-from app.schema.request.web.staff_user import StaffUserCreateRequest, StaffUserUpdateRequest
+from app.schema.request.web.staff_user import (
+    StaffUserCreateRequest,
+    StaffUserUpdateRequest,
+)
 from app.schema.response.web.staff_user import StaffUserSchema
 from db.generated.models import StaffRole, StaffUser
 
@@ -38,7 +41,7 @@ async def list_staff_users(
             email=user.email,
             role=user.role,
             created_at=user.created_at,
-            updated_at=user.updated_at
+            updated_at=user.updated_at,
         )
         for user in staff_users
     ]
@@ -58,7 +61,7 @@ async def create_staff_user(
         email=staff_user.email,
         role=staff_user.role,
         created_at=staff_user.created_at,
-        updated_at=staff_user.updated_at
+        updated_at=staff_user.updated_at,
     )
 
 
@@ -68,7 +71,6 @@ async def update_staff_user(
     req: StaffUserUpdateRequest,
     current_staff_user: StaffUser = Depends(get_current_staff_user),
     container: Container = Depends(get_container),
-
 ) -> StaffUserSchema:
     staff_user = await container.staff_user_service.update_staff_user(
         id=staff_user_id, email=req.email, role=StaffRole(req.role)
@@ -79,7 +81,7 @@ async def update_staff_user(
         email=staff_user.email,
         role=staff_user.role,
         created_at=staff_user.created_at,
-        updated_at=staff_user.updated_at
+        updated_at=staff_user.updated_at,
     )
 
 
@@ -96,5 +98,5 @@ async def delete_staff_user(
         email=staff_user.email,
         role=staff_user.role,
         created_at=staff_user.created_at,
-        updated_at=staff_user.updated_at
+        updated_at=staff_user.updated_at,
     )

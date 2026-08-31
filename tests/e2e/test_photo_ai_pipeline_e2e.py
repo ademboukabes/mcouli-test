@@ -7,7 +7,12 @@ from app.infra.database import engine
 from app.infra.minio import Bucket, IMAGES_BUCKET_NAME
 from app.infra.nats import NatsClient, NatsSubjects
 
-from tests.e2e.conftest import _seed_event_and_photo, _wait_for_job, _cleanup, FIXTURE_DIR
+from tests.e2e.conftest import (
+    _seed_event_and_photo,
+    _wait_for_job,
+    _cleanup,
+    FIXTURE_DIR,
+)
 
 
 async def test_photo_ai_pipeline_detects_single_face() -> None:
@@ -37,7 +42,7 @@ async def test_photo_ai_pipeline_detects_single_face() -> None:
         "image_ref": storage_key,
         "event_id": str(event_id),
     }
-    await NatsClient.publish(
+    await NatsClient.js_publish(
         NatsSubjects.PHOTO_PROCESS, json.dumps(payload).encode("utf-8")
     )
 
@@ -89,14 +94,16 @@ async def test_photo_ai_pipeline_corrupt_image() -> None:
         "image_ref": storage_key,
         "event_id": str(event_id),
     }
-    await NatsClient.publish(
+    await NatsClient.js_publish(
         NatsSubjects.PHOTO_PROCESS, json.dumps(payload).encode("utf-8")
     )
 
     # 3. Assertions + Cleanup
     try:
         final_status = await _wait_for_job(photo_id, timeout_s=30)
-        assert final_status == "failed", f"Expected job to fail, but ended with: {final_status}"
+        assert final_status == "failed", (
+            f"Expected job to fail, but ended with: {final_status}"
+        )
     finally:
         async with engine.begin() as conn:
             await _cleanup(conn, photo_id=photo_id, event_id=event_id)

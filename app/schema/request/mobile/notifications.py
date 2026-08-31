@@ -4,6 +4,4 @@ from pydantic import BaseModel, Field
 
 
 class MarkUserNotificationsReadRequest(BaseModel):
-    notification_ids: list[UUID] = Field(
-        ..., min_length=1, max_length=100
-    )
+    notification_ids: list[UUID] = Field(..., min_length=1, max_length=100)

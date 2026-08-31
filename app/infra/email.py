@@ -5,6 +5,7 @@ import asyncio
 from app.core.config import settings
 from app.core.logger import logger
 
+
 class EmailSender:
     @staticmethod
     async def send_otp_email(to_email: str, otp: str) -> bool:
@@ -18,7 +19,7 @@ class EmailSender:
         headers = {
             "Authorization": f"Bearer {settings.RESEND_API_KEY}",
             "Content-Type": "application/json",
-            "User-Agent": "multAI-Backend/1.0"
+            "User-Agent": "multAI-Backend/1.0",
         }
 
         html_content = f"""
@@ -34,14 +35,11 @@ class EmailSender:
             "from": settings.EMAIL_FROM,
             "to": [to_email],
             "subject": "Votre code de vérification multAI",
-            "html": html_content
+            "html": html_content,
         }
 
         req = urllib.request.Request(
-            url,
-            data=json.dumps(data).encode("utf-8"),
-            headers=headers,
-            method="POST"
+            url, data=json.dumps(data).encode("utf-8"), headers=headers, method="POST"
         )
 
         def _send() -> bool:
@@ -52,7 +50,9 @@ class EmailSender:
                     return True
             except urllib.error.HTTPError as e:
                 err_body = e.read()
-                logger.error("Failed to send email via Resend: %s - %s", e.code, err_body)
+                logger.error(
+                    "Failed to send email via Resend: %s - %s", e.code, err_body
+                )
                 return False
             except Exception as e:
                 logger.error("Error sending email: %s", str(e))

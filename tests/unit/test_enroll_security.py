@@ -54,7 +54,9 @@ def _make_upload_file(
     mock_file.filename = filename
     mock_file.content_type = content_type
     mock_file.headers = headers
-    mock_file.read = AsyncMock(side_effect=lambda n=-1: buf.read(n) if n == -1 else buf.read(n))
+    mock_file.read = AsyncMock(
+        side_effect=lambda n=-1: buf.read(n) if n == -1 else buf.read(n)
+    )
     mock_file.seek = AsyncMock(side_effect=lambda pos: buf.seek(pos))
     return mock_file  # type: ignore[return-value]
 
@@ -86,8 +88,9 @@ class TestSanitiseFilename:
 
     def test_windows_reserved_chars_are_replaced(self) -> None:
         for char in r'\\/:*?"<>|':
-            assert char not in sanitise_filename(f"face{char}name.jpg", "jpg"), \
+            assert char not in sanitise_filename(f"face{char}name.jpg", "jpg"), (
                 f"char {char!r} must be replaced"
+            )
 
     def test_none_filename_returns_uuid_only(self) -> None:
         result = sanitise_filename(None, "png")
@@ -170,7 +173,9 @@ class TestPrecheckUploadHeaders:
 
     def test_unsupported_content_type_raises_400(self) -> None:
         with pytest.raises(HTTPException) as exc_info:
-            precheck_upload_headers(_make_upload_file(b"", content_type="application/pdf"))
+            precheck_upload_headers(
+                _make_upload_file(b"", content_type="application/pdf")
+            )
         assert exc_info.value.status_code == 400
 
     def test_content_type_with_charset_param_accepted(self) -> None:
@@ -182,7 +187,9 @@ class TestPrecheckUploadHeaders:
     def test_oversized_content_length_raises_400(self) -> None:
         with pytest.raises(HTTPException) as exc_info:
             precheck_upload_headers(
-                _make_upload_file(b"", content_type="image/jpeg", content_length=MAX_IMAGE_SIZE + 1)
+                _make_upload_file(
+                    b"", content_type="image/jpeg", content_length=MAX_IMAGE_SIZE + 1
+                )
             )
         assert exc_info.value.status_code == 400
 

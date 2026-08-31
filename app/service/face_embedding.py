@@ -5,7 +5,7 @@ from collections.abc import AsyncIterable, AsyncIterator
 from dataclasses import dataclass
 from typing import List, Literal, Optional, Sequence, Tuple, TypedDict
 
-import cv2 # type: ignore
+import cv2  # type: ignore
 import numpy as np
 from insightface.app import FaceAnalysis  # type: ignore[import-untyped]
 from app.core.config import settings
@@ -101,7 +101,7 @@ class FaceEmbedding:
         if not faces:
             raise ValueError("No faces detected by the model")
 
-        x1, y1, x2, y2 = bboxes[0] # type: ignore
+        x1, y1, x2, y2 = bboxes[0]  # type: ignore
         target_cx = (x1 + x2) / 2
         target_cy = (y1 + y2) / 2
 
@@ -154,9 +154,11 @@ class FaceEmbeddingService:
             image = self._decode_image(payload)
             image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
 
-            # Single detection pass — model.get() already returns embeddings
+            if self.face_embedding.model is None:
+                raise RuntimeError("Model is not initialized")
             faces: list[FaceStub] = await asyncio.to_thread(  # type: ignore
-                self.face_embedding.model.get, image_rgb  # type: ignore
+                self.face_embedding.model.get,
+                image_rgb,  # type: ignore
             )
 
             if not faces:
@@ -189,9 +191,7 @@ class FaceEmbeddingService:
     ) -> dict[str, list[list[float]]]:
 
         if not payloads:
-            raise AppException.bad_request(
-                "At least one image is required"
-            )
+            raise AppException.bad_request("At least one image is required")
 
         results: dict[str, list[list[float]]] = {}
 
@@ -200,8 +200,11 @@ class FaceEmbeddingService:
                 image = self._decode_image(payload)
                 image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
 
-                faces: list[FaceStub] = await asyncio.to_thread( # type: ignore
-                    self.face_embedding.model.get, image_rgb  # type: ignore
+                if self.face_embedding.model is None:
+                    raise RuntimeError("Model is not initialized")
+                faces: list[FaceStub] = await asyncio.to_thread(  # type: ignore
+                    self.face_embedding.model.get,
+                    image_rgb,  # type: ignore
                 )
 
                 results[payload["filename"]] = [
@@ -223,8 +226,11 @@ class FaceEmbeddingService:
         image = self._decode_image(payload)
         image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
 
-        faces: list[FaceStub] = await asyncio.to_thread( # type: ignore
-            self.face_embedding.model.get, image_rgb  # type: ignore
+        if self.face_embedding.model is None:
+            raise RuntimeError("Model is not initialized")
+        faces: list[FaceStub] = await asyncio.to_thread(  # type: ignore
+            self.face_embedding.model.get,
+            image_rgb,  # type: ignore
         )
 
         detected: list[DetectedFace] = []

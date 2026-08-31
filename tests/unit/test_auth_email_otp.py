@@ -6,29 +6,36 @@ import pytest
 from app.service.users import AuthService
 from app.schema.request.mobile.auth import MobileRegisterRequest, RegisterVerifyRequest
 
+
 @pytest.fixture
 def mock_user_querier() -> AsyncMock:
     return AsyncMock()
+
 
 @pytest.fixture
 def mock_device_querier() -> AsyncMock:
     return AsyncMock()
 
+
 @pytest.fixture
 def mock_session_querier() -> AsyncMock:
     return AsyncMock()
+
 
 @pytest.fixture
 def mock_face_embedding_service() -> AsyncMock:
     return AsyncMock()
 
+
 @pytest.fixture
 def mock_redis() -> AsyncMock:
     return AsyncMock()
 
+
 @pytest.fixture
 def mock_refresh_token_querier() -> AsyncMock:
     return AsyncMock()
+
 
 @pytest.fixture
 def auth_service(
@@ -46,8 +53,10 @@ def auth_service(
         refresh_token_querier=mock_refresh_token_querier,
     )
 
+
 @pytest.mark.asyncio
-@patch("app.service.users.NatsClient.publish")
+@patch("app.service.users.settings.environment", "production")
+@patch("app.service.users.NatsClient.js_publish")
 async def test_mobile_register_sends_otp(
     mock_publish: AsyncMock,
     auth_service: AuthService,
@@ -77,6 +86,7 @@ async def test_mobile_register_sends_otp(
     assert payload["email"] == "test@example.com"
     assert "otp" in payload
 
+
 @pytest.mark.asyncio
 async def test_verify_mobile_register_success(
     auth_service: AuthService,
@@ -92,12 +102,12 @@ async def test_verify_mobile_register_success(
         device_name="iPhone",
         device_type="iOS",
         physical_device_id=device_id,
-        otp="123456"
+        otp="123456",
     )
 
     mock_redis.get.side_effect = [
         "123456",
-        json.dumps({"hashed_password": "hashed_pass"})
+        json.dumps({"hashed_password": "hashed_pass"}),
     ]
 
     mock_user = AsyncMock()
@@ -123,13 +133,19 @@ async def test_verify_mobile_register_success(
     # FIX 2: Mock create_device to return a truthy device
     mock_device_querier.create_device.return_value = AsyncMock()
 
-    with patch("app.service.users.SessionService.cache_session_for_auth", new_callable=AsyncMock):
+    with patch(
+        "app.service.users.SessionService.cache_session_for_auth",
+        new_callable=AsyncMock,
+    ):
         res = await auth_service.verify_mobile_register(redis=mock_redis, req=req)
 
     assert res.is_new_user is True
     assert res.user_id == mock_user.id
-    mock_user_querier.create_user.assert_called_once_with(email="test@example.com", hashed_password="hashed_pass")
+    mock_user_querier.create_user.assert_called_once_with(
+        email="test@example.com", hashed_password="hashed_pass"
+    )
     assert mock_redis.delete.call_count == 2
+
 
 @pytest.mark.asyncio
 async def test_mobile_register_resend_otp_success(
@@ -140,8 +156,15 @@ async def test_mobile_register_resend_otp_success(
     mock_redis.get.return_value = '{"hashed_password": "fake"}'
     mock_redis.incr.return_value = 1
 
-    with patch("app.service.users.NatsClient.publish", new_callable=AsyncMock) as mock_publish:
-        res = await auth_service.mobile_register_resend_otp(redis=mock_redis, email=email)
+    with (
+        patch("app.service.users.settings.environment", "production"),
+        patch(
+            "app.service.users.NatsClient.js_publish", new_callable=AsyncMock
+        ) as mock_publish,
+    ):
+        res = await auth_service.mobile_register_resend_otp(
+            redis=mock_redis, email=email
+        )
 
     assert res.status == "pending_verification"
     assert res.message == "New OTP sent to email"
@@ -150,12 +173,14 @@ async def test_mobile_register_resend_otp_success(
     mock_redis.set.assert_called_with(f"otp:{email}", ANY, expire=600)
     mock_publish.assert_called_once()
 
+
 @pytest.mark.asyncio
 async def test_mobile_register_resend_otp_not_found(
     auth_service: AuthService,
     mock_redis: AsyncMock,
 ) -> None:
     from fastapi import HTTPException
+
     email = "test@example.com"
     mock_redis.incr.return_value = 1
     mock_redis.get.return_value = None

@@ -4,10 +4,19 @@ INSERT INTO upload_request_groups (
     folder_id,
     requested_by,
     total_photo_count,
-    batch_count
+    batch_count,
+    source,
+    processing_status
 ) VALUES (
-    $1, $2, $3, $4, $5
+    $1, $2, $3, $4, $5, $6, $7
 )
+RETURNING *;
+
+-- name: IncrementUploadRequestGroupCounts :one
+UPDATE upload_request_groups
+SET total_photo_count = total_photo_count + $2,
+    batch_count = batch_count + 1
+WHERE id = $1
 RETURNING *;
 
 -- name: GetUploadRequestGroupById :one

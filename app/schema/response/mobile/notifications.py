@@ -33,4 +33,6 @@ class UserNotificationListResponse(BaseModel):
         cls,
         notifications: list[Notification],
     ) -> "UserNotificationListResponse":
-        return cls(items=[UserNotificationSchema.from_model(item) for item in notifications])
+        return cls(
+            items=[UserNotificationSchema.from_model(item) for item in notifications]
+        )

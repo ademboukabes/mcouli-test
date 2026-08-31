@@ -65,6 +65,7 @@ class TestMobileAuthEndpointsE2E:
         # But if they are FULLY registered, it returns 409.
         # Let's verify them first to fully register them.
         import redis
+
         r = redis.Redis(host="localhost", port=6379, decode_responses=True)
         otp = r.get(f"otp:{email}")
 
@@ -115,6 +116,7 @@ class TestMobileAuthEndpointsE2E:
         assert register_response.json()["status"] == "pending_verification"
 
         import redis
+
         r = redis.Redis(host="localhost", port=6379, decode_responses=True)
         otp = r.get(f"otp:{email}")
 
@@ -178,6 +180,7 @@ class TestMobileAuthEndpointsE2E:
         assert register_response.status_code == 200
 
         import redis
+
         r = redis.Redis(host="localhost", port=6379, decode_responses=True)
         otp = r.get(f"otp:{email}")
 

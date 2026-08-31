@@ -12,6 +12,7 @@ from db.generated.models import StaffUser
 
 router = APIRouter(prefix="/users")
 
+
 @router.post("/", response_model=AdminUserSchema, status_code=status.HTTP_201_CREATED)
 async def create_user(
     req: AdminUserCreateRequest,
@@ -26,6 +27,7 @@ async def create_user(
     )
     logger.info("admin %s created user %s", current_staff_user.id, user.id)
     return to_admin_user_schema(user)
+
 
 @router.get("/", response_model=list[AdminUserSchema])
 async def list_users(

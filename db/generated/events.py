@@ -13,10 +13,30 @@ import sqlalchemy.ext.asyncio
 from db.generated import models
 
 
+ACTIVATE_DUE_EVENTS = """-- name: activate_due_events \\:many
+UPDATE events
+SET status = 'scheduled'\\:\\:event_status
+WHERE status = 'draft'\\:\\:event_status
+  AND event_date <= NOW()
+RETURNING id
+"""
+
+
+ARCHIVE_ENDED_EVENTS = """-- name: archive_ended_events \\:many
+UPDATE events
+SET status = 'archived'\\:\\:event_status,
+    archived_at = NOW()
+WHERE status = 'scheduled'\\:\\:event_status
+  AND end_date IS NOT NULL
+  AND end_date <= NOW()
+RETURNING id
+"""
+
+
 CREATE_EVENT = """-- name: create_event \\:one
-INSERT INTO events (name, event_code, event_date, status, created_by)
-VALUES (:p1, :p2, :p3, :p4, :p5)
-RETURNING id, name, event_code, event_date, status, created_by, created_at, archived_at
+INSERT INTO events (name, event_code, event_date, end_date, status, created_by)
+VALUES (:p1, :p2, :p3, :p4, :p5, :p6)
+RETURNING id, name, event_code, event_date, status, created_by, created_at, archived_at, end_date
 """
 
 
@@ -25,37 +45,38 @@ class CreateEventParams:
     name: str
     event_code: str
     event_date: datetime.datetime
+    end_date: Optional[datetime.datetime]
     status: Any
     created_by: uuid.UUID
 
 
 DELETE_EVENT = """-- name: delete_event \\:exec
-DELETE FROM events 
+DELETE FROM events
 WHERE id = :p1
 """
 
 
 GET_EVENT_BY_CODE = """-- name: get_event_by_code \\:one
-SELECT id, name, event_code, event_date, status, created_by, created_at, archived_at FROM events 
+SELECT id, name, event_code, event_date, status, created_by, created_at, archived_at, end_date FROM events 
 WHERE event_code = :p1
 """
 
 
 GET_EVENT_BY_ID = """-- name: get_event_by_id \\:one
-SELECT id, name, event_code, event_date, status, created_by, created_at, archived_at FROM events 
+SELECT id, name, event_code, event_date, status, created_by, created_at, archived_at, end_date FROM events 
 WHERE id = :p1
 """
 
 
 GET_EVENTS_BY_NAME = """-- name: get_events_by_name \\:many
-SELECT id, name, event_code, event_date, status, created_by, created_at, archived_at FROM events 
+SELECT id, name, event_code, event_date, status, created_by, created_at, archived_at, end_date FROM events 
 WHERE name ILIKE '%' || :p1 || '%'
 ORDER BY event_date DESC
 """
 
 
 LIST_EVENTS = """-- name: list_events \\:many
-SELECT id, name, event_code, event_date, status, created_by, created_at, archived_at FROM events 
+SELECT id, name, event_code, event_date, status, created_by, created_at, archived_at, end_date FROM events 
 WHERE 
     -- Filter by Status (Optional)
     (:p3\\:\\:event_status IS NULL OR status = :p3)
@@ -95,7 +116,7 @@ UPDATE events
 SET status = :p2, 
     archived_at = CASE WHEN :p2 = 'archived'\\:\\:event_status THEN NOW() ELSE archived_at END
 WHERE id = :p1
-RETURNING id, name, event_code, event_date, status, created_by, created_at, archived_at
+RETURNING id, name, event_code, event_date, status, created_by, created_at, archived_at, end_date
 """
 
 
@@ -103,13 +124,24 @@ class AsyncQuerier:
     def __init__(self, conn: sqlalchemy.ext.asyncio.AsyncConnection):
         self._conn = conn
 
+    async def activate_due_events(self) -> AsyncIterator[uuid.UUID]:
+        result = await self._conn.stream(sqlalchemy.text(ACTIVATE_DUE_EVENTS))
+        async for row in result:
+            yield row[0]
+
+    async def archive_ended_events(self) -> AsyncIterator[uuid.UUID]:
+        result = await self._conn.stream(sqlalchemy.text(ARCHIVE_ENDED_EVENTS))
+        async for row in result:
+            yield row[0]
+
     async def create_event(self, arg: CreateEventParams) -> Optional[models.Event]:
         row = (await self._conn.execute(sqlalchemy.text(CREATE_EVENT), {
             "p1": arg.name,
             "p2": arg.event_code,
             "p3": arg.event_date,
-            "p4": arg.status,
-            "p5": arg.created_by,
+            "p4": arg.end_date,
+            "p5": arg.status,
+            "p6": arg.created_by,
         })).first()
         if row is None:
             return None
@@ -122,6 +154,7 @@ class AsyncQuerier:
             created_by=row[5],
             created_at=row[6],
             archived_at=row[7],
+            end_date=row[8],
         )
 
     async def delete_event(self, *, id: uuid.UUID) -> None:
@@ -140,6 +173,7 @@ class AsyncQuerier:
             created_by=row[5],
             created_at=row[6],
             archived_at=row[7],
+            end_date=row[8],
         )
 
     async def get_event_by_id(self, *, id: uuid.UUID) -> Optional[models.Event]:
@@ -155,6 +189,7 @@ class AsyncQuerier:
             created_by=row[5],
             created_at=row[6],
             archived_at=row[7],
+            end_date=row[8],
         )
 
     async def get_events_by_name(self, *, dollar_1: Optional[str]) -> AsyncIterator[models.Event]:
@@ -169,6 +204,7 @@ class AsyncQuerier:
                 created_by=row[5],
                 created_at=row[6],
                 archived_at=row[7],
+                end_date=row[8],
             )
 
     async def list_events(self, arg: ListEventsParams) -> AsyncIterator[models.Event]:
@@ -191,6 +227,7 @@ class AsyncQuerier:
                 created_by=row[5],
                 created_at=row[6],
                 archived_at=row[7],
+                end_date=row[8],
             )
 
     async def update_event_status(self, *, id: uuid.UUID, status: Any) -> Optional[models.Event]:
@@ -206,4 +243,5 @@ class AsyncQuerier:
             created_by=row[5],
             created_at=row[6],
             archived_at=row[7],
+            end_date=row[8],
         )

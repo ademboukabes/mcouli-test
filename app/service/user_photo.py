@@ -10,8 +10,12 @@ from app.service.staff_drive import StaffDriveService
 from db.generated import photo_approvals as photo_approval_queries
 from db.generated import photo_faces as photo_face_queries
 from db.generated import photos as photo_queries
-from db.generated.models import Photo
-from db.generated.photos import ListEventPhotosForUserParams, ListUserPhotosParams
+from db.generated.photos import (
+    ListEventPhotosForUserParams,
+    ListEventPhotosForUserRow,
+    ListUserPhotosParams,
+    ListUserPhotosRow,
+)
 
 
 class UserPhotoService:
@@ -36,8 +40,8 @@ class UserPhotoService:
         sort: str = "desc",
         limit: int = 50,
         offset: int = 0,
-    ) -> list[Photo]:
-        photos: list[Photo] = []
+    ) -> list[ListUserPhotosRow]:
+        photos: list[ListUserPhotosRow] = []
         async for photo in self._photo_querier.list_user_photos(
             ListUserPhotosParams(
                 user_id=user_id,
@@ -58,8 +62,8 @@ class UserPhotoService:
         sort: str = "desc",
         limit: int = 50,
         offset: int = 0,
-    ) -> list[Photo]:
-        photos: list[Photo] = []
+    ) -> list[ListEventPhotosForUserRow]:
+        photos: list[ListEventPhotosForUserRow] = []
         async for photo in self._photo_querier.list_event_photos_for_user(
             ListEventPhotosForUserParams(
                 user_id=user_id,
@@ -79,7 +83,8 @@ class UserPhotoService:
         event_id: UUID,
     ) -> int:
         count = await self._photo_querier.count_event_photos_for_user(
-            user_id=user_id, event_id=event_id,
+            user_id=user_id,
+            event_id=event_id,
         )
         return count or 0
 
@@ -109,10 +114,16 @@ class UserPhotoService:
         except Exception:
             logger.info("Photo %s not in bucket, trying Drive fallback", photo_id)
 
-        # Fallback: get drive_file_id from upload_request_photos
-        drive_file_id = await self._photo_querier.get_drive_file_id_for_photo(
-            final_storage_key=photo.storage_key,
-        )
+        # Fallback: photos.drive_file_id (set once drive_sync confirms an
+        # approved direct-upload photo has been synced) takes priority since
+        # it's the authoritative post-approval copy; upload_request_photos'
+        # drive_file_id (the original *source* file for Drive-imported
+        # photos) is the older path, kept for backward compatibility.
+        drive_file_id = photo.drive_file_id
+        if drive_file_id is None:
+            drive_file_id = await self._photo_querier.get_drive_file_id_for_photo(
+                final_storage_key=photo.storage_key,
+            )
         if drive_file_id is None:
             raise AppException.not_found("Photo no longer available")
 
@@ -128,11 +139,16 @@ class UserPhotoService:
     async def _user_has_access(self, user_id: UUID, photo_id: UUID) -> bool:
         """Check if user has a face_match or photo_approval for this photo."""
         match = await self._photo_face_querier.user_has_face_match_for_photo(
-            photo_id=photo_id, user_id=user_id,
+            photo_id=photo_id,
+            user_id=user_id,
         )
         if match is not None:
             return True
-        async for approval in self._photo_approval_querier.get_photo_approvals_by_photo_id(photo_id=photo_id):
+        async for (
+            approval
+        ) in self._photo_approval_querier.get_photo_approvals_by_photo_id(
+            photo_id=photo_id
+        ):
             if approval.user_id == user_id:
                 return True
         return False

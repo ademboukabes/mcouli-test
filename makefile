@@ -65,6 +65,9 @@ run-workers:
 	uv run python -m app.worker.photo_worker.main & \
 	uv run python -m app.worker.storage_cleaner.main & \
 	uv run python -m app.worker.email_worker.main & \
+	uv run python -m app.worker.event_lifecycle.main & \
+	uv run python -m app.worker.upload_reconciler.main & \
+	uv run python -m app.worker.drive_sync.main & \
 	wait
 	
 lint:

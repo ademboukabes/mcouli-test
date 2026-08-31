@@ -18,10 +18,11 @@ class UploadRequestGroupSchema(BaseModel):
 
     id: UUID
     event_id: UUID
-    folder_id: str
+    folder_id: str | None
     requested_by: UUID
     approved_by: UUID | None
     status: str
+    source: str
     processing_status: str
     total_photo_count: int
     batch_count: int
@@ -39,7 +40,9 @@ class UploadRequestGroupSchema(BaseModel):
         return getattr(v, "value", str(v))
 
     @classmethod
-    def from_details(cls, details: UploadRequestGroupDetails) -> "UploadRequestGroupSchema":
+    def from_details(
+        cls, details: UploadRequestGroupDetails
+    ) -> "UploadRequestGroupSchema":
         data = dataclasses.asdict(details.group)
         data["requests"] = [
             UploadRequestSchema.from_details(req) for req in details.requests
@@ -55,7 +58,9 @@ class UploadRequestGroupListResponse(BaseModel):
         cls,
         details_list: list[UploadRequestGroupDetails],
     ) -> "UploadRequestGroupListResponse":
-        return cls(items=[UploadRequestGroupSchema.from_details(d) for d in details_list])
+        return cls(
+            items=[UploadRequestGroupSchema.from_details(d) for d in details_list]
+        )
 
 
 class UploadRequestGroupPhotoListResponse(UploadRequestPhotoListResponse):
@@ -64,16 +69,16 @@ class UploadRequestGroupPhotoListResponse(UploadRequestPhotoListResponse):
         cls,
         photos: list[UploadRequestPhoto],
     ) -> "UploadRequestGroupPhotoListResponse":
-        return cls(
-            items=[UploadRequestPhotoSchema.model_validate(p) for p in photos]
-        )
+        return cls(items=[UploadRequestPhotoSchema.model_validate(p) for p in photos])
+
 
 class UploadRequestGroupSummarySchema(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: UUID
     event_id: UUID
-    folder_id: str
+    folder_id: str | None
     status: str
+    source: str
     processing_status: str
     total_photo_count: int
     batch_count: int
@@ -94,5 +99,9 @@ class UploadRequestGroupSummaryListResponse(BaseModel):
     items: list[UploadRequestGroupSummarySchema]
 
     @classmethod
-    def from_groups(cls, groups: list["UploadRequestGroup"]) -> "UploadRequestGroupSummaryListResponse":
-        return cls(items=[UploadRequestGroupSummarySchema.model_validate(g) for g in groups])
+    def from_groups(
+        cls, groups: list["UploadRequestGroup"]
+    ) -> "UploadRequestGroupSummaryListResponse":
+        return cls(
+            items=[UploadRequestGroupSummarySchema.model_validate(g) for g in groups]
+        )

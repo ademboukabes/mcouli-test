@@ -3,7 +3,7 @@ import json
 
 from app.core.config import settings
 from app.core.logger import logger
-from app.infra.nats import NatsClient
+from app.infra.nats import NatsClient, NatsSubjects
 from app.infra.email import EmailSender
 
 
@@ -25,9 +25,11 @@ async def handle_message(raw_payload: bytes | str) -> None:
             logger.info("Successfully sent OTP email to %s", email)
         else:
             logger.error("Failed to send OTP email to %s", email)
+            raise Exception("EmailSender returned False")
 
     except Exception:
         logger.exception("Unexpected error in email worker")
+        raise
 
 
 async def run_worker() -> None:
@@ -37,7 +39,7 @@ async def run_worker() -> None:
         await handle_message(msg)
 
     # Subscribe to the email.send_otp subject
-    await NatsClient.subscribe("email.send_otp", wrapped_handler)
+    await NatsClient.js_subscribe(NatsSubjects.EMAIL_SEND_OTP, wrapped_handler)
 
     # Keep the worker running
     await asyncio.Event().wait()

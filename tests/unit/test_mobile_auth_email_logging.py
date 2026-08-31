@@ -8,7 +8,7 @@ from collections.abc import AsyncIterator
 import logging
 import uuid
 from datetime import datetime, timezone
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, AsyncMock
 
 import pytest
 
@@ -71,7 +71,6 @@ class FakeDeviceQuerier:
 class FakeSessionQuerier:
     def __init__(self, session: FakeSession) -> None:
         self._session = session
-
 
     async def lock_user_sessions(self, *, user_id: str) -> None:
         return None
@@ -148,7 +147,11 @@ def test_mobile_register_logs_without_plaintext_email(
     async def _noop_cache_session_for_auth(**_: object) -> None:
         return None
 
-    monkeypatch.setattr(SessionService, "cache_session_for_auth", _noop_cache_session_for_auth)
+    monkeypatch.setattr("app.service.users.settings.environment", "production")
+    monkeypatch.setattr("app.service.users.NatsClient.js_publish", AsyncMock())
+    monkeypatch.setattr(
+        SessionService, "cache_session_for_auth", _noop_cache_session_for_auth
+    )
     monkeypatch.setattr(users_module, "create_acces_mobile_token", lambda _: "access")
     monkeypatch.setattr(users_module, "create_raw_refresh_token", lambda: "refresh")
 

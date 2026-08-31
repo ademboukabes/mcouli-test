@@ -2,12 +2,16 @@ from datetime import datetime, timezone
 import uuid
 from typing import TYPE_CHECKING
 from app.schema.response.web.stats import (
-    AdminStatsResponse, DriveUsageResponse,
-    ProcessingLoadResponse, AlertResponse, AlertItem
+    AdminStatsResponse,
+    DriveUsageResponse,
+    ProcessingLoadResponse,
+    AlertResponse,
+    AlertItem,
 )
 
 if TYPE_CHECKING:
     from db.generated.stats import AsyncQuerier
+
 
 class StatsService:
     def __init__(self, querier: "AsyncQuerier"):
@@ -23,7 +27,7 @@ class StatsService:
             photos_uploaded=photos or 0,
             processed_photos=metrics.completed_count if metrics else 0,
             queue_size=metrics.pending_count if metrics else 0,
-            timestamp=datetime.now(timezone.utc)
+            timestamp=datetime.now(timezone.utc),
         )
 
     async def get_processing_load(self) -> ProcessingLoadResponse:
@@ -39,7 +43,7 @@ class StatsService:
         return ProcessingLoadResponse(
             completed=round((metrics.completed_count / total) * 100, 1),
             processing=round((metrics.running_count / total) * 100, 1),
-            queued=round((metrics.pending_count / total) * 100, 1)
+            queued=round((metrics.pending_count / total) * 100, 1),
         )
 
     async def get_storage_usage(self) -> DriveUsageResponse:
@@ -50,28 +54,34 @@ class StatsService:
         return DriveUsageResponse(
             used_bytes=used_bytes or 0,
             total_bytes=total_bytes,
-            timestamp=datetime.now(timezone.utc)
+            timestamp=datetime.now(timezone.utc),
         )
 
     async def get_staff_alerts(self, staff_id: uuid.UUID) -> AlertResponse:
-        db_alerts = [a async for a in self.q.get_recent_staff_alerts(staff_user_id=staff_id)]
-        unread_count = await self.q.get_unread_staff_alerts_count(staff_user_id=staff_id)
+        db_alerts = [
+            a async for a in self.q.get_recent_staff_alerts(staff_user_id=staff_id)
+        ]
+        unread_count = await self.q.get_unread_staff_alerts_count(
+            staff_user_id=staff_id
+        )
 
         alerts = []
         for a in db_alerts:
             # Assuming payload is a dict with title and message
             payload = a.payload or {}
-            alerts.append(AlertItem(
-                id=str(a.id),
-                type=a.type,
-                title=payload.get("title", "Notification"),
-                message=payload.get("message", "No message provided"),
-                created_at=a.created_at,
-                is_read=a.read_at is not None
-            ))
+            alerts.append(
+                AlertItem(
+                    id=str(a.id),
+                    type=a.type,
+                    title=payload.get("title", "Notification"),
+                    message=payload.get("message", "No message provided"),
+                    created_at=a.created_at,
+                    is_read=a.read_at is not None,
+                )
+            )
 
         return AlertResponse(
             alerts=alerts,
             unread_count=unread_count or 0,
-            timestamp=datetime.now(timezone.utc)
+            timestamp=datetime.now(timezone.utc),
         )

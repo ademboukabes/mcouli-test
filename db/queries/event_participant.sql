@@ -6,10 +6,11 @@ RETURNING *;
 
 -- name: GetUserEvents :many
 -- Retrieves all events a specific user has successfully joined
-SELECT 
-    e.id, 
-    e.name, 
-    e.event_date, 
+SELECT
+    e.id,
+    e.name,
+    e.event_date,
+    e.end_date,
     e.status,
     ep.joined_at
 FROM events e

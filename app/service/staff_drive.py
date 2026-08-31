@@ -8,9 +8,11 @@ import uuid
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
+from fastapi import HTTPException
 from cryptography.fernet import Fernet, InvalidToken
 
 from app.core.config import settings
+from app.core.logger import logger
 from app.core.constant import IMAGE_ALLOWED_TYPES
 from app.core.exceptions import AppException
 from app.infra.google_drive import GoogleDriveClient
@@ -110,7 +112,9 @@ class StaffDriveService:
         if redirect_url is not None and not isinstance(redirect_url, str):
             raise AppException.bad_request("Invalid OAuth redirect URL")
 
-        staff_user = await self.staff_user_querier.get_staff_user_by_id(id=staff_user_id)
+        staff_user = await self.staff_user_querier.get_staff_user_by_id(
+            id=staff_user_id
+        )
         if staff_user is None:
             raise AppException.not_found("Staff user not found")
 
@@ -158,7 +162,10 @@ class StaffDriveService:
     def _token_needs_refresh(cls, connection: StaffDriveConnection) -> bool:
         if connection.token_expires_at is None:
             return False
-        return connection.token_expires_at <= datetime.now(timezone.utc) + cls.TOKEN_REFRESH_BUFFER
+        return (
+            connection.token_expires_at
+            <= datetime.now(timezone.utc) + cls.TOKEN_REFRESH_BUFFER
+        )
 
     async def _refresh_connection_access_token(
         self,
@@ -170,27 +177,40 @@ class StaffDriveService:
             )
 
         refresh_token = self.decrypt(connection.refresh_token)
-        token = await GoogleDriveClient.refresh_access_token(refresh_token)
+        try:
+            token = await GoogleDriveClient.refresh_access_token(refresh_token)
+        except HTTPException as exc:
+            if "invalid_grant" in str(exc.detail):
+                await self.drive_connection_querier.revoke_staff_drive_connection_by_staff_user_id(
+                    staff_user_id=connection.staff_user_id,
+                    provider=connection.provider,
+                )
+                raise AppException.not_found("Drive connection revoked") from exc
+            raise
 
         encrypted_access_token = self._encrypt(token.access_token)
         encrypted_refresh_token = connection.refresh_token
         if token.refresh_token:
             encrypted_refresh_token = self._encrypt(token.refresh_token)
 
-        refreshed_connection = await self.drive_connection_querier.upsert_staff_drive_connection(
-            arg=drive_queries.UpsertStaffDriveConnectionParams(
-                staff_user_id=connection.staff_user_id,
-                provider=connection.provider,
-                google_email=connection.google_email,
-                google_account_id=connection.google_account_id,
-                access_token=encrypted_access_token,
-                refresh_token=encrypted_refresh_token,
-                token_expires_at=token.expires_at,
-                scopes=token.scope,
+        refreshed_connection = (
+            await self.drive_connection_querier.upsert_staff_drive_connection(
+                arg=drive_queries.UpsertStaffDriveConnectionParams(
+                    staff_user_id=connection.staff_user_id,
+                    provider=connection.provider,
+                    google_email=connection.google_email,
+                    google_account_id=connection.google_account_id,
+                    access_token=encrypted_access_token,
+                    refresh_token=encrypted_refresh_token,
+                    token_expires_at=token.expires_at,
+                    scopes=token.scope,
+                )
             )
         )
         if refreshed_connection is None:
-            raise AppException.internal_error("Failed to refresh Google Drive connection")
+            raise AppException.internal_error(
+                "Failed to refresh Google Drive connection"
+            )
 
         return refreshed_connection
 
@@ -202,12 +222,150 @@ class StaffDriveService:
 
     async def get_system_access_token(self) -> str:
         """Get an access token from any active staff Drive connection."""
-        connection = await self.drive_connection_querier.get_any_active_staff_drive_connection()
+        connection = (
+            await self.drive_connection_querier.get_any_active_staff_drive_connection()
+        )
         if connection is None:
             raise AppException.not_found("No active Google Drive connection")
         if self._token_needs_refresh(connection):
             connection = await self._refresh_connection_access_token(connection)
         return self.decrypt(connection.access_token)
+
+    # How long the folder-creation lock is held (initial TTL).
+    # Drive API calls (search + optional create) can take up to ~60s on a slow
+    # network; 120s gives a comfortable margin before the heartbeat is even needed.
+    _FOLDER_LOCK_TTL_SECONDS: int = 120
+    # The heartbeat renews the lock every N seconds to keep it alive during
+    # slow Drive API calls.  Must be well below _FOLDER_LOCK_TTL_SECONDS.
+    _FOLDER_LOCK_HEARTBEAT_SECONDS: int = 40
+
+    async def _lock_heartbeat(
+        self,
+        lock_key: str,
+        lock_value: str,
+        stop: asyncio.Event,
+    ) -> None:
+        """Renews the Redis lock TTL every _FOLDER_LOCK_HEARTBEAT_SECONDS to
+        prevent it from expiring during slow Drive API calls."""
+        while not stop.is_set():
+            await asyncio.sleep(self._FOLDER_LOCK_HEARTBEAT_SECONDS)
+            if stop.is_set():
+                break
+            try:
+                current = await self.redis.get(lock_key)
+                if current != lock_value:
+                    logger.warning(
+                        "drive_folder_lock: lock %s no longer ours, stopping heartbeat",
+                        lock_key,
+                    )
+                    break
+                await self.redis.expire(lock_key, self._FOLDER_LOCK_TTL_SECONDS)
+                logger.debug("drive_folder_lock: refreshed TTL for %s", lock_key)
+            except Exception as exc:  # pragma: no cover
+                logger.warning(
+                    "drive_folder_lock: heartbeat error for %s: %s", lock_key, exc
+                )
+
+    async def _resolve_drive_folder(
+        self,
+        event_name: str,
+        access_token: str,
+    ) -> str:
+        """Find an existing Drive folder with *event_name* or create one.
+        Returns the folder ID."""
+        parent_id = settings.GOOGLE_CLUB_DRIVE_FOLDER_ID or None
+        existing = await GoogleDriveClient.search_files(
+            access_token=access_token, query=event_name, file_type="folder"
+        )
+        for folder in existing or []:
+            if folder.name == event_name:
+                return folder.id
+        folder_meta = await GoogleDriveClient.create_folder(
+            access_token=access_token, name=event_name, parent_id=parent_id
+        )
+        return folder_meta.id
+
+    async def _get_or_create_event_folder(
+        self,
+        event_id: uuid.UUID,
+        event_name: str,
+        access_token: str,
+    ) -> str:
+        cache_key = f"drive:folder:{event_id}"
+        cached_id = await self.redis.get(cache_key)
+        if cached_id:
+            return cached_id
+
+        lock_key = f"lock:drive:folder:{event_id}"
+        # Unique value: only the holder can release its own lock.
+        lock_value = str(uuid.uuid4())
+
+        while True:
+            acquired = await self.redis.set(
+                lock_key,
+                lock_value,
+                expire=self._FOLDER_LOCK_TTL_SECONDS,
+                nx=True,
+            )
+            if acquired:
+                break
+            await asyncio.sleep(1.0)
+
+        stop_heartbeat = asyncio.Event()
+        # Background heartbeat keeps the lock alive during slow Drive API calls.
+        heartbeat_task = asyncio.create_task(
+            self._lock_heartbeat(lock_key, lock_value, stop_heartbeat)
+        )
+
+        try:
+            # Double-check: another waiter may have populated the cache while
+            # we were spinning in the loop above.
+            cached_id = await self.redis.get(cache_key)
+            if cached_id:
+                return cached_id
+
+            folder_id = await self._resolve_drive_folder(event_name, access_token)
+            await self.redis.set(cache_key, folder_id, expire=7 * 24 * 3600)
+            return folder_id
+        finally:
+            stop_heartbeat.set()
+            heartbeat_task.cancel()
+            try:
+                await heartbeat_task
+            except asyncio.CancelledError:
+                pass
+            # Only release the lock if it still belongs to us.
+            current_value = await self.redis.get(lock_key)
+            if current_value == lock_value:
+                await self.redis.delete(lock_key)
+
+    async def upload_to_system_drive(
+        self,
+        *,
+        file_name: str,
+        content_type: str,
+        data: bytes,
+        event_id: uuid.UUID | None = None,
+        event_name: str | None = None,
+    ) -> str:
+        """Upload bytes to the system/club Drive using the most recently
+        connected active staff Drive connection. Returns the Drive file id."""
+        access_token = await self.get_system_access_token()
+        folder_id = settings.GOOGLE_CLUB_DRIVE_FOLDER_ID or None
+
+        if event_id and event_name:
+            folder_id = await self._get_or_create_event_folder(
+                event_id, event_name, access_token
+            )
+
+        metadata = await GoogleDriveClient.upload_file(
+            access_token=access_token,
+            file_name=file_name,
+            content_type=content_type,
+            data=data,
+            folder_id=folder_id,
+        )
+        return metadata.id
 
     async def disconnect(self, staff_user_id: uuid.UUID) -> None:
         connection = await self.get_status(staff_user_id)
@@ -224,9 +382,13 @@ class StaffDriveService:
 
     def decrypt(self, encrypted_value: str) -> str:
         try:
-            return self._fernet().decrypt(encrypted_value.encode("utf-8")).decode("utf-8")
+            return (
+                self._fernet().decrypt(encrypted_value.encode("utf-8")).decode("utf-8")
+            )
         except InvalidToken as exc:
-            raise AppException.internal_error("Stored Google Drive token cannot be decrypted") from exc
+            raise AppException.internal_error(
+                "Stored Google Drive token cannot be decrypted"
+            ) from exc
 
     async def import_images_from_drive(
         self,
@@ -299,7 +461,7 @@ class StaffDriveService:
 
     @staticmethod
     def _generate_object_name(filename: str) -> str:
-        suffix = filename[filename.rfind("."):] if "." in filename else ""
+        suffix = filename[filename.rfind(".") :] if "." in filename else ""
         return f"{uuid.uuid4()}{suffix}"
 
     @staticmethod
@@ -324,4 +486,6 @@ class StaffDriveService:
             query.append(("google_email", google_email))
         if error is not None:
             query.append(("error", error))
-        return urllib.parse.urlunparse(parsed._replace(query=urllib.parse.urlencode(query)))
+        return urllib.parse.urlunparse(
+            parsed._replace(query=urllib.parse.urlencode(query))
+        )

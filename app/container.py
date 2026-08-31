@@ -43,6 +43,7 @@ from app.service.stats import StatsService
 from app.worker.notification.notification_queue import NotificationQueue
 from app.worker.notification.settings import NotifSetting
 
+
 class Container:
     def __init__(
         self,
@@ -51,7 +52,9 @@ class Container:
     ):
         # infrastructure
         self.redis = RedisClient.get_instance()
-        self.face_embedding_service = face_embedding_service or get_face_embedding_service()
+        self.face_embedding_service = (
+            face_embedding_service or get_face_embedding_service()
+        )
 
         # queriers
         self.user_querier = user_queries.AsyncQuerier(conn)
@@ -59,9 +62,13 @@ class Container:
         self.device_querier = device_queries.AsyncQuerier(conn)
         self.staff_user_querier = staff_user_queries.AsyncQuerier(conn)
         self.staff_drive_querier = staff_drive_queries.AsyncQuerier(conn)
-        self.upload_request_group_querier = upload_request_group_queries.AsyncQuerier(conn)
+        self.upload_request_group_querier = upload_request_group_queries.AsyncQuerier(
+            conn
+        )
         self.upload_request_querier = upload_request_queries.AsyncQuerier(conn)
-        self.upload_request_photo_querier = upload_request_photo_queries.AsyncQuerier(conn)
+        self.upload_request_photo_querier = upload_request_photo_queries.AsyncQuerier(
+            conn
+        )
         self.photo_querier = photo_queries.AsyncQuerier(conn)
         self.photo_approval_querier = photo_approval_queries.AsyncQuerier(conn)
         self.photo_face_querier = photo_face_queries.AsyncQuerier(conn)
@@ -78,7 +85,6 @@ class Container:
             session_querier=self.session_querier,
             redis=self.redis,
         )
-
 
         self.device_service = DeviceService()
         self.device_service.init(
@@ -130,7 +136,8 @@ class Container:
 
         self.staff_user_service = StaffUserService()
         self.staff_user_service.init(
-            staff_user_querier=self.staff_user_querier,)
+            staff_user_querier=self.staff_user_querier,
+        )
 
         self.event_service = EventService(
             e_querier=self.event_querier,
@@ -154,6 +161,7 @@ class Container:
         self.stats_service = StatsService(
             querier=self.stats_querier,
         )
+
 
 async def get_container(
     conn: sqlalchemy.ext.asyncio.AsyncConnection = Depends(get_db),

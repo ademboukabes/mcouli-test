@@ -11,7 +11,7 @@ class UploadRequestPhotoSchema(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: UUID
-    drive_file_id: str
+    drive_file_id: str | None
     file_name: str
     mime_type: str
     size_bytes: int
@@ -19,6 +19,8 @@ class UploadRequestPhotoSchema(BaseModel):
     day_number: int | None
     visibility: str
     status: str
+    source: str
+    transfer_status: str
     created_at: datetime
 
 
@@ -32,6 +34,7 @@ class UploadRequestSchema(BaseModel):
     requested_by: UUID
     approved_by: UUID | None
     status: str
+    source: str
     photo_count: int
     created_at: datetime
     approved_at: datetime | None

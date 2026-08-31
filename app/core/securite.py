@@ -12,6 +12,7 @@ import pyotp
 from app.core.config import settings
 from app.core.exceptions import AppException
 from app.core.logger import logger
+
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 
@@ -42,15 +43,21 @@ def create_acces_mobile_token(session_id: str) -> str:
     payload: dict[str, Any] = {
         "session_id": session_id,
         "exp": int(
-            (datetime.now(timezone.utc) + timedelta(seconds=Get_expiry_time())).timestamp()
+            (
+                datetime.now(timezone.utc) + timedelta(seconds=Get_expiry_time())
+            ).timestamp()
         ),
     }
-    return jwt.encode(payload, key=settings.jwt_secret, algorithm=settings.jwt_algorithm)
+    return jwt.encode(
+        payload, key=settings.jwt_secret, algorithm=settings.jwt_algorithm
+    )
 
 
 def decode_access_mobile_token(token: str) -> dict[str, Any]:
     try:
-        payload = jwt.decode(token, key=settings.jwt_secret, algorithms=[settings.jwt_algorithm])
+        payload = jwt.decode(
+            token, key=settings.jwt_secret, algorithms=[settings.jwt_algorithm]
+        )
         return payload
     except jwt.ExpiredSignatureError:
         raise AppException.unauthorized("Token has expired")
@@ -65,6 +72,7 @@ def create_raw_refresh_token() -> str:
 def hash_refresh_token(raw_token: str) -> str:
     return hashlib.sha256(raw_token.encode("utf-8")).hexdigest()
 
+
 def create_totp_secret() -> str:
     return pyotp.random_base32()
 
@@ -74,7 +82,9 @@ def get_totp_uri(secret: str, email: str) -> str:
     return totp.provisioning_uri(name=email, issuer_name=settings.totp_issuer)
 
 
-def verify_totp_token_with_window(secret: str, token: str, valid_window: int = 8) -> bool:
+def verify_totp_token_with_window(
+    secret: str, token: str, valid_window: int = 8
+) -> bool:
     totp = pyotp.TOTP(secret)
     return totp.verify(token, valid_window=valid_window)
 
@@ -84,14 +94,20 @@ def generate_Acces_token_stuff(user_id: str, role: str) -> str:
         "user_id": user_id,
         "role": role,
         "exp": int(
-            (datetime.now(timezone.utc) + timedelta(seconds=Get_expiry_time())).timestamp()
+            (
+                datetime.now(timezone.utc) + timedelta(seconds=Get_expiry_time())
+            ).timestamp()
         ),
     }
-    return jwt.encode(payload, key=settings.jwt_secret, algorithm=settings.jwt_algorithm)
+    return jwt.encode(
+        payload, key=settings.jwt_secret, algorithm=settings.jwt_algorithm
+    )
+
 
 def _get_refresh_cache_aesgcm() -> AESGCM:
     key = base64.b64decode(settings.encryption_key)
     return AESGCM(key)
+
 
 def encrypt_refresh_cache_payload(plaintext: str) -> str:
     """Encrypt a JSON string for storage in Redis. Returns a base64 string
@@ -100,6 +116,7 @@ def encrypt_refresh_cache_payload(plaintext: str) -> str:
     nonce = os.urandom(12)
     ciphertext = aes.encrypt(nonce, plaintext.encode("utf-8"), None)
     return base64.b64encode(nonce + ciphertext).decode("utf-8")
+
 
 def decrypt_refresh_cache_payload(encoded: str) -> str:
     """Reverse of encrypt_refresh_cache_payload. Raises on tampering or
@@ -152,13 +169,13 @@ def create_access_staff_token(staff_id: str, role: str) -> str:
         role=role,
         type="access",
         exp=int(
-            (datetime.now(timezone.utc) + timedelta(seconds=Get_expiry_time())).timestamp()
+            (
+                datetime.now(timezone.utc) + timedelta(seconds=Get_expiry_time())
+            ).timestamp()
         ),
     )
     return jwt.encode(
-        payload.model_dump(),
-        key=settings.jwt_secret,
-        algorithm=settings.jwt_algorithm
+        payload.model_dump(), key=settings.jwt_secret, algorithm=settings.jwt_algorithm
     )
 
 
@@ -171,13 +188,13 @@ def create_refresh_staff_token(staff_id: str, role: str) -> str:
         role=role,
         type="refresh",
         exp=int(
-            (datetime.now(timezone.utc) + timedelta(seconds=Get_expiry_time() * 4)).timestamp()
+            (
+                datetime.now(timezone.utc) + timedelta(seconds=Get_expiry_time() * 4)
+            ).timestamp()
         ),
     )
     return jwt.encode(
-        payload.model_dump(),
-        key=settings.jwt_secret,
-        algorithm=settings.jwt_algorithm
+        payload.model_dump(), key=settings.jwt_secret, algorithm=settings.jwt_algorithm
     )
 
 
@@ -187,9 +204,7 @@ def decode_staff_token(token: str) -> StaffJWTPayload:
     """
     try:
         decoded = jwt.decode(
-            token,
-            key=settings.jwt_secret,
-            algorithms=[settings.jwt_algorithm]
+            token, key=settings.jwt_secret, algorithms=[settings.jwt_algorithm]
         )
         return StaffJWTPayload(**decoded)
     except jwt.ExpiredSignatureError:

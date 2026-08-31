@@ -4,9 +4,10 @@ INSERT INTO upload_requests (
     group_id,
     drive_file_id,
     requested_by,
-    photo_count
+    photo_count,
+    source
 ) VALUES (
-    $1, $2, $3, $4, $5
+    $1, $2, $3, $4, $5, $6
 )
 RETURNING *;
 

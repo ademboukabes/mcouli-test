@@ -5,6 +5,7 @@ from app.deps.client_ip import get_client_ip
 from app.infra.redis import RedisClient
 from app.core.logger import logger
 
+
 def RateLimiter(requests: int, window: int) -> Callable:
     async def _rate_limit_dependency(request: Request) -> None:
         client_ip = get_client_ip(request) or "127.0.0.1"
@@ -20,7 +21,9 @@ def RateLimiter(requests: int, window: int) -> Callable:
         except HTTPException:
             raise
         except Exception:
-            logger.warning("rate_limit: redis unavailable, failing open for key=%s", key)
+            logger.warning(
+                "rate_limit: redis unavailable, failing open for key=%s", key
+            )
             return
 
         if current > requests:

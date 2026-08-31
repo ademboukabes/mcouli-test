@@ -15,6 +15,7 @@ from app.service.session import SessionService
 
 pytestmark = pytest.mark.asyncio(loop_scope="session")
 
+
 @pytest.fixture(scope="session", autouse=True)
 async def setup_infra():
     # We must init Redis since ASGITransport doesn't trigger the lifespan
@@ -25,14 +26,18 @@ async def setup_infra():
             password=settings.REDIS_PASSWORD,
         )
     except RuntimeError:
-        pass # Already initialized
+        pass  # Already initialized
     yield
     await RedisClient.get_instance().close()
 
+
 @pytest.fixture(scope="session")
 async def client():
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://testserver") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://testserver"
+    ) as c:
         yield c
+
 
 def create_mock_jwt(user_id: str, exp_delta_hours: int = 24) -> str:
     payload = {
@@ -40,6 +45,7 @@ def create_mock_jwt(user_id: str, exp_delta_hours: int = 24) -> str:
         "exp": datetime.now(timezone.utc) + timedelta(hours=exp_delta_hours),
     }
     return jwt.encode(payload, settings.jwt_secret, algorithm="HS256")
+
 
 async def test_jwt_validation_invalid_signature(client):
     """Test that a JWT with an invalid signature is rejected."""
@@ -51,30 +57,29 @@ async def test_jwt_validation_invalid_signature(client):
 
     # We must use "Bearer "
     response = await client.get(
-        "/user/photos",
-        headers={"Authorization": f"Bearer {invalid_token}"}
+        "/user/photos", headers={"Authorization": f"Bearer {invalid_token}"}
     )
     assert response.status_code == 401
     assert "Invalid token" in response.text
+
 
 async def test_jwt_validation_expired_token(client):
     """Test that an expired JWT is rejected."""
     expired_token = create_mock_jwt(str(uuid.uuid4()), exp_delta_hours=-1)
 
     response = await client.get(
-        "/user/photos",
-        headers={"Authorization": f"Bearer {expired_token}"}
+        "/user/photos", headers={"Authorization": f"Bearer {expired_token}"}
     )
     assert response.status_code == 401
     assert "Token has expired" in response.text
+
 
 async def test_blocked_user_access(client):
     """Test that a blocked user cannot access protected endpoints."""
     async with engine.begin() as conn:
         uq = user_queries.AsyncQuerier(conn)
         user = await uq.create_user(
-            email=f"blocked-{uuid.uuid4()}@test.com",
-            hashed_password="hash"
+            email=f"blocked-{uuid.uuid4()}@test.com", hashed_password="hash"
         )
         user_id = user.id
 
@@ -93,7 +98,7 @@ async def test_blocked_user_access(client):
         absolute_expires_at=datetime.now(timezone.utc) + timedelta(days=30),
         blocked=True,
         ttl=3600,
-        last_active=datetime.now(timezone.utc)
+        last_active=datetime.now(timezone.utc),
     )
 
     payload = {
@@ -104,21 +109,24 @@ async def test_blocked_user_access(client):
 
     try:
         response = await client.get(
-            "/user/photos",
-            headers={"Authorization": f"Bearer {token}"}
+            "/user/photos", headers={"Authorization": f"Bearer {token}"}
         )
-        assert response.status_code in (401, 403), f"Expected 401 or 403, got {response.status_code}"
+        assert response.status_code in (401, 403), (
+            f"Expected 401 or 403, got {response.status_code}"
+        )
     finally:
         async with engine.begin() as conn:
-            await conn.execute(text("DELETE FROM users WHERE id = :uid"), {"uid": user_id})
+            await conn.execute(
+                text("DELETE FROM users WHERE id = :uid"), {"uid": user_id}
+            )
+
 
 async def test_rate_limiting(client):
     """Test that multiple requests within a short timeframe hit rate limits."""
     async with engine.begin() as conn:
         uq = user_queries.AsyncQuerier(conn)
         user = await uq.create_user(
-            email=f"rate-{uuid.uuid4()}@test.com",
-            hashed_password="hash"
+            email=f"rate-{uuid.uuid4()}@test.com", hashed_password="hash"
         )
         user_id = user.id
         session_id = uuid.uuid4()
@@ -133,7 +141,7 @@ async def test_rate_limiting(client):
         absolute_expires_at=datetime.now(timezone.utc) + timedelta(days=30),
         blocked=False,
         ttl=3600,
-        last_active=datetime.now(timezone.utc)
+        last_active=datetime.now(timezone.utc),
     )
 
     payload = {
@@ -147,15 +155,18 @@ async def test_rate_limiting(client):
         # We test with enough requests to hit the 20/min limit
         for _ in range(25):
             res = await client.get(
-                "/user/photos",
-                headers={"Authorization": f"Bearer {token}"}
+                "/user/photos", headers={"Authorization": f"Bearer {token}"}
             )
             responses.append(res.status_code)
 
-        assert 429 in responses, "Expected to hit rate limit (429) after multiple rapid requests"
+        assert 429 in responses, (
+            "Expected to hit rate limit (429) after multiple rapid requests"
+        )
     finally:
         async with engine.begin() as conn:
-            await conn.execute(text("DELETE FROM users WHERE id = :uid"), {"uid": user_id})
+            await conn.execute(
+                text("DELETE FROM users WHERE id = :uid"), {"uid": user_id}
+            )
         try:
             redis = RedisClient.get_instance()
             await redis._client.delete("rate_limit:/user/photos:127.0.0.1")
@@ -163,13 +174,13 @@ async def test_rate_limiting(client):
         except Exception:
             pass
 
+
 async def test_fast_path_rejects_idle_expired_cached_session(client):
     """Cached session past idle timeout but before absolute → 401."""
     async with engine.begin() as conn:
         uq = user_queries.AsyncQuerier(conn)
         user = await uq.create_user(
-            email=f"idle-expired-{uuid.uuid4()}@test.com",
-            hashed_password="hash"
+            email=f"idle-expired-{uuid.uuid4()}@test.com", hashed_password="hash"
         )
         user_id = user.id
         session_id = uuid.uuid4()
@@ -181,7 +192,7 @@ async def test_fast_path_rejects_idle_expired_cached_session(client):
         session_id=session_id,
         user_id=user_id,
         email="idle@test.com",
-        idle_expires_at=now - timedelta(hours=1),      # expired
+        idle_expires_at=now - timedelta(hours=1),  # expired
         absolute_expires_at=now + timedelta(days=30),  # still valid
         blocked=False,
         ttl=3600,
@@ -196,14 +207,15 @@ async def test_fast_path_rejects_idle_expired_cached_session(client):
 
     try:
         response = await client.get(
-            "/user/photos",
-            headers={"Authorization": f"Bearer {token}"}
+            "/user/photos", headers={"Authorization": f"Bearer {token}"}
         )
         assert response.status_code == 401
         assert "expired" in response.json()["detail"].lower()
     finally:
         async with engine.begin() as conn:
-            await conn.execute(text("DELETE FROM users WHERE id = :uid"), {"uid": user_id})
+            await conn.execute(
+                text("DELETE FROM users WHERE id = :uid"), {"uid": user_id}
+            )
 
 
 async def test_fast_path_rejects_absolute_expired_cached_session(client):
@@ -211,8 +223,7 @@ async def test_fast_path_rejects_absolute_expired_cached_session(client):
     async with engine.begin() as conn:
         uq = user_queries.AsyncQuerier(conn)
         user = await uq.create_user(
-            email=f"abs-expired-{uuid.uuid4()}@test.com",
-            hashed_password="hash"
+            email=f"abs-expired-{uuid.uuid4()}@test.com", hashed_password="hash"
         )
         user_id = user.id
         session_id = uuid.uuid4()
@@ -224,7 +235,7 @@ async def test_fast_path_rejects_absolute_expired_cached_session(client):
         session_id=session_id,
         user_id=user_id,
         email="abs@test.com",
-        idle_expires_at=now + timedelta(days=7),       # still valid
+        idle_expires_at=now + timedelta(days=7),  # still valid
         absolute_expires_at=now - timedelta(hours=1),  # expired
         blocked=False,
         ttl=3600,
@@ -239,11 +250,12 @@ async def test_fast_path_rejects_absolute_expired_cached_session(client):
 
     try:
         response = await client.get(
-            "/user/photos",
-            headers={"Authorization": f"Bearer {token}"}
+            "/user/photos", headers={"Authorization": f"Bearer {token}"}
         )
         assert response.status_code == 401
         assert "expired" in response.json()["detail"].lower()
     finally:
         async with engine.begin() as conn:
-            await conn.execute(text("DELETE FROM users WHERE id = :uid"), {"uid": user_id})
+            await conn.execute(
+                text("DELETE FROM users WHERE id = :uid"), {"uid": user_id}
+            )

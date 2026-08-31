@@ -64,10 +64,12 @@ class MobileLoginRequest(MobileAuthBaseRequest):
 
 
 class RegisterVerifyRequest(MobileAuthBaseRequest):
-    otp: str = Field(..., min_length=6, max_length=6, description="The 6-digit OTP code sent via email")
-
-
-
+    otp: str = Field(
+        ...,
+        min_length=6,
+        max_length=6,
+        description="The 6-digit OTP code sent via email",
+    )
 
 
 class ResendOtpRequest(BaseModel):
@@ -92,3 +94,7 @@ class UpdateDeviceTokenRequest(BaseModel):
 
 class InactivateDeviceRequest(BaseModel):
     device_id: UUID
+
+
+class UpdateProfileRequest(BaseModel):
+    name: str = Field(..., min_length=1, max_length=100)

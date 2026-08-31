@@ -9,6 +9,3 @@ class WebAuthResponse(BaseModel):
     access_token: str
     user_id: uuid.UUID
     role: str
-
-
-

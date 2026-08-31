@@ -7,7 +7,12 @@ from app.infra.database import engine
 from app.infra.minio import Bucket, IMAGES_BUCKET_NAME
 from app.infra.nats import NatsClient, NatsSubjects
 
-from tests.e2e.conftest import _seed_event_and_photo, _wait_for_job, _cleanup, FIXTURE_DIR
+from tests.e2e.conftest import (
+    _seed_event_and_photo,
+    _wait_for_job,
+    _cleanup,
+    FIXTURE_DIR,
+)
 
 # ── tests ─────────────────────────────────────────────────────────────
 
@@ -30,8 +35,14 @@ async def test_photo_ai_pipeline_detects_0_faces() -> None:
             conn, photo_id=photo_id, storage_key=storage_key
         )
 
-    payload = {"photo_id": str(photo_id), "image_ref": storage_key, "event_id": str(event_id)}
-    await NatsClient.publish(NatsSubjects.PHOTO_PROCESS, json.dumps(payload).encode("utf-8"))
+    payload = {
+        "photo_id": str(photo_id),
+        "image_ref": storage_key,
+        "event_id": str(event_id),
+    }
+    await NatsClient.js_publish(
+        NatsSubjects.PHOTO_PROCESS, json.dumps(payload).encode("utf-8")
+    )
 
     try:
         final_status = await _wait_for_job(photo_id)
@@ -74,8 +85,14 @@ async def test_photo_ai_pipeline_detects_multiple_faces() -> None:
             conn, photo_id=photo_id, storage_key=storage_key
         )
 
-    payload = {"photo_id": str(photo_id), "image_ref": storage_key, "event_id": str(event_id)}
-    await NatsClient.publish(NatsSubjects.PHOTO_PROCESS, json.dumps(payload).encode("utf-8"))
+    payload = {
+        "photo_id": str(photo_id),
+        "image_ref": storage_key,
+        "event_id": str(event_id),
+    }
+    await NatsClient.js_publish(
+        NatsSubjects.PHOTO_PROCESS, json.dumps(payload).encode("utf-8")
+    )
 
     try:
         final_status = await _wait_for_job(photo_id)
@@ -153,8 +170,14 @@ async def test_photo_ai_pipeline_matched_user() -> None:
             {"uid": matched_user_id, "emb": embedding_literal},
         )
 
-    payload = {"photo_id": str(photo_id), "image_ref": storage_key, "event_id": str(event_id)}
-    await NatsClient.publish(NatsSubjects.PHOTO_PROCESS, json.dumps(payload).encode("utf-8"))
+    payload = {
+        "photo_id": str(photo_id),
+        "image_ref": storage_key,
+        "event_id": str(event_id),
+    }
+    await NatsClient.js_publish(
+        NatsSubjects.PHOTO_PROCESS, json.dumps(payload).encode("utf-8")
+    )
 
     try:
         final_status = await _wait_for_job(photo_id)

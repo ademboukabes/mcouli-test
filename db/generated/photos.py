@@ -31,11 +31,12 @@ INSERT INTO photos (
     storage_key,
     taken_at,
     day_number,
-    visibility
+    visibility,
+    source
 ) VALUES (
-    :p1, :p2, :p3, :p4, :p5
+    :p1, :p2, :p3, :p4, :p5, :p6
 )
-RETURNING id, event_id, uploaded_by, storage_key, taken_at, day_number, visibility, status, created_at
+RETURNING id, event_id, uploaded_by, storage_key, taken_at, day_number, visibility, status, created_at, drive_file_id, drive_synced_at, source, storage_cleaned_at
 """
 
 
@@ -46,6 +47,7 @@ class CreatePhotoParams:
     taken_at: Optional[datetime.datetime]
     day_number: Optional[int]
     visibility: str
+    source: str
 
 
 GET_DRIVE_FILE_ID_FOR_PHOTO = """-- name: get_drive_file_id_for_photo \\:one
@@ -57,12 +59,13 @@ LIMIT 1
 
 
 GET_PHOTO_BY_ID = """-- name: get_photo_by_id \\:one
-SELECT id, event_id, uploaded_by, storage_key, taken_at, day_number, visibility, status, created_at FROM photos WHERE id = :p1
+SELECT id, event_id, uploaded_by, storage_key, taken_at, day_number, visibility, status, created_at, drive_file_id, drive_synced_at, source, storage_cleaned_at FROM photos WHERE id = :p1
 """
 
 
 LIST_EVENT_PHOTOS_FOR_USER = """-- name: list_event_photos_for_user \\:many
-SELECT p.id, p.event_id, p.uploaded_by, p.storage_key, p.taken_at, p.day_number, p.visibility, p.status, p.created_at
+SELECT p.id, p.event_id, p.uploaded_by, p.storage_key, p.taken_at, p.day_number, p.visibility, p.status, p.created_at, p.drive_file_id, p.drive_synced_at, p.source, p.storage_cleaned_at,
+  (SELECT COUNT(*) FROM photo_faces pf2 WHERE pf2.photo_id = p.id)\\:\\:int AS face_count
 FROM photos p
 WHERE p.event_id = :p2
 AND p.status = 'approved'
@@ -94,10 +97,44 @@ class ListEventPhotosForUserParams:
     offset: int
 
 
-LIST_USER_PHOTOS = """-- name: list_user_photos \\:many
-SELECT p.id, p.event_id, p.uploaded_by, p.storage_key, p.taken_at, p.day_number, p.visibility, p.status, p.created_at
+@dataclasses.dataclass()
+class ListEventPhotosForUserRow:
+    id: uuid.UUID
+    event_id: uuid.UUID
+    uploaded_by: Optional[uuid.UUID]
+    storage_key: str
+    taken_at: Optional[datetime.datetime]
+    day_number: Optional[int]
+    visibility: str
+    status: Any
+    created_at: datetime.datetime
+    drive_file_id: Optional[str]
+    drive_synced_at: Optional[datetime.datetime]
+    source: str
+    storage_cleaned_at: Optional[datetime.datetime]
+    face_count: int
+
+
+LIST_PHOTOS_DUE_FOR_STORAGE_CLEANUP = """-- name: list_photos_due_for_storage_cleanup \\:many
+SELECT p.id, p.event_id, p.uploaded_by, p.storage_key, p.taken_at, p.day_number, p.visibility, p.status, p.created_at, p.drive_file_id, p.drive_synced_at, p.source, p.storage_cleaned_at
 FROM photos p
-WHERE (
+JOIN events e ON e.id = p.event_id
+WHERE p.status = 'approved'
+  AND p.storage_cleaned_at IS NULL
+  AND e.end_date IS NOT NULL
+  AND e.end_date <= NOW() - (:p1 || ' days')\\:\\:interval
+  AND (p.source != 'direct' OR p.drive_synced_at IS NOT NULL)
+ORDER BY e.end_date ASC
+LIMIT 500
+"""
+
+
+LIST_USER_PHOTOS = """-- name: list_user_photos \\:many
+SELECT p.id, p.event_id, p.uploaded_by, p.storage_key, p.taken_at, p.day_number, p.visibility, p.status, p.created_at, p.drive_file_id, p.drive_synced_at, p.source, p.storage_cleaned_at,
+  (SELECT COUNT(*) FROM photo_faces pf2 WHERE pf2.photo_id = p.id)\\:\\:int AS face_count
+FROM photos p
+WHERE p.status = 'approved'
+AND (
   EXISTS (
     SELECT 1 FROM photo_faces pf
     JOIN face_matches fm ON fm.photo_face_id = pf.id
@@ -125,11 +162,46 @@ class ListUserPhotosParams:
     offset: int
 
 
+@dataclasses.dataclass()
+class ListUserPhotosRow:
+    id: uuid.UUID
+    event_id: uuid.UUID
+    uploaded_by: Optional[uuid.UUID]
+    storage_key: str
+    taken_at: Optional[datetime.datetime]
+    day_number: Optional[int]
+    visibility: str
+    status: Any
+    created_at: datetime.datetime
+    drive_file_id: Optional[str]
+    drive_synced_at: Optional[datetime.datetime]
+    source: str
+    storage_cleaned_at: Optional[datetime.datetime]
+    face_count: int
+
+
+MARK_PHOTO_DRIVE_SYNCED = """-- name: mark_photo_drive_synced \\:one
+UPDATE photos
+SET drive_file_id = :p2,
+    drive_synced_at = NOW()
+WHERE id = :p1
+RETURNING id, event_id, uploaded_by, storage_key, taken_at, day_number, visibility, status, created_at, drive_file_id, drive_synced_at, source, storage_cleaned_at
+"""
+
+
+MARK_PHOTO_STORAGE_CLEANED = """-- name: mark_photo_storage_cleaned \\:one
+UPDATE photos
+SET storage_cleaned_at = NOW()
+WHERE id = :p1
+RETURNING id, event_id, uploaded_by, storage_key, taken_at, day_number, visibility, status, created_at, drive_file_id, drive_synced_at, source, storage_cleaned_at
+"""
+
+
 UPDATE_PHOTO_STATUS = """-- name: update_photo_status \\:one
 UPDATE photos
 SET status = :p2
 WHERE id = :p1
-RETURNING id, event_id, uploaded_by, storage_key, taken_at, day_number, visibility, status, created_at
+RETURNING id, event_id, uploaded_by, storage_key, taken_at, day_number, visibility, status, created_at, drive_file_id, drive_synced_at, source, storage_cleaned_at
 """
 
 
@@ -137,7 +209,7 @@ UPDATE_PHOTO_VISIBILITY = """-- name: update_photo_visibility \\:one
 UPDATE photos
 SET visibility = :p2
 WHERE id = :p1
-RETURNING id, event_id, uploaded_by, storage_key, taken_at, day_number, visibility, status, created_at
+RETURNING id, event_id, uploaded_by, storage_key, taken_at, day_number, visibility, status, created_at, drive_file_id, drive_synced_at, source, storage_cleaned_at
 """
 
 
@@ -158,6 +230,7 @@ class AsyncQuerier:
             "p3": arg.taken_at,
             "p4": arg.day_number,
             "p5": arg.visibility,
+            "p6": arg.source,
         })).first()
         if row is None:
             return None
@@ -171,9 +244,13 @@ class AsyncQuerier:
             visibility=row[6],
             status=row[7],
             created_at=row[8],
+            drive_file_id=row[9],
+            drive_synced_at=row[10],
+            source=row[11],
+            storage_cleaned_at=row[12],
         )
 
-    async def get_drive_file_id_for_photo(self, *, final_storage_key: Optional[str]) -> Optional[str]:
+    async def get_drive_file_id_for_photo(self, *, final_storage_key: Optional[str]) -> Optional[Optional[str]]:
         row = (await self._conn.execute(sqlalchemy.text(GET_DRIVE_FILE_ID_FOR_PHOTO), {"p1": final_storage_key})).first()
         if row is None:
             return None
@@ -193,9 +270,13 @@ class AsyncQuerier:
             visibility=row[6],
             status=row[7],
             created_at=row[8],
+            drive_file_id=row[9],
+            drive_synced_at=row[10],
+            source=row[11],
+            storage_cleaned_at=row[12],
         )
 
-    async def list_event_photos_for_user(self, arg: ListEventPhotosForUserParams) -> AsyncIterator[models.Photo]:
+    async def list_event_photos_for_user(self, arg: ListEventPhotosForUserParams) -> AsyncIterator[ListEventPhotosForUserRow]:
         result = await self._conn.stream(sqlalchemy.text(LIST_EVENT_PHOTOS_FOR_USER), {
             "p1": arg.user_id,
             "p2": arg.event_id,
@@ -204,7 +285,7 @@ class AsyncQuerier:
             "p5": arg.offset,
         })
         async for row in result:
-            yield models.Photo(
+            yield ListEventPhotosForUserRow(
                 id=row[0],
                 event_id=row[1],
                 uploaded_by=row[2],
@@ -214,16 +295,15 @@ class AsyncQuerier:
                 visibility=row[6],
                 status=row[7],
                 created_at=row[8],
+                drive_file_id=row[9],
+                drive_synced_at=row[10],
+                source=row[11],
+                storage_cleaned_at=row[12],
+                face_count=row[13],
             )
 
-    async def list_user_photos(self, arg: ListUserPhotosParams) -> AsyncIterator[models.Photo]:
-        result = await self._conn.stream(sqlalchemy.text(LIST_USER_PHOTOS), {
-            "p1": arg.user_id,
-            "p2": arg.column_2,
-            "p3": arg.column_3,
-            "p4": arg.limit,
-            "p5": arg.offset,
-        })
+    async def list_photos_due_for_storage_cleanup(self, *, dollar_1: Optional[str]) -> AsyncIterator[models.Photo]:
+        result = await self._conn.stream(sqlalchemy.text(LIST_PHOTOS_DUE_FOR_STORAGE_CLEANUP), {"p1": dollar_1})
         async for row in result:
             yield models.Photo(
                 id=row[0],
@@ -235,7 +315,77 @@ class AsyncQuerier:
                 visibility=row[6],
                 status=row[7],
                 created_at=row[8],
+                drive_file_id=row[9],
+                drive_synced_at=row[10],
+                source=row[11],
+                storage_cleaned_at=row[12],
             )
+
+    async def list_user_photos(self, arg: ListUserPhotosParams) -> AsyncIterator[ListUserPhotosRow]:
+        result = await self._conn.stream(sqlalchemy.text(LIST_USER_PHOTOS), {
+            "p1": arg.user_id,
+            "p2": arg.column_2,
+            "p3": arg.column_3,
+            "p4": arg.limit,
+            "p5": arg.offset,
+        })
+        async for row in result:
+            yield ListUserPhotosRow(
+                id=row[0],
+                event_id=row[1],
+                uploaded_by=row[2],
+                storage_key=row[3],
+                taken_at=row[4],
+                day_number=row[5],
+                visibility=row[6],
+                status=row[7],
+                created_at=row[8],
+                drive_file_id=row[9],
+                drive_synced_at=row[10],
+                source=row[11],
+                storage_cleaned_at=row[12],
+                face_count=row[13],
+            )
+
+    async def mark_photo_drive_synced(self, *, id: uuid.UUID, drive_file_id: Optional[str]) -> Optional[models.Photo]:
+        row = (await self._conn.execute(sqlalchemy.text(MARK_PHOTO_DRIVE_SYNCED), {"p1": id, "p2": drive_file_id})).first()
+        if row is None:
+            return None
+        return models.Photo(
+            id=row[0],
+            event_id=row[1],
+            uploaded_by=row[2],
+            storage_key=row[3],
+            taken_at=row[4],
+            day_number=row[5],
+            visibility=row[6],
+            status=row[7],
+            created_at=row[8],
+            drive_file_id=row[9],
+            drive_synced_at=row[10],
+            source=row[11],
+            storage_cleaned_at=row[12],
+        )
+
+    async def mark_photo_storage_cleaned(self, *, id: uuid.UUID) -> Optional[models.Photo]:
+        row = (await self._conn.execute(sqlalchemy.text(MARK_PHOTO_STORAGE_CLEANED), {"p1": id})).first()
+        if row is None:
+            return None
+        return models.Photo(
+            id=row[0],
+            event_id=row[1],
+            uploaded_by=row[2],
+            storage_key=row[3],
+            taken_at=row[4],
+            day_number=row[5],
+            visibility=row[6],
+            status=row[7],
+            created_at=row[8],
+            drive_file_id=row[9],
+            drive_synced_at=row[10],
+            source=row[11],
+            storage_cleaned_at=row[12],
+        )
 
     async def update_photo_status(self, *, id: uuid.UUID, status: Any) -> Optional[models.Photo]:
         row = (await self._conn.execute(sqlalchemy.text(UPDATE_PHOTO_STATUS), {"p1": id, "p2": status})).first()
@@ -251,6 +401,10 @@ class AsyncQuerier:
             visibility=row[6],
             status=row[7],
             created_at=row[8],
+            drive_file_id=row[9],
+            drive_synced_at=row[10],
+            source=row[11],
+            storage_cleaned_at=row[12],
         )
 
     async def update_photo_visibility(self, *, id: uuid.UUID, visibility: str) -> Optional[models.Photo]:
@@ -267,4 +421,8 @@ class AsyncQuerier:
             visibility=row[6],
             status=row[7],
             created_at=row[8],
+            drive_file_id=row[9],
+            drive_synced_at=row[10],
+            source=row[11],
+            storage_cleaned_at=row[12],
         )

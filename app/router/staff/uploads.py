@@ -95,7 +95,9 @@ async def get_upload_request_group(
     return UploadRequestGroupSchema.from_details(group)
 
 
-@router.get("/groups/{group_id}/photos", response_model=UploadRequestGroupPhotoListResponse)
+@router.get(
+    "/groups/{group_id}/photos", response_model=UploadRequestGroupPhotoListResponse
+)
 async def list_upload_request_group_photos(
     group_id: UUID,
     current_staff_user: StaffUser = Depends(get_current_staff_user),
@@ -160,7 +162,9 @@ async def list_upload_request_photos(
         current_staff_user=current_staff_user,
     )
     return UploadRequestPhotoListResponse(
-        items=[UploadRequestPhotoSchema.model_validate(p) for p in upload_request.photos]
+        items=[
+            UploadRequestPhotoSchema.model_validate(p) for p in upload_request.photos
+        ]
     )
 
 
@@ -177,7 +181,9 @@ async def preview_upload_request_photo(
         current_staff_user=current_staff_user,
     )
     headers = {"Content-Disposition": f'inline; filename="{preview.file_name}"'}
-    return Response(content=preview.data, media_type=preview.content_type, headers=headers)
+    return Response(
+        content=preview.data, media_type=preview.content_type, headers=headers
+    )
 
 
 @router.post("/{request_id}/approve", response_model=UploadRequestSchema)
