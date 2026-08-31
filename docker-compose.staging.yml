@@ -1,5 +1,19 @@
 name: multai-staging
 services:
+  nginx:
+    image: nginx:alpine
+    container_name: multi_nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    volumes:
+      - ./multai.nginx:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - fastapi
+    networks:
+      - edge
+      - backend
+
   postgres:
     image: pgvector/pgvector:pg16
     container_name: multi_postgres
@@ -10,12 +24,10 @@ services:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: ${POSTGRES_DB}
-    ports:
-      - "${POSTGRES_PORT}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     networks:
-      - multi_network
+      - data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
       interval: 10s
@@ -34,13 +46,10 @@ services:
       -m ${NATS_MONITOR_PORT}
       --user ${NATS_USER}
       --pass ${NATS_PASSWORD}
-    ports:
-      - "${NATS_PORT}:4222"
-      - "${NATS_MONITOR_PORT}:8222"
     volumes:
       - nats_data:/data
     networks:
-      - multi_network
+      - backend
     healthcheck:
       test: ["CMD-SHELL", "wget -q --spider http://localhost:${NATS_MONITOR_PORT}/healthz || exit 1"]
       interval: 10s
@@ -55,13 +64,10 @@ services:
     env_file:
       - .env.staging
     command: server /data --console-address ":${MINIO_CONSOLE_PORT}"
-    ports:
-      - "${MINIO_API_PORT}:9000"
-      - "${MINIO_CONSOLE_PORT}:9001"
     volumes:
       - minio_data:/data
     networks:
-      - multi_network
+      - data
     healthcheck:
       test: ["CMD-SHELL", "curl -sf http://localhost:9000/minio/health/live || exit 1"]
       interval: 10s
@@ -75,10 +81,8 @@ services:
     restart: unless-stopped
     env_file:
       - .env.staging
-    ports:
-      - "${REDIS_PORT}:6379"
     networks:
-      - multi_network
+      - backend
     volumes:
       - redis_data:/data
     healthcheck:
@@ -89,7 +93,7 @@ services:
       start_period: 5s
 
   fastapi:
-    image: ghcr.io/microclub-usthb/multai-back:latest
+    image: ghcr.io/microclub-usthb/multai-back:develop
     container_name: multi_fastapi
     restart: unless-stopped
     env_file:
@@ -103,13 +107,10 @@ services:
         condition: service_healthy
       minio:
         condition: service_healthy
-    ports:
-      - "8000:8000"
     networks:
-      - multi_network
+      - backend
+      - data
     healthcheck:
-      # Uses Python's stdlib — no curl needed in python:3.12-slim.
-      # 60s start_period accounts for AI model loading at boot.
       test:
         - CMD
         - python
@@ -127,7 +128,7 @@ services:
       start_period: 60s
 
   migrate:
-    image: ghcr.io/microclub-usthb/multai-back:latest
+    image: ghcr.io/microclub-usthb/multai-back:develop
     container_name: multi_migrate
     restart: "no"
     env_file:
@@ -137,10 +138,10 @@ services:
         condition: service_healthy
     command: ["uv", "run", "alembic", "upgrade", "head"]
     networks:
-      - multi_network
+      - data
 
   email-worker:
-    image: ghcr.io/microclub-usthb/multai-back:latest
+    image: ghcr.io/microclub-usthb/multai-back:develop
     container_name: multi_email_worker
     restart: unless-stopped
     env_file:
@@ -150,10 +151,11 @@ services:
         condition: service_healthy
     command: ["uv", "run", "python", "-m", "app.worker.email_worker.main"]
     networks:
-      - multi_network
+      - backend
+      - data
 
   photo-worker:
-    image: ghcr.io/microclub-usthb/multai-back:latest
+    image: ghcr.io/microclub-usthb/multai-back:develop
     container_name: multi_photo_worker
     restart: unless-stopped
     env_file:
@@ -169,11 +171,12 @@ services:
         condition: service_healthy
     command: ["uv", "run", "python", "-m", "app.worker.photo_worker.main"]
     networks:
-      - multi_network
+      - backend
+      - data
 
   notification-worker:
     profiles: ["firebase"]
-    image: ghcr.io/microclub-usthb/multai-back:latest
+    image: ghcr.io/microclub-usthb/multai-back:develop
     container_name: multi_notification_worker
     restart: unless-stopped
     env_file:
@@ -185,10 +188,11 @@ services:
         condition: service_healthy
     command: ["uv", "run", "python", "-m", "app.worker.notification.main"]
     networks:
-      - multi_network
+      - backend
+      - data
 
   upload-group-worker:
-    image: ghcr.io/microclub-usthb/multai-back:latest
+    image: ghcr.io/microclub-usthb/multai-back:develop
     container_name: multi_upload_group_worker
     restart: unless-stopped
     env_file:
@@ -204,10 +208,11 @@ services:
         condition: service_healthy
     command: ["uv", "run", "python", "-m", "app.worker.upload_group_worker.main"]
     networks:
-      - multi_network
+      - backend
+      - data
 
   audit-worker:
-    image: ghcr.io/microclub-usthb/multai-back:latest
+    image: ghcr.io/microclub-usthb/multai-back:develop
     container_name: multi_audit_worker
     restart: unless-stopped
     env_file:
@@ -219,10 +224,11 @@ services:
         condition: service_healthy
     command: ["uv", "run", "python", "-m", "app.worker.audit.main"]
     networks:
-      - multi_network
+      - backend
+      - data
 
   storage-cleaner:
-    image: ghcr.io/microclub-usthb/multai-back:latest
+    image: ghcr.io/microclub-usthb/multai-back:develop
     container_name: multi_storage_cleaner
     restart: unless-stopped
     env_file:
@@ -236,7 +242,8 @@ services:
         condition: service_healthy
     command: ["uv", "run", "python", "-m", "app.worker.storage_cleaner.main"]
     networks:
-      - multi_network
+      - backend
+      - data
 
 volumes:
   postgres_data:
@@ -245,5 +252,9 @@ volumes:
   nats_data:
 
 networks:
-  multi_network:
+  edge:
     driver: bridge
+  backend:
+    internal: true
+  data:
+    internal: true
