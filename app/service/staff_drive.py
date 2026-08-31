@@ -12,6 +12,7 @@ from fastapi import HTTPException
 from cryptography.fernet import Fernet, InvalidToken
 
 from app.core.config import settings
+from app.core.logger import logger
 from app.core.constant import IMAGE_ALLOWED_TYPES
 from app.core.exceptions import AppException
 from app.infra.google_drive import GoogleDriveClient
@@ -230,6 +231,60 @@ class StaffDriveService:
             connection = await self._refresh_connection_access_token(connection)
         return self.decrypt(connection.access_token)
 
+    # How long the folder-creation lock is held (initial TTL).
+    # Drive API calls (search + optional create) can take up to ~60s on a slow
+    # network; 120s gives a comfortable margin before the heartbeat is even needed.
+    _FOLDER_LOCK_TTL_SECONDS: int = 120
+    # The heartbeat renews the lock every N seconds to keep it alive during
+    # slow Drive API calls.  Must be well below _FOLDER_LOCK_TTL_SECONDS.
+    _FOLDER_LOCK_HEARTBEAT_SECONDS: int = 40
+
+    async def _lock_heartbeat(
+        self,
+        lock_key: str,
+        lock_value: str,
+        stop: asyncio.Event,
+    ) -> None:
+        """Renews the Redis lock TTL every _FOLDER_LOCK_HEARTBEAT_SECONDS to
+        prevent it from expiring during slow Drive API calls."""
+        while not stop.is_set():
+            await asyncio.sleep(self._FOLDER_LOCK_HEARTBEAT_SECONDS)
+            if stop.is_set():
+                break
+            try:
+                current = await self.redis.get(lock_key)
+                if current != lock_value:
+                    logger.warning(
+                        "drive_folder_lock: lock %s no longer ours, stopping heartbeat",
+                        lock_key,
+                    )
+                    break
+                await self.redis.expire(lock_key, self._FOLDER_LOCK_TTL_SECONDS)
+                logger.debug("drive_folder_lock: refreshed TTL for %s", lock_key)
+            except Exception as exc:  # pragma: no cover
+                logger.warning(
+                    "drive_folder_lock: heartbeat error for %s: %s", lock_key, exc
+                )
+
+    async def _resolve_drive_folder(
+        self,
+        event_name: str,
+        access_token: str,
+    ) -> str:
+        """Find an existing Drive folder with *event_name* or create one.
+        Returns the folder ID."""
+        parent_id = settings.GOOGLE_CLUB_DRIVE_FOLDER_ID or None
+        existing = await GoogleDriveClient.search_files(
+            access_token=access_token, query=event_name, file_type="folder"
+        )
+        for folder in existing or []:
+            if folder.name == event_name:
+                return folder.id
+        folder_meta = await GoogleDriveClient.create_folder(
+            access_token=access_token, name=event_name, parent_id=parent_id
+        )
+        return folder_meta.id
+
     async def _get_or_create_event_folder(
         self,
         event_id: uuid.UUID,
@@ -242,39 +297,47 @@ class StaffDriveService:
             return cached_id
 
         lock_key = f"lock:drive:folder:{event_id}"
+        # Unique value: only the holder can release its own lock.
+        lock_value = str(uuid.uuid4())
+
         while True:
-            acquired = await self.redis.set(lock_key, "1", expire=30, nx=True)
+            acquired = await self.redis.set(
+                lock_key,
+                lock_value,
+                expire=self._FOLDER_LOCK_TTL_SECONDS,
+                nx=True,
+            )
             if acquired:
                 break
             await asyncio.sleep(1.0)
 
+        stop_heartbeat = asyncio.Event()
+        # Background heartbeat keeps the lock alive during slow Drive API calls.
+        heartbeat_task = asyncio.create_task(
+            self._lock_heartbeat(lock_key, lock_value, stop_heartbeat)
+        )
+
         try:
+            # Double-check: another waiter may have populated the cache while
+            # we were spinning in the loop above.
             cached_id = await self.redis.get(cache_key)
             if cached_id:
                 return cached_id
 
-            parent_id = settings.GOOGLE_CLUB_DRIVE_FOLDER_ID or None
-
-            existing = await GoogleDriveClient.search_files(
-                access_token=access_token, query=event_name, file_type="folder"
-            )
-            folder_id = None
-            if existing:
-                for folder in existing:
-                    if folder.name == event_name:
-                        folder_id = folder.id
-                        break
-
-            if not folder_id:
-                folder_meta = await GoogleDriveClient.create_folder(
-                    access_token=access_token, name=event_name, parent_id=parent_id
-                )
-                folder_id = folder_meta.id
-
+            folder_id = await self._resolve_drive_folder(event_name, access_token)
             await self.redis.set(cache_key, folder_id, expire=7 * 24 * 3600)
             return folder_id
         finally:
-            await self.redis.delete(lock_key)
+            stop_heartbeat.set()
+            heartbeat_task.cancel()
+            try:
+                await heartbeat_task
+            except asyncio.CancelledError:
+                pass
+            # Only release the lock if it still belongs to us.
+            current_value = await self.redis.get(lock_key)
+            if current_value == lock_value:
+                await self.redis.delete(lock_key)
 
     async def upload_to_system_drive(
         self,
