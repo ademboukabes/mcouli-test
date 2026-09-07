@@ -36,18 +36,24 @@ router = APIRouter(prefix="/auth")
 
 @router.post(
     "/register",
-    response_model=RegisterPendingResponse,
+    response_model=RegisterPendingResponse | MobileAuthResponse,
     dependencies=[Depends(RateLimiter(requests=5, window=60))],
 )
 async def mobile_register(
     req: MobileRegisterRequest,
     request: Request,
     container: Container = Depends(get_container),
-) -> RegisterPendingResponse:
+) -> RegisterPendingResponse | MobileAuthResponse:
     client_ip = get_client_ip(request)
     result = await container.auth_service.mobile_register(
         container.redis, req, client_ip=client_ip
     )
+    if isinstance(result, MobileAuthResponse):
+        await container.audit_service.create_record(
+            event_type=AuditEventType.USER_SIGNUP,
+            user_id=result.user_id,
+            metadata={"endpoint": "register", "otp_activated": False},
+        )
     return result
 
 

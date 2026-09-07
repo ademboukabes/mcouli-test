@@ -1,3 +1,6 @@
+import base64
+import binascii
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import field_validator
 
@@ -76,6 +79,9 @@ class Settings(BaseSettings):
     # In dev env, registration OTPs are fixed to this value and the email/NATS
     # send is skipped, so mobile devs can verify without a real inbox.
     DEV_OTP_BYPASS_CODE: str = "000000"
+    # When false, mobile registration skips the OTP verification step entirely
+    # and creates the user + session directly (pre-OTP-feature behavior).
+    OTP_ACTIVATED: bool = False
     TRUST_PROXY_HEADERS: bool = True
     # Admin list defaults
     ADMIN_USERS_DEFAULT_LIMIT: int = 20
@@ -123,6 +129,24 @@ class Settings(BaseSettings):
         env_file=".env",
         extra="ignore",
     )
+
+    @field_validator("encryption_key")
+    @classmethod
+    def _validate_encryption_key(cls, value: str) -> str:
+        try:
+            key_bytes = base64.b64decode(value, validate=True)
+        except (binascii.Error, ValueError) as exc:
+            raise ValueError(
+                "encryption_key must be base64-encoded (AESGCM key)"
+            ) from exc
+        if len(key_bytes) not in (16, 24, 32):
+            raise ValueError(
+                "encryption_key must decode to 128, 192, or 256 bits "
+                f"(got {len(key_bytes) * 8} bits); generate one with: "
+                "python -c \"import secrets, base64; "
+                "print(base64.b64encode(secrets.token_bytes(32)).decode())\""
+            )
+        return value
 
     @field_validator("debug", mode="before")
     @classmethod

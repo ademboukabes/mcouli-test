@@ -160,7 +160,7 @@ class AuthService:
         redis: RedisClient,
         req: MobileRegisterRequest,
         client_ip: Optional[str] = None,
-    ) -> RegisterPendingResponse:
+    ) -> RegisterPendingResponse | MobileAuthResponse:
         logger.info("mobile_register attempt")
         max_attempts = settings.RATE_LIMIT_LOGIN_MAX_ATTEMPTS
         window = settings.RATE_LIMIT_LOGIN_WINDOW_SECONDS
@@ -185,6 +185,20 @@ class AuthService:
             raise AppException.conflict("Email already in use; please login instead")
 
         hashed = hash_password(req.password)
+
+        if not settings.OTP_ACTIVATED:
+            logger.info("OTP deactivated, creating user directly")
+            user = await self.user_querier.create_user(
+                email=req.email, hashed_password=hashed
+            )
+            if not user:
+                raise AppException.internal_error("Failed to create user")
+            return await self._create_mobile_session(
+                redis=redis,
+                user=user,
+                req=req,
+                is_new_user=True,
+            )
 
         pending_key = f"pending_user:{req.email}"
         pending_data = {
