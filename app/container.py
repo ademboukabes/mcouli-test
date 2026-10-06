@@ -87,6 +87,8 @@ class Container:
             redis=self.redis,
         )
 
+        self.mcdi_service = McdiService()
+
         self.device_service = DeviceService()
         self.device_service.init(
             device_querier=self.device_querier,
@@ -98,6 +100,7 @@ class Container:
             session_querier=self.session_querier,
             refresh_token_querier=self.refresh_token_querier,
             face_embedding_service=self.face_embedding_service,
+            mcdi_service=self.mcdi_service,
         )
 
         self.staff_drive_service = StaffDriveService(
@@ -162,8 +165,6 @@ class Container:
         self.stats_service = StatsService(
             querier=self.stats_querier,
         )
-
-        self.mcdi_service = McdiService()
 
 
 async def get_container(

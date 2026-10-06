@@ -52,6 +52,15 @@ async def get_current_mobile_user(
         if cached.blocked:
             raise HTTPException(status_code=403, detail="User is blocked")
 
+
+        # MCDI validation in fast path (async task or inline? We should inline for security if required, but for mobile we can do it inline since redis is fast)
+        # But wait, MCDI validate_token requires a token.
+        if cached.mcdi_token:
+            try:
+                await container.mcdi_service.validate_token(cached.mcdi_token)
+            except Exception:
+                raise HTTPException(status_code=401, detail="MCDI session invalid")
+
         if (
             now - cached.last_active
         ).total_seconds() > settings.SESSION_ACTIVITY_THROTTLE_SECONDS:
@@ -73,6 +82,7 @@ async def get_current_mobile_user(
                 blocked=cached.blocked,
                 ttl=settings.MOBILE_SESSION_TTL_SECONDS,
                 last_active=now,
+                mcdi_token=cached.mcdi_token,
             )
 
         return MobileUserSchema(
@@ -111,6 +121,7 @@ async def get_current_mobile_user(
         blocked=user.blocked,
         ttl=settings.MOBILE_SESSION_TTL_SECONDS,
         last_active=session.last_active,
+        mcdi_token=None,  # MCDI token not available on slow path, will be re-fetched on login
     )
 
     return MobileUserSchema(

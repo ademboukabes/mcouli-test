@@ -13,10 +13,11 @@ from app.deps.token_auth import MobileUserSchema, get_current_mobile_user
 from app.deps.rate_limit import RateLimiter
 
 from app.schema.request.mobile.auth import (
-    MobileLoginRequest,
-    MobileRegisterRequest,
-    RegisterVerifyRequest,
-    ResendOtpRequest,
+    McdiExchangeRequest,
+
+
+
+
     RefreshTokenRequest,
     UpdateDeviceTokenRequest,
     InactivateDeviceRequest,
@@ -28,95 +29,38 @@ from app.schema.response.mobile.auth import (
     MobileAuthResponse,
     SessionSchema,
     UserSchema,
-    RegisterPendingResponse,
 )
 
 router = APIRouter(prefix="/auth")
 
 
 @router.post(
-    "/register",
-    response_model=RegisterPendingResponse | MobileAuthResponse,
+    "/mcdi/exchange",
+    response_model=MobileAuthResponse,
     dependencies=[Depends(RateLimiter(requests=5, window=60))],
 )
-async def mobile_register(
-    req: MobileRegisterRequest,
+async def mcdi_exchange(
+    req: McdiExchangeRequest,
     request: Request,
     container: Container = Depends(get_container),
-) -> RegisterPendingResponse | MobileAuthResponse:
+) -> MobileAuthResponse:
     client_ip = get_client_ip(request)
-    result = await container.auth_service.mobile_register(
+    result = await container.auth_service.mcdi_exchange(
         container.redis, req, client_ip=client_ip
     )
-    if isinstance(result, MobileAuthResponse):
+    if result.is_new_user:
         await container.audit_service.create_record(
             event_type=AuditEventType.USER_SIGNUP,
             user_id=result.user_id,
-            metadata={"endpoint": "register", "otp_activated": False},
+            metadata={"endpoint": "mcdi_exchange"},
+        )
+    else:
+        await container.audit_service.create_record(
+            event_type=AuditEventType.USER_LOGIN,
+            user_id=result.user_id,
+            metadata={"endpoint": "mcdi_exchange"},
         )
     return result
-
-
-@router.post(
-    "/register/resend-otp",
-    response_model=RegisterPendingResponse,
-    dependencies=[Depends(RateLimiter(requests=5, window=60))],
-)
-async def mobile_register_resend_otp(
-    req: ResendOtpRequest,
-    request: Request,
-    container: Container = Depends(get_container),
-) -> RegisterPendingResponse:
-    client_ip = get_client_ip(request)
-    result = await container.auth_service.mobile_register_resend_otp(
-        container.redis, req.email, client_ip=client_ip
-    )
-    return result
-
-
-@router.post(
-    "/register/verify",
-    response_model=MobileAuthResponse,
-    dependencies=[Depends(RateLimiter(requests=10, window=60))],
-)
-async def mobile_register_verify(
-    req: RegisterVerifyRequest,
-    request: Request,
-    container: Container = Depends(get_container),
-) -> MobileAuthResponse:
-    client_ip = get_client_ip(request)
-    result = await container.auth_service.verify_mobile_register(
-        container.redis, req, client_ip=client_ip
-    )
-    await container.audit_service.create_record(
-        event_type=AuditEventType.USER_SIGNUP,
-        user_id=result.user_id,
-        metadata={"endpoint": "register_verify"},
-    )
-    return result
-
-
-@router.post(
-    "/login",
-    response_model=MobileAuthResponse,
-    dependencies=[Depends(RateLimiter(requests=5, window=60))],
-)
-async def mobile_login(
-    req: MobileLoginRequest,
-    request: Request,
-    container: Container = Depends(get_container),
-) -> MobileAuthResponse:
-    client_ip = get_client_ip(request)
-    result = await container.auth_service.mobile_login(
-        container.redis, req, client_ip=client_ip
-    )
-    await container.audit_service.create_record(
-        event_type=AuditEventType.USER_LOGIN,
-        user_id=result.user_id,
-        metadata={"endpoint": "login"},
-    )
-    return result
-
 
 @router.post(
     "/refresh",
