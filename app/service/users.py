@@ -74,8 +74,9 @@ class AuthService:
 
         if existing_device:
             if existing_device.is_invalid_token:
-                raise AppException.forbidden(
-                    "Device push token is invalid. Update the token before logging in."
+                logger.warning(
+                    "Device %s has invalid push token. Allowing login to let client update it.",
+                    existing_device.id
                 )
             if not existing_device.is_active:
                 await self.device_querier.activate_device(

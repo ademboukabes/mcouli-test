@@ -34,7 +34,7 @@ services:
       - multi_network
 
   minio:
-    image: minio/minio:latest
+    image: cgr.dev/chainguard/minio:latest
     container_name: multi_minio
     restart: unless-stopped
     env_file:
