@@ -18,6 +18,7 @@ from app.service.user_photo import UserPhotoService
 from app.service.upload_requests import UploadRequestsService
 from app.service.users import AuthService
 from app.service.user_notification import UserNotificationService
+from app.service.mcdi import McdiService
 from db.generated import devices as device_queries
 from db.generated import photo_approvals as photo_approval_queries
 from db.generated import processing_jobs as processing_job_queries
@@ -161,6 +162,8 @@ class Container:
         self.stats_service = StatsService(
             querier=self.stats_querier,
         )
+
+        self.mcdi_service = McdiService()
 
 
 async def get_container(
