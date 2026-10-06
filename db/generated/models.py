@@ -266,6 +266,7 @@ class User:
     deleted_at: Optional[datetime.datetime]
     blocked: bool
     avatar_key: Optional[str]
+    discord_id: Optional[str]
 
 
 @dataclasses.dataclass()
