@@ -143,8 +143,8 @@ class Settings(BaseSettings):
             raise ValueError(
                 "encryption_key must decode to 128, 192, or 256 bits "
                 f"(got {len(key_bytes) * 8} bits); generate one with: "
-                "python -c \"import secrets, base64; "
-                "print(base64.b64encode(secrets.token_bytes(32)).decode())\""
+                'python -c "import secrets, base64; '
+                'print(base64.b64encode(secrets.token_bytes(32)).decode())"'
             )
         return value
 
