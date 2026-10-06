@@ -1,6 +1,5 @@
 from datetime import datetime, timedelta, timezone
 import uuid
-import sqlalchemy
 from collections.abc import AsyncIterable
 from typing import Optional, Any
 
@@ -50,14 +49,14 @@ class AuthService:
         session_querier: session_queries.AsyncQuerier,
         refresh_token_querier: refresh_token_queries.AsyncQuerier,
         face_embedding_service: FaceEmbeddingService,
-        mcdi_service: McdiService,
+        mcdi_service: McdiService | None = None,
     ):
         self.user_querier = user_querier
         self.device_querier = device_querier
         self.session_querier = session_querier
         self.refresh_token_querier = refresh_token_querier
         self.face_embedding_service = face_embedding_service
-        self.mcdi_service = mcdi_service
+        self.mcdi_service = mcdi_service or McdiService()
 
     async def _ensure_device_for_login(
         self,
@@ -109,8 +108,9 @@ class AuthService:
 
         mcdi_data = await self.mcdi_service.exchange_code(req.code, settings.MCDI_REDIRECT_URI_MOBILE)
 
-        email = mcdi_data.get("member", {}).get("email")
-        discord_id = mcdi_data.get("member", {}).get("discordId")
+        member = mcdi_data.get("member", {})
+        email = member.get("email")
+        discord_id = member.get("id") or member.get("discordId")
         mcdi_token = mcdi_data.get("token")
 
         if not email or not discord_id or not mcdi_token:
@@ -124,11 +124,12 @@ class AuthService:
         if not user:
             user = await self.user_querier.get_user_by_email(email=email)
             if user:
-                # Update with discord_id using direct DB execution since generated query doesn't exist
-                await self.user_querier._conn.execute(
-                    sqlalchemy.text("UPDATE users SET discord_id = :d WHERE id = :id"),
-                    {"d": discord_id, "id": user.id}
+                user = await self.user_querier.update_user_discord_id(
+                    discord_id=discord_id,
+                    id=user.id,
                 )
+                if not user:
+                    raise AppException.internal_error("Failed to link Discord account")
             else:
                 user = await self.user_querier.create_user(
                     email=email, hashed_password=None, discord_id=discord_id
@@ -346,6 +347,10 @@ class AuthService:
         session_id: str,
     ) -> dict[str, str]:
         sid = uuid.UUID(session_id)
+        cached = await SessionService.get_cached_session(redis, sid)
+        if cached and cached.mcdi_token:
+            await self.mcdi_service.logout(cached.mcdi_token, redis=redis)
+
         await self.session_querier.delete_session_by_id(
             id=sid, user_id=uuid.UUID(user_id)
         )

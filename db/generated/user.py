@@ -139,6 +139,15 @@ RETURNING id, email, hashed_password, created_at, updated_at, display_name, face
 """
 
 
+UPDATE_USER_DISCORD_ID = """-- name: update_user_discord_id \\:one
+UPDATE users
+SET discord_id = :p1,
+    updated_at = NOW()
+WHERE id = :p2
+RETURNING id, email, hashed_password, created_at, updated_at, display_name, face_embedding, deleted_at, blocked, avatar_key, discord_id
+"""
+
+
 class AsyncQuerier:
     def __init__(self, conn: sqlalchemy.ext.asyncio.AsyncConnection):
         self._conn = conn
@@ -349,6 +358,24 @@ class AsyncQuerier:
 
     async def update_user_password(self, *, hashed_password: Optional[str], id: uuid.UUID) -> Optional[models.User]:
         row = (await self._conn.execute(sqlalchemy.text(UPDATE_USER_PASSWORD), {"p1": hashed_password, "p2": id})).first()
+        if row is None:
+            return None
+        return models.User(
+            id=row[0],
+            email=row[1],
+            hashed_password=row[2],
+            created_at=row[3],
+            updated_at=row[4],
+            display_name=row[5],
+            face_embedding=row[6],
+            deleted_at=row[7],
+            blocked=row[8],
+            avatar_key=row[9],
+            discord_id=row[10],
+        )
+
+    async def update_user_discord_id(self, *, discord_id: str, id: uuid.UUID) -> Optional[models.User]:
+        row = (await self._conn.execute(sqlalchemy.text(UPDATE_USER_DISCORD_ID), {"p1": discord_id, "p2": id})).first()
         if row is None:
             return None
         return models.User(

@@ -69,11 +69,43 @@ class McdiExchangeRequest(BaseModel):
         if info.field_name == "device_type":
             return stripped.lower()
         return stripped
+class MobileRegisterRequest(MobileAuthBaseRequest):
+    @field_validator("password")
+    @classmethod
+    def _validate_password_complexity(cls, value: str) -> str:
+        if not any(c.isupper() for c in value):
+            raise ValueError("Password must contain at least one uppercase letter")
+        if not any(c.islower() for c in value):
+            raise ValueError("Password must contain at least one lowercase letter")
+        if not any(c.isdigit() for c in value):
+            raise ValueError("Password must contain at least one digit")
+        if not any(not c.isalnum() for c in value):
+            raise ValueError("Password must contain at least one special character")
+        return value
 
 
+class MobileLoginRequest(MobileAuthBaseRequest):
+    pass
 
 
+class RegisterVerifyRequest(MobileAuthBaseRequest):
+    otp: str = Field(
+        ...,
+        min_length=6,
+        max_length=6,
+        description="The 6-digit OTP code sent via email",
+    )
 
+
+class ResendOtpRequest(BaseModel):
+    email: EmailStr = Field(..., max_length=255)
+
+    @field_validator("email", mode="before")
+    @classmethod
+    def _normalize_email(cls, value: object) -> object:
+        if not isinstance(value, str):
+            return value
+        return value.strip().lower()
 class RefreshTokenRequest(BaseModel):
     refresh_token: str
 

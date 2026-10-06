@@ -1,43 +1,42 @@
-from fastapi import APIRouter, Depends, Request, Cookie
-from app.container import Container, get_container
-from fastapi import Response
+import secrets
+
+from fastapi import APIRouter, Cookie, Depends, Request, Response
 from fastapi.responses import RedirectResponse
 
+from app.container import Container, get_container
 from app.core.config import settings
+from app.core.exceptions import AppException
 from app.deps.cookie_auth import get_current_staff_user
 from app.schema.response.web.staff_user import StaffUserSchema
 from db.generated.models import StaffUser
-from app.core.exceptions import AppException
-import urllib.parse
-import secrets
 
 router = APIRouter(prefix="/auth")
 
 
 @router.get("/mcdi/login")
-async def mcdi_login(r: Response) -> RedirectResponse:
+async def mcdi_login(
+    container: Container = Depends(get_container),
+) -> RedirectResponse:
     state = secrets.token_urlsafe(16)
-    r.set_cookie(
-        "mcdi_state",
-        state,
+    url = container.mcdi_service.get_sso_authorize_url(
+        redirect_uri=settings.MCDI_REDIRECT_URI_WEB,
+        state=state,
+    )
+    response = RedirectResponse(url=url)
+    response.set_cookie(
+        key="mcdi_state",
+        value=state,
         httponly=True,
         max_age=300,
         secure=settings.environment != "dev",
-        samesite="lax"
+        samesite="lax",
     )
-    params = urllib.parse.urlencode({
-        "client_id": settings.MCDI_PROJECT_ID,
-        "redirect_uri": settings.MCDI_REDIRECT_URI_WEB,
-        "state": state
-    })
-    url = f"{settings.MCDI_BASE_URL.replace('/api', '')}/api/auth/sso/authorize?{params}"
-    return RedirectResponse(url)
+    return response
 
 
 @router.get("/mcdi/callback")
 async def mcdi_callback(
     request: Request,
-    r: Response,
     code: str,
     state: str,
     container: Container = Depends(get_container),
@@ -46,7 +45,10 @@ async def mcdi_callback(
     if not cookie_state or state != cookie_state:
         raise AppException.unauthorized("Invalid state parameter")
 
-    mcdi_data = await container.mcdi_service.exchange_code(code, settings.MCDI_REDIRECT_URI_WEB)
+    mcdi_data = await container.mcdi_service.exchange_code(
+        code=code,
+        redirect_uri=settings.MCDI_REDIRECT_URI_WEB,
+    )
 
     # Extract email and verify staff access
     email = mcdi_data.get("member", {}).get("email")
@@ -61,7 +63,6 @@ async def mcdi_callback(
     if not token:
         raise AppException.internal_error("MCDI did not return a session token")
 
-    # Let the frontend dashboard URL be determined by CORS origin or environment
     frontend_url = settings.CORS_ORIGINS[0] if settings.CORS_ORIGINS else "http://localhost:5173"
 
     redirect_res = RedirectResponse(url=f"{frontend_url}/dashboard")
@@ -96,8 +97,9 @@ async def admin_logout(
     token: str | None = Cookie(default=None, alias="access_token"),
     container: Container = Depends(get_container),
 ) -> None:
-    # We could also call MCDI logout endpoint here to kill the session globally or for this project
-    # But removing the cookie is the minimum required.
+    if token:
+        await container.mcdi_service.logout(token, redis=container.redis)
+
     r.delete_cookie(
         key="access_token",
         httponly=True,

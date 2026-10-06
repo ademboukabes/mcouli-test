@@ -5,7 +5,7 @@ import uuid
 from fastapi import Depends, HTTPException
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
-from app.container import get_container, Container
+from app.container import Container, get_container
 from app.core.config import settings
 from app.core.securite import decode_access_mobile_token
 from app.infra.redis import RedisClient
@@ -15,21 +15,74 @@ from app.service.session import MobileSessionCache, SessionService
 security = HTTPBearer()
 
 
+def _check_session_validity(
+    idle_expires_at: datetime,
+    absolute_expires_at: datetime,
+    blocked: bool,
+) -> None:
+    now = datetime.now(timezone.utc)
+    if idle_expires_at < now or absolute_expires_at < now:
+        raise HTTPException(status_code=401, detail="Session expired")
+    if blocked:
+        raise HTTPException(status_code=403, detail="User is blocked")
+
+
+async def _validate_mcdi_session(
+    container: Container,
+    redis: RedisClient,
+    mcdi_token: str | None,
+) -> None:
+    if not mcdi_token:
+        return
+    try:
+        await container.mcdi_service.validate_token_cached(
+            redis=redis,
+            token=mcdi_token,
+            ttl_seconds=300,
+        )
+    except Exception:
+        raise HTTPException(status_code=401, detail="MCDI session invalid or expired")
+
+
+async def _touch_session_activity(
+    container: Container,
+    redis: RedisClient,
+    cached: MobileSessionCache,
+    now: datetime,
+) -> None:
+    if (now - cached.last_active).total_seconds() <= settings.SESSION_ACTIVITY_THROTTLE_SECONDS:
+        return
+
+    new_idle_expires_at = min(
+        now + timedelta(days=settings.MOBILE_SESSION_DAYS),
+        cached.absolute_expires_at,
+    )
+    await container.session_service.session_querier.update_session_activity(
+        id=cached.session_id,
+        idle_expires_at=new_idle_expires_at,
+    )
+    await SessionService.cache_session_for_auth(
+        redis=redis,
+        session_id=cached.session_id,
+        user_id=cached.user_id,
+        email=cached.email,
+        idle_expires_at=new_idle_expires_at,
+        absolute_expires_at=cached.absolute_expires_at,
+        blocked=cached.blocked,
+        ttl=settings.MOBILE_SESSION_TTL_SECONDS,
+        last_active=now,
+        mcdi_token=cached.mcdi_token,
+    )
+
+
 async def get_current_mobile_user(
     credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)],
     container: Annotated[Container, Depends(get_container)],
 ) -> MobileUserSchema:
     """
     Dependency to get the current logged-in mobile user.
-    Fast path: Redis cache hit. Usually 0 DB queries; occasionally 1 cheap,
-    throttled UPDATE to last_active (see SESSION_ACTIVITY_THROTTLE_SECONDS) —
-    this is not a full round trip through the slow path, just a single
-    indexed write on the request's existing connection.
-    Slow path: Postgres fallback (2 DB queries) with cache re-population.
-
-    idle_expires_at slides forward on each throttled activity refresh, up to
-    MOBILE_SESSION_DAYS from now, but is capped so it never exceeds
-    absolute_expires_at — the hard ceiling set at login that never moves.
+    Fast path: Redis cache hit. Usually 0 DB queries; throttled touch to last_active.
+    Slow path: Postgres fallback with cache re-population.
     """
     token = credentials.credentials
     payload = decode_access_mobile_token(token)
@@ -39,51 +92,20 @@ async def get_current_mobile_user(
         raise HTTPException(status_code=401, detail="Invalid token")
 
     session_id = uuid.UUID(session_id_str)
+    redis = RedisClient.get_instance()
 
     # --- Fast path: Redis cache ---
-    redis = RedisClient.get_instance()
     cached: MobileSessionCache | None = await SessionService.get_cached_session(
         redis, session_id
     )
     if cached is not None:
-        now = datetime.now(timezone.utc)
-        if cached.idle_expires_at < now or cached.absolute_expires_at < now:
-            raise HTTPException(status_code=401, detail="Session expired")
-        if cached.blocked:
-            raise HTTPException(status_code=403, detail="User is blocked")
-
-
-        # MCDI validation in fast path (async task or inline? We should inline for security if required, but for mobile we can do it inline since redis is fast)
-        # But wait, MCDI validate_token requires a token.
-        if cached.mcdi_token:
-            try:
-                await container.mcdi_service.validate_token(cached.mcdi_token)
-            except Exception:
-                raise HTTPException(status_code=401, detail="MCDI session invalid")
-
-        if (
-            now - cached.last_active
-        ).total_seconds() > settings.SESSION_ACTIVITY_THROTTLE_SECONDS:
-            new_idle_expires_at = min(
-                now + timedelta(days=settings.MOBILE_SESSION_DAYS),
-                cached.absolute_expires_at,
-            )
-            await container.session_service.session_querier.update_session_activity(
-                id=cached.session_id,
-                idle_expires_at=new_idle_expires_at,
-            )
-            await SessionService.cache_session_for_auth(
-                redis=redis,
-                session_id=cached.session_id,
-                user_id=cached.user_id,
-                email=cached.email,
-                idle_expires_at=new_idle_expires_at,
-                absolute_expires_at=cached.absolute_expires_at,
-                blocked=cached.blocked,
-                ttl=settings.MOBILE_SESSION_TTL_SECONDS,
-                last_active=now,
-                mcdi_token=cached.mcdi_token,
-            )
+        _check_session_validity(
+            cached.idle_expires_at,
+            cached.absolute_expires_at,
+            cached.blocked,
+        )
+        await _validate_mcdi_session(container, redis, cached.mcdi_token)
+        await _touch_session_activity(container, redis, cached, datetime.now(timezone.utc))
 
         return MobileUserSchema(
             user_id=cached.user_id,
@@ -98,19 +120,16 @@ async def get_current_mobile_user(
     if not session:
         raise HTTPException(status_code=401, detail="Session not found")
 
-    now = datetime.now(timezone.utc)
-    if session.idle_expires_at < now or session.absolute_expires_at < now:
-        raise HTTPException(status_code=401, detail="Session expired")
-
     user = await container.auth_service.user_querier.get_user_by_id(id=session.user_id)
     if not user:
         raise HTTPException(status_code=401, detail="User not found")
-    if user.blocked:
-        raise HTTPException(status_code=403, detail="User is blocked")
 
-    # Re-populate cache so next request hits Redis. The session row was just
-    # fetched fresh from Postgres, so its last_active is already accurate —
-    # no extra write needed here, only cache population.
+    _check_session_validity(
+        session.idle_expires_at,
+        session.absolute_expires_at,
+        user.blocked,
+    )
+
     await SessionService.cache_session_for_auth(
         redis=redis,
         session_id=session.id,
@@ -121,7 +140,7 @@ async def get_current_mobile_user(
         blocked=user.blocked,
         ttl=settings.MOBILE_SESSION_TTL_SECONDS,
         last_active=session.last_active,
-        mcdi_token=None,  # MCDI token not available on slow path, will be re-fetched on login
+        mcdi_token=None,
     )
 
     return MobileUserSchema(
@@ -135,12 +154,7 @@ async def require_onboarded_mobile_user(
     current_user: Annotated[MobileUserSchema, Depends(get_current_mobile_user)],
     container: Annotated[Container, Depends(get_container)],
 ) -> MobileUserSchema:
-    """Gate for endpoints that require a completed face enrollment.
-    Auth (login/me/devices/etc.), /enroll, and /event/join stay reachable
-    via plain get_current_mobile_user so a new user can always finish
-    onboarding; everything else (photos, notifications, audits, /event/me)
-    depends on this instead.
-    """
+    """Gate for endpoints that require a completed face enrollment."""
     user = await container.auth_service.user_querier.get_user_by_id(
         id=current_user.user_id
     )

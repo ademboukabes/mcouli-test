@@ -24,6 +24,13 @@ SELECT *
 FROM users
 WHERE discord_id = $1;
 
+-- name: UpdateUserDiscordId :one
+UPDATE users
+SET discord_id = $1,
+    updated_at = NOW()
+WHERE id = $2
+RETURNING *;
+
 -- name: UpdateUserPassword :one
 UPDATE users
 SET hashed_password = $1,

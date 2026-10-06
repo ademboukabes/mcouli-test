@@ -14,11 +14,15 @@ async def get_current_staff_user(
     token: Annotated[str | None, Cookie(alias="access_token")] = None,
 ) -> StaffUser:
     if token is None:
-        raise AppException.unauthorized("token doestn exist")
+        raise AppException.unauthorized("Authentication token required")
 
-    # 1. Validate token with MCDI (live verification)
+    # 1. Validate token with MCDI (cached in Redis for sub-ms latency and rate-limit protection)
     try:
-        mcdi_data = await container.mcdi_service.validate_token(token)
+        mcdi_data = await container.mcdi_service.validate_token_cached(
+            redis=container.redis,
+            token=token,
+            ttl_seconds=60,
+        )
     except Exception:
         raise AppException.unauthorized("MCDI session invalid or expired")
 
