@@ -81,7 +81,7 @@ class Settings(BaseSettings):
     DEV_OTP_BYPASS_CODE: str = "000000"
     # When false, mobile registration skips the OTP verification step entirely
     # and creates the user + session directly (pre-OTP-feature behavior).
-    OTP_ACTIVATED: bool = False
+    OTP_ACTIVATED: bool = True
     TRUST_PROXY_HEADERS: bool = True
     # Admin list defaults
     ADMIN_USERS_DEFAULT_LIMIT: int = 20
