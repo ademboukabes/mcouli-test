@@ -329,7 +329,7 @@ async def test_token_auth_validate_mcdi_session_revoked() -> None:
     redis = AsyncMock()
     container.mcdi_service = AsyncMock()
     container.mcdi_service.validate_token_cached.side_effect = Exception("revoked")
-
+    
     with pytest.raises(HTTPException) as exc_info:
         await _validate_mcdi_session(container, redis, "revoked_tok")
     assert exc_info.value.status_code == 401

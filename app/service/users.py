@@ -5,9 +5,12 @@ from typing import Optional, Any
 
 from fastapi import HTTPException
 
+import json
+import secrets
 from app.core.exceptions import AppException, DBException
 from app.core.securite import (
     hash_password,
+    verify_password,
     create_acces_mobile_token,
     create_raw_refresh_token,
     hash_refresh_token,
@@ -16,12 +19,18 @@ from app.core.securite import (
 )
 from app.core.config import settings
 from app.infra.redis import RedisClient
+from app.infra.nats import NatsClient
 from app.infra.minio import Bucket, IMAGES_BUCKET_NAME
 from app.service.mcdi import McdiService
 from app.schema.request.mobile.auth import (
     McdiExchangeRequest,
+    MobileLoginRequest,
+    MobileRegisterRequest,
+    RegisterVerifyRequest,
+    MobileAuthBaseRequest,
 )
-from app.schema.response.mobile.auth import MobileAuthResponse
+from app.schema.response.mobile.auth import MobileAuthResponse, RegisterPendingResponse
+from sqlalchemy.exc import SQLAlchemyError
 from db.generated import user as user_queries
 from db.generated import devices as device_queries
 from db.generated import session as session_queries
@@ -92,6 +101,224 @@ class AuthService:
         if not device:
             raise AppException.internal_error("Failed to create device")
         return device
+
+    async def mobile_login(
+        self,
+        redis: RedisClient,
+        req: MobileLoginRequest,
+        client_ip: Optional[str] = None,
+    ) -> MobileAuthResponse:
+        logger.info("mobile_login attempt")
+        max_attempts = settings.RATE_LIMIT_LOGIN_MAX_ATTEMPTS
+        window = settings.RATE_LIMIT_LOGIN_WINDOW_SECONDS
+
+        if client_ip:
+            await self.check_rate_limit(
+                redis,
+                f"rate:ip:{client_ip}",
+                max_attempts,
+                window,
+            )
+        await self.check_rate_limit(
+            redis,
+            f"rate:email:{req.email}",
+            max_attempts,
+            window,
+        )
+
+        existing_user = await self.user_querier.get_user_by_email(email=req.email)
+        if existing_user is None:
+            logger.warning("login attempt: user_not_found")
+            raise AppException.unauthorized(
+                "User not found; consider registering instead"
+            )
+        if existing_user.blocked:
+            logger.warning("login attempt: user_blocked user_id=%s", existing_user.id)
+            raise AppException.forbidden("User is blocked")
+        if not verify_password(req.password, existing_user.hashed_password or ""):
+            logger.warning(
+                "login attempt: invalid_credentials user_id=%s", existing_user.id
+            )
+            raise AppException.unauthorized("Invalid credentials")
+
+        locked_user = await self.user_querier.get_user_by_id_for_update(
+            id=existing_user.id
+        )
+        if not locked_user:
+            raise AppException.unauthorized("User not found")
+        if locked_user.blocked:
+            logger.warning(
+                "login attempt: user_blocked_at_commit user_id=%s", locked_user.id
+            )
+            raise AppException.forbidden("User is blocked")
+
+        logger.info("login success user_id=%s", locked_user.id)
+        return await self._create_mobile_session(
+            redis=redis,
+            user=locked_user,
+            req=req,
+            is_new_user=False,
+        )
+
+    async def mobile_register(
+        self,
+        redis: RedisClient,
+        req: MobileRegisterRequest,
+        client_ip: Optional[str] = None,
+    ) -> RegisterPendingResponse | MobileAuthResponse:
+        logger.info("mobile_register attempt")
+        max_attempts = settings.RATE_LIMIT_LOGIN_MAX_ATTEMPTS
+        window = settings.RATE_LIMIT_LOGIN_WINDOW_SECONDS
+
+        if client_ip:
+            await self.check_rate_limit(
+                redis,
+                f"rate:ip:{client_ip}",
+                max_attempts,
+                window,
+            )
+        await self.check_rate_limit(
+            redis,
+            f"rate:email:{req.email}",
+            max_attempts,
+            window,
+        )
+
+        existing_user = await self.user_querier.get_user_by_email(email=req.email)
+        if existing_user is not None:
+            logger.warning("register attempt: email_already_in_use")
+            raise AppException.conflict("Email already in use; please login instead")
+
+        hashed = hash_password(req.password)
+
+        if not settings.OTP_ACTIVATED:
+            logger.info("OTP deactivated, creating user directly")
+            user = await self.user_querier.create_user(
+                email=req.email, hashed_password=hashed
+            )
+            if not user:
+                raise AppException.internal_error("Failed to create user")
+            return await self._create_mobile_session(
+                redis=redis,
+                user=user,
+                req=req,
+                is_new_user=True,
+            )
+
+        pending_key = f"pending_user:{req.email}"
+        pending_data = {
+            "hashed_password": hashed,
+        }
+
+        # Save in Redis for 10 minutes (600 seconds)
+        await redis.set(pending_key, json.dumps(pending_data), expire=600)
+
+        if settings.environment == "dev":
+            otp = settings.DEV_OTP_BYPASS_CODE
+            await redis.set(f"otp:{req.email}", otp, expire=600)
+            logger.info("dev OTP bypass active, otp=%s email=%s", otp, req.email)
+        else:
+            otp = "".join(secrets.choice("0123456789") for _ in range(6))
+            await redis.set(f"otp:{req.email}", otp, expire=600)
+            # Send to NATS
+            await NatsClient.js_publish(
+                "email.send_otp",
+                json.dumps({"email": req.email, "otp": otp}).encode("utf-8"),
+            )
+
+        logger.info("register success, OTP sent")
+        return RegisterPendingResponse(
+            message="OTP sent to email", status="pending_verification", email=req.email
+        )
+
+    async def mobile_register_resend_otp(
+        self,
+        redis: RedisClient,
+        email: str,
+        client_ip: Optional[str] = None,
+    ) -> RegisterPendingResponse:
+        logger.info("resend_otp attempt for %s", email)
+        max_attempts = settings.RATE_LIMIT_LOGIN_MAX_ATTEMPTS
+        window = settings.RATE_LIMIT_LOGIN_WINDOW_SECONDS
+
+        if client_ip:
+            await self.check_rate_limit(
+                redis,
+                f"rate:ip:{client_ip}",
+                max_attempts,
+                window,
+            )
+        await self.check_rate_limit(
+            redis,
+            f"rate:email:{email}",
+            max_attempts,
+            window,
+        )
+
+        pending_key = f"pending_user:{email}"
+        raw_data = await redis.get(pending_key)
+        if not raw_data:
+            raise AppException.not_found("No pending registration found for this email")
+
+        if settings.environment == "dev":
+            otp = settings.DEV_OTP_BYPASS_CODE
+            await redis.set(f"otp:{email}", otp, expire=600)
+            logger.info("dev OTP bypass active, otp=%s email=%s", otp, email)
+        else:
+            otp = "".join(secrets.choice("0123456789") for _ in range(6))
+            # Regenerate OTP with 10 mins TTL, without touching the pending_user TTL
+            await redis.set(f"otp:{email}", otp, expire=600)
+            # Send to NATS
+            await NatsClient.js_publish(
+                "email.send_otp",
+                json.dumps({"email": email, "otp": otp}).encode("utf-8"),
+            )
+
+        logger.info("resend_otp success, new OTP sent to %s", email)
+        return RegisterPendingResponse(
+            message="New OTP sent to email", status="pending_verification", email=email
+        )
+
+    async def verify_mobile_register(
+        self,
+        redis: RedisClient,
+        req: RegisterVerifyRequest,
+        client_ip: Optional[str] = None,
+    ) -> MobileAuthResponse:
+        otp_key = f"otp:{req.email}"
+        stored_otp = await redis.get(otp_key)
+
+        if not stored_otp or stored_otp != req.otp:
+            raise AppException.unauthorized("Invalid or expired OTP")
+
+        pending_key = f"pending_user:{req.email}"
+        raw_data = await redis.get(pending_key)
+        if not raw_data:
+            raise AppException.unauthorized("Registration session expired")
+
+        data = json.loads(raw_data)
+
+        try:
+            user = await self.user_querier.create_user(
+                email=req.email, hashed_password=data["hashed_password"]
+            )
+            if not user:
+                raise AppException.internal_error("Failed to create user")
+        except SQLAlchemyError as exc:
+            logger.error("Failed to create user: %s", exc)
+            raise DBException.handle(exc)
+
+        # Clean up redis
+        await redis.delete(otp_key)
+        await redis.delete(pending_key)
+
+        logger.info("register verify success user_id=%s", user.id)
+        return await self._create_mobile_session(
+            redis=redis,
+            user=user,
+            req=req,
+            is_new_user=True,
+        )
 
     async def mcdi_exchange(
         self,
