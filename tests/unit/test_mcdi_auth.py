@@ -199,3 +199,139 @@ async def test_users_service_mcdi_exchange_creates_new_user() -> None:
         hashed_password=None,
         discord_id="discord_12345",
     )
+
+
+@pytest.mark.asyncio
+async def test_users_service_mcdi_exchange_links_existing_user() -> None:
+    user_querier = AsyncMock()
+    device_querier = AsyncMock()
+    session_querier = AsyncMock()
+    refresh_token_querier = AsyncMock()
+    face_service = MagicMock()
+    mock_mcdi = AsyncMock()
+    redis = AsyncMock()
+    redis.incr.return_value = 1
+
+    auth_service = AuthService(
+        user_querier=user_querier,
+        device_querier=device_querier,
+        session_querier=session_querier,
+        refresh_token_querier=refresh_token_querier,
+        face_embedding_service=face_service,
+        mcdi_service=mock_mcdi,
+    )
+
+    mock_mcdi.exchange_code.return_value = {
+        "token": "mcdi_sess_tok_2",
+        "member": {
+            "id": "discord_existing_123",
+            "email": "existing@microclub.info",
+            "username": "existing_user",
+        },
+    }
+
+    existing_user = MagicMock()
+    existing_user.id = uuid.uuid4()
+    existing_user.email = "existing@microclub.info"
+    existing_user.blocked = False
+
+    user_querier.get_user_by_discord_id.return_value = None
+    user_querier.get_user_by_email.return_value = existing_user
+    user_querier.update_user_discord_id.return_value = existing_user
+    user_querier.get_user_by_id_for_update.return_value = existing_user
+
+    device_mock = MagicMock()
+    device_mock.id = uuid.uuid4()
+    device_querier.get_device_by_physical_id.return_value = None
+    device_querier.create_device.return_value = device_mock
+
+    session_mock = MagicMock()
+    session_mock.id = uuid.uuid4()
+    session_mock.user_id = existing_user.id
+    session_mock.idle_expires_at = MagicMock()
+    session_mock.absolute_expires_at = MagicMock()
+    session_mock.last_active = MagicMock()
+    session_querier.upsert_session.return_value = session_mock
+
+    async def _empty_async_iter(*args, **kwargs):
+        if False:
+            yield
+
+    session_querier.evict_overflow_sessions = MagicMock(side_effect=_empty_async_iter)
+
+    req = McdiExchangeRequest(
+        code="code_existing",
+        device_name="Pixel 8",
+        device_type="android",
+        physical_device_id=uuid.uuid4(),
+    )
+
+    res = await auth_service.mcdi_exchange(redis, req)
+
+    assert res.is_new_user is False
+    assert res.user_id == existing_user.id
+    user_querier.update_user_discord_id.assert_called_once_with(
+        discord_id="discord_existing_123",
+        id=existing_user.id,
+    )
+    user_querier.create_user.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_cookie_auth_get_current_staff_user_success() -> None:
+    from app.deps.cookie_auth import get_current_staff_user
+
+    container = MagicMock()
+    container.redis = AsyncMock()
+    container.mcdi_service = AsyncMock()
+    container.staff_user_querier = AsyncMock()
+
+    container.mcdi_service.validate_token_cached.return_value = {
+        "member": {"email": "admin@microclub.info", "id": "111"},
+        "roles": [{"roleName": "Admin"}],
+    }
+
+    mock_staff = MagicMock()
+    mock_staff.email = "admin@microclub.info"
+    container.staff_user_querier.get_staff_user_by_email.return_value = mock_staff
+
+    staff = await get_current_staff_user(container=container, token="valid_staff_tok")
+    assert staff == mock_staff
+
+
+@pytest.mark.asyncio
+async def test_cookie_auth_get_current_staff_user_unauthorized_if_not_staff() -> None:
+    from app.deps.cookie_auth import get_current_staff_user
+
+    container = MagicMock()
+    container.redis = AsyncMock()
+    container.mcdi_service = AsyncMock()
+    container.staff_user_querier = AsyncMock()
+
+    container.mcdi_service.validate_token_cached.return_value = {
+        "member": {"email": "stranger@discord.com", "id": "999"},
+        "roles": [],
+    }
+
+    container.staff_user_querier.get_staff_user_by_email.return_value = None
+
+    with pytest.raises(HTTPException) as exc_info:
+        await get_current_staff_user(container=container, token="valid_mcdi_tok")
+    assert exc_info.value.status_code == 401
+    assert "not authorized" in exc_info.value.detail.lower()
+
+
+@pytest.mark.asyncio
+async def test_token_auth_validate_mcdi_session_revoked() -> None:
+    from app.deps.token_auth import _validate_mcdi_session
+
+    container = MagicMock()
+    redis = AsyncMock()
+    container.mcdi_service = AsyncMock()
+    container.mcdi_service.validate_token_cached.side_effect = Exception("revoked")
+
+    with pytest.raises(HTTPException) as exc_info:
+        await _validate_mcdi_session(container, redis, "revoked_tok")
+    assert exc_info.value.status_code == 401
+    assert "MCDI session invalid" in exc_info.value.detail
+

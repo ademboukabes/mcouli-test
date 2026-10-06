@@ -152,7 +152,7 @@ class AsyncQuerier:
     def __init__(self, conn: sqlalchemy.ext.asyncio.AsyncConnection):
         self._conn = conn
 
-    async def create_user(self, *, email: str, hashed_password: Optional[str], discord_id: Optional[str]) -> Optional[models.User]:
+    async def create_user(self, *, email: str, hashed_password: Optional[str] = None, discord_id: Optional[str] = None) -> Optional[models.User]:
         row = (await self._conn.execute(sqlalchemy.text(CREATE_USER), {"p1": email, "p2": hashed_password, "p3": discord_id})).first()
         if row is None:
             return None
